@@ -712,3 +712,85 @@ Copy rules: MIT/Apache-2.0/CC0 → may copy with attribution (keep copyright hea
 - `scripts/check-licenses.sh`: fails CI if any file under `packages/|apps/` matches MPL-2.0 header or Kaetram import path; allowlist: MIT/Apache-2.0/CC0 only.
 - Game art: code MIT; each asset pack keeps its own license file beside it (`public/assets/<pack>/LICENSE.txt`); §14 shortlist must record per-pack license before merge.
 
+## 29. Architecture lock-in amendments (post-review corrections — SUPERSEDES where in conflict)
+
+Review finding: `skill.md` could not be fetched directly (server returns Markdown content-type the tooling couldn't parse), so **no Moltbook implementation details asserted from that file are trustworthy**. Everywhere §§3.5/13/App.A describes Moltbook mechanics (api_key flow, ~4h heartbeat, claim flow, rate limits), treat as **unverified hypothesis, not fact**. What SURVIVES (architecture distinction, independently sound): Human GitHub Account → Agent Identity (credentials + progression + reputation + history) → Sessions (A/B/C, ephemeral). To confirm Moltbook's actual reconnect/session handling, read its source/API docs directly — never infer from `skill.md` summaries. Same caution applies to any claim cited only to an unfetched page (Pi/Paperclip/MCP-spec quotes in §§12–13): keep the *principle*, drop the *citation certainty*.
+
+### 29.1 Four contracts to lock BEFORE any feature code
+
+1. **Extension API** (§20 `GameFeature` + `createRuntime`) — frozen first; features only ever touch this.
+2. **Agent Identity** — `agents` row + `agent_credentials` (hash, scopes, expiry) + ownership (`agents.user_id`); GitHub User ID ≠ Agent ID, permanently.
+3. **Session** — `sessions.agent_id → agents.id` (never `sessions.user_id` as agent identity); HELLO resume-vs-new + grace window + heartbeat (§22).
+4. **Agent Protocol (API/MCP)** — Application Commands/Queries are the single definition of what an agent can do; CLI/MCP/REST are consumers (§31–§32).
+
+If these four are right, everything above (bounty/battle/guild) stays tháo-lắp clean. If any is wrong, stop features and fix the contract.
+
+### 29.2 Thin core, extension-first, NO plugin system yet
+
+Core stays exactly §20 (runtime/commands/events/state/entities/extension-api) — knows no Bounty/Battle/Guild/XP. Extensions compose explicitly (`createRuntime({extensions:[Agent,Bounty,Progression]})`); each extension is `commands/events/state/domain/index`. **Banned for MVP**: marketplace, plugin installer, dynamic/remote plugin loading, distributed event infra, microservices. (Paperclip/Pi alignment: "thin core, rich edges" as direction, not copied implementation.)
+
+### 29.3 Event boundary rule (anti-overengineering)
+
+Events are the **cross-feature integration boundary ONLY**. Direct domain operations (`createBounty()`, `validateBounty()`, `calculateReward()`) stay plain function calls inside their feature. Cross-feature side effects (`BountyCompleted → +XP / +rep / achievement check`) go through the bus. If every function call becomes an event, the system is overengineered — reject in review.
+
+### 29.4 Persistence split (locked)
+
+`users / agents / agent_credentials / sessions / event_log` (platform-owned) vs feature-owned `bounties / quests / progressions / reputations / battles / guilds`. Invariant: `sessions.agent_id → agents.id`. Activity/Event Log (§30) is a first-class P0 feature, not a debug table.
+
+## 30. Activity/Event Log (new P0 feature)
+
+Rationale: replay, audit, achievements, reputation, anti-abuse, and battle history ALL need one ordered, attributed action trail (Paperclip treats action attribution the same way). Shape per session:
+
+```
+Agent #123 / Session #456
+10:02 claim bounty → 10:04 modify 3 files → 10:07 run tests →
+10:08 submit PR → 10:11 PR merged → 10:11 bounty completed → +500 XP
+```
+
+Implementation: `event_log` table (§21) + `features/activity/` extension (owns append/query API, retention policy); every `runtime.emit` appends key events (§21 `PERSISTED_EVENT_TYPES`); transient telemetry stays on the bus only. Replay (§22) and achievements/reputation read from this log — never from scattered feature tables.
+
+## 31. CLI is P0 foundation (not later tooling)
+
+CLI (`agent-battle`) is the agent's daily runtime entry point and ships in P0 alongside API — **MCP does not have to be P0**; protocol/API + CLI first, MCP as an adapter on the same protocol later (keeps core cleaner, Pi-consistent).
+
+```
+Web App (Next.js) ─┐
+                   ├─→ Public API → Core Runtime → Extensions → Neon
+CLI (agent-battle) ┘
+```
+
+CLI roles: (1) **agent runtime** — `login / init / start / status / stop`; (2) **platform interaction** — `agent status, quest list/claim, bounty list/inspect, profile, xp, submit`; (3) **dev/admin** — `dev, doctor, config, extension ...`. Iron rule: **CLI contains zero game logic and touches no DB** — it calls the Public API only (same `claimQuest(agentId,questId)` application command the web/MCP paths use). Future surfaces (Discord bot, GitHub App, SDK) reuse the same command; never reimplement per surface. `AgentRuntime` abstraction (`start/stop/status/send`) with future `LocalCliRuntime / McpRuntime / RemoteRuntime / EmbeddedRuntime`; CLI restart = new Session, same Agent ID (§3.2).
+
+`packages/cli/` layout: `src/{commands/{login,init,start,status,stop,agent,quest,bounty,profile,dev,doctor,config,extension}, runtime/{local.ts}, api-client.ts}` — thin wrappers over `Application API` (§32), argparse-only, no domain imports.
+
+## 32. Capability registry + stable MCP/CLI surface (cover all, expose little)
+
+Problem: N features × M operations → 100–200 MCP tools = undiscoverable, context-bloating tool dump. Principle: **cover every capability, expose few stable primitives**.
+
+Stable surface (frozen, ~5): `discover | search | inspect | act | observe`.
+
+- `discover([domain?])` — lazy catalog (top-level domains first; per-domain detail on demand, never the full 200-capability firehose at connect).
+- `search({type, status, difficulty, ...})`, `inspect({type, id})`, `act({action, target, input})`, `observe({scope})`.
+- Domain capabilities registered by features (`quest.list/claim/submit`, `battle.challenge/accept`, `guild.join/leave`, …) live in the **registry**, not as MCP tools. Feature growth ≠ tool growth: adding Guild changes the registry, not the 5 primitives.
+- Anti-God-Tool guard: `act()` dispatches **typed, registry-defined actions** (`defineAction({id:"quest.claim", input: ClaimQuestInput, output: ClaimQuestResult, permissions})`) — never `act({action:string, payload:any})`. Type safety + discoverability preserved.
+- CLI uses the identical abstraction (`quest list` → `search(type=quest)`; `quest claim <id>` → `act("quest.claim",…)`).
+
+## 33. Extension kinds (final taxonomy — supersedes §12 folder sketch where different)
+
+```
+CORE → Extension Contract → GAME extensions | INTERFACE extensions | INFRASTRUCTURE extensions
+```
+
+- `extensions/{agent,quest,bounty,progression,battle,guild,inventory,...}` — domain logic; declare capabilities; know NOTHING about MCP/CLI/REST/Web.
+- `interfaces/{cli,mcp,api,websocket}/` — capability CONSUMERS/adapters; adding a feature never edits them (only composition/manifest registration).
+- `infrastructure/{postgres,github,auth,notifications,...}` — integrations behind boundaries.
+
+Test (CI + review checklist): **adding a feature that forces edits to `core/`, `cli/`, or `mcp/` implementations = architecture failure**. Allowed: composition-root/manifest one-liners. Feature layout gains two optional dirs: `application/` (command/query handlers = the single domain implementation all surfaces share) and `cli/`+`mcp/` contribution fragments ONLY if the interface-adapter pattern needs per-feature metadata (default: pure registry entries, no code).
+
+Revised build order: **P0** Core Runtime, Extension API, Capability Registry, User/GitHub Auth, Agent Identity, Agent Credentials, Session, Activity/Event Log, Public API, CLI (login/init/start/status/doctor). **P1** Agent, Quest, Bounty, Progression, Reputation (each exposing CLI/MCP-consumable capabilities from birth — design machine-native, never "game first, protocol later"). **P2** Battle, Guild, World, Animation, Social. **P3** MCP adapter, Skills (`skill.md` family as onboarding layer: instructions ≠ transport ≠ protocol ≠ runtime — never conflated), Adapters per harness, External extension packages, Third-party worlds, Public protocol/SDK. Explicitly NOT now: marketplace, distributed events, microservices, dynamic loading.
+
+## 34. Watchlist + machine-native design note
+
+- **SpaceMolt** (MMO persistent AI-agent universe over MCP/WebSocket, agents living 24/7): track as the closest live experiment to our "persistent agent world" half; compare session/presence model against §3 before M5.
+- Machine-native assumption (§33 P1 rule): every gameplay loop must be fully playable through protocol/tool interface alone (no web clicks required). If a quest can't be discovered→claimed→submitted→rewarded via `discover/search/act` + CLI equivalents, the feature isn't done.
+
