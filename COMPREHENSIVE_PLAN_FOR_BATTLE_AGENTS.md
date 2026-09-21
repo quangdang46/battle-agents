@@ -60,7 +60,7 @@ Landscape conclusion: Visualization vs Coordination vs Orchestration are three s
 3. Pixel Agents (above): game-like office interface heading to "actually a game" (health bars for rate limits, token budgets, functional furniture, offices as save files, orchestrator characters, drag-to-team, hand-off work).
 4. AgentMove (FoothillSolutions/agent-move, .tmp/agent-move): Claude/OpenCode/Codex/pi -> shared world with 9 activity zones (Files/Terminal/Search/Web/Thinking/Messaging/Tasks/Spawn/Idle). Textbook AgentWatcher interface per CLI + shared AgentStateManager (30s idle) + Broadcaster + full_state-then-delta WS. shared/constants/tools.ts: TOOL_NAME_MAP ~50 entries + TOOL_ZONE_MAP + normalizeToolName/getZoneForTool. Session files + Claude hooks, install writes ~/.claude/settings.json with session-file fallback. STEAL: copy AgentWatcher + normalization verbatim as our adapters/ template. AVOID: generic grid layout, high-freq SQLite WAL polling.
 5. Arcane Agents (thomasrice/arcane-agents, .tmp/arcane-agents): 2D world + REAL control (spawn/kill/move/group/broadcast/attach terminal), tmux+node-pty+xterm, SQLite, status fusion (pane text + transcript -> idle/working/attention/error/stopped via decide.ts), RTS interactions (marquee/groups/rally). STEAL: status fusion, control-group UX for parties, SQLite schema draft. AVOID: tmux as CORE dependency (keep it one adapter backend only), Express/Canvas (use Next.js/PixiJS), local-only assumption.
-6. openagents-org/agentworld (.tmp/agentworld-openagents): Kaetram-based 2D multiplayer RPG where AI IS the player (move/chat/fight/craft/collaborate/compete, persistent). 2630-line game_tools.py action taxonomy + tool_definitions.py schemas + task_verifier.py win-conditions + trajectory viz. STEAL: action taxonomy for our MCP tools, verifier pattern for battle judging. AVOID: forking Kaetram, per-LLM subclass explosion.
+6. openagents-org/agentworld (.tmp/agentworld-openagents): Kaetram-based 2D multiplayer RPG where AI IS the player (move/chat/fight/craft/collaborate/compete, persistent). 2630-line game_tools.py action taxonomy + tool_definitions.py schemas + task_verifier.py win-conditions + trajectory viz. STEAL: action taxonomy as *registry capability seeds* (never as 1:1 MCP tools — §32), verifier pattern for battle judging. AVOID: forking Kaetram, per-LLM subclass explosion.
 7. agent-sandbox: LLM NPCs with perceive->plan->act loop in text-adventure-then-Godot world (research-grade, not product).
 8. Agentic Quest: RPG where puzzles ARE real code (player solves -> real validator runs -> pass/fail), AI companions (Scout/Scholar/Tinker/Cartographer), coding agent as game master. STEAL: real-validator win-condition concept.
 
@@ -180,7 +180,7 @@ One account fans out to Claude ONLINE + Codex ONLINE + OpenCode OFFLINE + Pi ONL
 
 Hook/session-watcher = telemetry/data plane (passive observation). MCP = command/control plane (active interaction). Diagram: Agent -> {HOOK -> telemetry, MCP -> commands} -> Agent Battle.
 
-Hook sources per agent: Claude hooks (SessionStart/PreToolUse/PostToolUse/Stop...); AgentMove pattern (auto-install into ~/.claude/settings.json, fallback to session-file watching); Codex JSONL; OpenCode SQLite; pi events. MCP surface (conceptual): register_agent/get_world/get_quests/get_opponents/challenge_agent/accept_battle/send_message/inspect_enemy/claim_reward/spawn_agent (+ quest/party/progress/report/move/inspect/accept per §1.3 extensions). Agent learns "challenged by Codex-Knight" and calls accept_battle()/send_message().
+Hook sources per agent: Claude hooks (SessionStart/PreToolUse/PostToolUse/Stop...); AgentMove pattern (auto-install into ~/.claude/settings.json, fallback to session-file watching); Codex JSONL; OpenCode SQLite; pi events. MCP surface: ONLY the 5 stable primitives (§32: discover/search/inspect/act/observe) — historical domain-operation names (register_agent, get_world/quests/opponents, challenge/accept_battle, send_message, inspect_enemy, claim_reward, spawn_agent, quest/party/progress/report/move/…) describe *capabilities in the registry*, never MCP tool names. Agent learns "challenged by Codex-Knight" then `act({action:"battle.accept",…})` / `act({action:"message.send",…})`. NEVER implement the §1.3-era tool list verbatim — that is exactly the tool-explosion path §32 bans.
 
 NEVER MCP-per-Read/Edit/Bash: context bloat, token cost, workflow drag, per-agent MCP quirks. MCP ≠ event capture.
 
@@ -384,7 +384,7 @@ Journey in conversation: fear of Apache-2.0 cloning -> split (Apache SDK/protoco
 - .tmp/arcane-agents: status fusion, RTS party UX, SQLite schema draft.
 - .tmp/agent-world-codemoo: diff broadcast, permission-queue mechanic, cost tracking.
 - .tmp/agent-world-smallville: MCP turn loop (wait_for_event/act/context/nearby/relationships).
-- .tmp/agentworld-openagents: fight/craft/loot action taxonomy + task verifier.
+- .tmp/agentworld-openagents: fight/craft/loot action taxonomy (as *registry capability seeds*, not MCP tools) + task verifier.
 - .tmp/tmux-agents: MCP schema/formatter pattern.
 - .tmp/agent-dashboard: hook gates, SKILL.md frontmatter, Harness interface.
 - .tmp/cross-agent-teams-mcp: identity-vs-session split, inbox/outbox + wake fanout.
@@ -489,9 +489,10 @@ battle-agents/
         net/client.ts    # SSE/WS: full_state then deltas
         state/store.ts   # zustand or event-emitter store
         scenes/ (city, arena, guild-hall)
-    mcp-server/                     # thin: MCP tools -> core runtime (@battle-agents/mcp-server)
-      src/tools/ (register_agent, get_world, get_quests, get_opponents, challenge_agent,
-                  accept_battle, send_message, inspect_enemy, claim_reward, spawn_agent)
+    mcp-server/                     # thin: 5 stable primitives -> capability registry (@battle-agents/mcp-server)
+      src/tools/ (discover.ts, search.ts, inspect.ts, act.ts, observe.ts — §32;
+                  domain operations like quest.claim / battle.accept live in the
+                  registry, never as extra tools)
   drizzle/ (schema + migrations) — or packages/db/
   scripts/ (dev, check-assets.ts port from agent-quest, seed.ts)
 ```
@@ -610,7 +611,7 @@ Ingest rule (§7.2) enforced in code: `PERSISTED_EVENT_TYPES = ["session.started
 
 `GET /api/events/stream` (SSE): per-user (web session) or per-battle channel; sends `full_state` snapshot first, then deltas (mirror agent-move protocol + codemoo diff shape).
 
-`POST /api/mcp` (Streamable HTTP): MCP tools from §5.1, each a thin wrapper over `runtime.dispatch` (e.g. `claim_reward` -> `ClaimBounty` command in features/bounty). Auth: short-lived installation token from §4 flow.
+`POST /api/mcp` (Streamable HTTP): ONLY the 5 stable primitives (§32); `act()` dispatches typed registry actions to `runtime.dispatch` (e.g. `act({action:"bounty.claim",…})` -> `ClaimBounty` command in features/bounty). No per-feature tool wrappers — adding a feature never adds an MCP tool. Auth: short-lived installation token from §4 flow.
 
 `POST /api/bounties` (create: repoOwner/repoName/issueNumber/amountCents/requirements[]) — validates GitHub issue exists via Octokit; emits `bounty.created`. `POST /api/bounties/[id]/claim` (agent session claims; emits `bounty.claimed`; sets `claimedAgentId`; Race mode rejects second claims). `POST /api/bounties/[id]/submit` (`{ prUrl }` -> `bounty.submitted`; webhook on merge -> `bounty.completed` -> progression/reputation/achievement handlers fire -> payout job enqueued). `POST /api/battles` (`{ mode, bountyId?, sessionIds[], weights? }` -> isolated workspaces -> judge -> `battle.finished{winnerSessionId, scores}` -> replay persisted). `POST /api/webhooks/github` (issues/PRs -> quests/bounties; PR merge -> complete bounty).
 
@@ -674,6 +675,9 @@ Rules: sessions are ephemeral (close any time; character persists); XP comes fro
 - M5: PixiJS city + base buildings unlocking capabilities; offline->online continuity. DoD: close all sessions, reopen next day, world + character state intact.
 - M6: guilds + messaging + tournaments + leaderboard + seasons. DoD: two users' agents in one guild complete a team bounty.
 - M7: third-party adapter PR merged using only `_template` + protocol docs; removal-test CI green. DoD: contributor adds Amp support without touching core.
+- M0 (amended §37): `docker compose up` from clean clone → web + Postgres + migrations + seed + CLI bootstrap green; DB survives restarts via named volume.
+- M1 (amended): Capability Registry + Event Bus + agent adapters + **CLI and MCP interfaces as equal consumers** (§36) + handshake.
+- M2 (locked): FIRST REAL GAME LOOP = full Bounty vertical slice (Issue → Bounty → Discover → Claim → Coding → PR → Review → Merge → Reward → Activity/History). "Reward" is the payoff at the END of the first playable loop, never the first feature.
 
 ## 28. Implementation — salvage plan (what to copy/port/learn per repo)
 
@@ -698,7 +702,7 @@ Copy rules: MIT/Apache-2.0/CC0 → may copy with attribution (keep copyright hea
 
 ### 28.2 Learn-only, rewrite clean (NO paste)
 
-- `agentworld-openagents` (MPL-2.0): mine `agents/game_tools.py` (2630 lines action taxonomy) + `tool_definitions.py` (203 lines schemas) + `task_verifier.py` + `task_categories.txt` for battle MCP tools + bounty categories + verifier — REWRITE all in TS, no Kaetram file enters our repo.
+- `agentworld-openagents` (MPL-2.0): mine `agents/game_tools.py` (2630 lines action taxonomy) + `tool_definitions.py` (203 lines schemas) + `task_verifier.py` + `task_categories.txt` for battle *registry capabilities* + bounty categories + verifier — REWRITE all in TS, no Kaetram file enters our repo, and no taxonomy entry becomes a standalone MCP tool (§32).
 - `agent-quest` server (MIT but Bun-locked): `providers/` (multi-~/.claude* + Codex rollout split), `parsers/`, `AgentStateManager`, `ws/` broadcast, `hooks/` postToolUse path, `SessionRegistry`, `EventBridge.ts` React↔Phaser bridge, `scripts/check-assets.ts` (port the SCRIPT, it's build tooling), map-editor scene concept → guild-hall editor.
 - `agent-move` server: `watcher/{claude,opencode,codex,pi}/` parsers, `AgentStateManager` 30s idle, `Broadcaster`, `TaskGraphManager`, `full_state`-then-delta + exp-backoff reconnect, OpenCode WAL polling CAUTION.
 - `pixel-agents` server: `agentRuntime.ts`, `agentStateStore.ts` (sole broadcaster), `fileWatcher.ts`/`transcriptParser.ts`, `transport/index.ts` branching, AsyncAPI→Modelina codegen discipline (adopt contract-first habit, not the files).
@@ -788,6 +792,27 @@ CORE → Extension Contract → GAME extensions | INTERFACE extensions | INFRAST
 Test (CI + review checklist): **adding a feature that forces edits to `core/`, `cli/`, or `mcp/` implementations = architecture failure**. Allowed: composition-root/manifest one-liners. Feature layout gains two optional dirs: `application/` (command/query handlers = the single domain implementation all surfaces share) and `cli/`+`mcp/` contribution fragments ONLY if the interface-adapter pattern needs per-feature metadata (default: pure registry entries, no code).
 
 Revised build order: **P0** Core Runtime, Extension API, Capability Registry, User/GitHub Auth, Agent Identity, Agent Credentials, Session, Activity/Event Log, Public API, CLI (login/init/start/status/doctor). **P1** Agent, Quest, Bounty, Progression, Reputation (each exposing CLI/MCP-consumable capabilities from birth — design machine-native, never "game first, protocol later"). **P2** Battle, Guild, World, Animation, Social. **P3** MCP adapter, Skills (`skill.md` family as onboarding layer: instructions ≠ transport ≠ protocol ≠ runtime — never conflated), Adapters per harness, External extension packages, Third-party worlds, Public protocol/SDK. Explicitly NOT now: marketplace, distributed events, microservices, dynamic loading.
+
+## 35. License lock (decided: MIT — supersedes any Apache-2.0 mention)
+
+Review flagged an inconsistency (§16 said MIT while an earlier thread said Apache-2.0). **Decision locked 2026-09-21: MIT, whole repo, public from day one.** Rationale stands as §16 records (fun-game OSS flywheel: stars/forks/contributes; moat = community + agents + bounties + history + rep + guilds, not source; Kubernetes/Kafka/Spark/TensorFlow/Android + LiveKit precedents; no custom MIT+no-compete pseudo-license; trademark/brand/domain protected separately). Action: `LICENSE` file is already MIT — no code change needed; any future Apache-2.0 reference is stale unless a new explicit decision reverses this lock. Contributor docs + README must state MIT only.
+
+## 36. CLI as first-class interface extension (equal to MCP/API)
+
+§31 made CLI P0 but the plan still read "MCP-first, CLI-follows". Locked correction: the taxonomy is §33 — `interfaces/{cli,mcp,api,websocket}/` are **equal capability consumers**; features declare capabilities, adapters consume them. Banned shape: per-feature `quest-cli.ts`/`quest-mcp.ts` implementations (feature "owning" its tools). Required shape: `Feature → capabilities → Interface adapters (CLI ∥ MCP ∥ API)`. CLI and MCP evolve independently of feature count (§32: feature growth ≠ surface growth); only composition/manifest registration touches adapters. Review checklist addition: any PR adding `interfaces/cli/*` or `interfaces/mcp/*` implementation code *for a specific game feature* (instead of registry entries) fails review.
+
+## 37. Docker local dev (new M0 scope — gap fill, no arch change)
+
+Rationale: Next.js + DB + CLI + MCP/worker later = too many moving parts for "install Node + Postgres manually". Locked local contract: `git clone → cp .env.example .env → docker compose up` runs the app with HMR, offline (no Neon required).
+
+```
+/ (repo root)
+├── apps/web/  packages/{core,features,cli,mcp,protocol,…}/
+├── docker/Dockerfile  docker/Dockerfile.dev  .dockerignore
+├── compose.yaml  compose.dev.yaml  .env.example
+```
+
+Services (M0): `web` (Next.js dev, bind-mount + Compose Watch/HMR) + `postgres` (local PG, named volume `agent-battle-postgres-data`, survives restarts). LATER only when needed: `worker` (background jobs), standalone MCP server, queue. DB modes: **default local = container Postgres** (offline-capable); **cloud/preview = Neon branch** per-developer/per-PR (`neonctl link/checkout/env pull` workflow) — Neon is never a local-run dependency. Compose may also run lint/test parity services for CI/local sameness. Invariant: Docker lives in the **infrastructure layer** — features never import Docker/Compose/Postgres-container concepts, only repository/capability interfaces (§33). M0 DoD gains: `docker compose up` from clean clone → web + migrations + seed + CLI bootstrap all green; `docker compose down && docker compose up` preserves local DB via the named volume.
 
 ## 34. Watchlist + machine-native design note
 
