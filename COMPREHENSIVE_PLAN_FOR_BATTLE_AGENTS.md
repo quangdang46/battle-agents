@@ -200,7 +200,7 @@ Claude Code: richest hooks (use Hook plane primary, JSONL secondary). Codex: JSO
 
 ### 7.1 Stack decision and why
 
-Next.js App Router (RSC, Route Handlers/Server Actions, Auth, /api/mcp, SSE) + Neon Postgres + Vercel (git push -> deploy; no Docker/Nginx/PM2/backup/K8s to operate). Conversation explicitly prioritized deploy-ease; this stack wins MVP-to-mid-scale. MCP endpoint lives in Next.js (https://agentbattle.gg/api/mcp); split into standalone gateway only if long-lived streaming demands it. Beginner trap to avoid per conversation: new Client()+connect() per query — always pooled neon() driver.
+Next.js App Router (RSC, Route Handlers/Server Actions, Auth via Better Auth §38, /api/mcp, SSE) + Postgres (local container) / Neon Postgres (cloud) + Vercel (git push -> deploy; no Docker/Nginx/PM2/backup/K8s required *for deployment*). Clarification (supersedes older "no Docker" phrasing): Docker is the **local development/test environment** (§37: `docker compose up` → web + Postgres + HMR, offline-capable), never a production dependency. Conversation explicitly prioritized deploy-ease; this stack wins MVP-to-mid-scale. MCP endpoint lives in Next.js (https://agentbattle.gg/api/mcp); split into standalone gateway only if long-lived streaming demands it. Beginner trap to avoid per conversation: new Client()+connect() per query — always pooled driver (Neon serverless driver in cloud, pg-pool against local container in Docker dev).
 
 ### 7.2 Request profile (the key insight)
 
@@ -365,7 +365,7 @@ Journey in conversation: fear of Apache-2.0 cloning -> split (Apache SDK/protoco
 ## 18. Build order (code first)
 
 1. Re-clone learn-spine cleanly; run age-of-agents demo + agent-move locally to internalize PixiJS + AgentWatcher behavior.
-2. Scaffold Next.js + Neon + GitHub OAuth (M0): users/installations/agents/projects/sessions tables.
+2. Scaffold Next.js + Postgres (Docker local) / Neon (cloud) + Better Auth + GitHub OAuth (§38) (M0): users/installations/agents/projects/sessions tables; local OAuth via 127.0.0.1:3000 → Better Auth `/api/auth/[...all]` → GitHub → callback → local DB (§38–§40).
 3. Define AgentEvent union + Event Bus + createRuntime/extensions[] skeleton (§12) with features/agent/ + features/progression/ first.
 4. adapters/claude/ (hooks + JSONL) using AgentWatcher template; POST /api/events (batched) + SSE fan-out.
 5. features/bounty/ (M2): Bounty object (§11.1), claim->PR->merge->payout flow against a real test repo.
@@ -675,7 +675,7 @@ Rules: sessions are ephemeral (close any time; character persists); XP comes fro
 - M5: PixiJS city + base buildings unlocking capabilities; offline->online continuity. DoD: close all sessions, reopen next day, world + character state intact.
 - M6: guilds + messaging + tournaments + leaderboard + seasons. DoD: two users' agents in one guild complete a team bounty.
 - M7: third-party adapter PR merged using only `_template` + protocol docs; removal-test CI green. DoD: contributor adds Amp support without touching core.
-- M0 (amended §37): `docker compose up` from clean clone → web + Postgres + migrations + seed + CLI bootstrap green; DB survives restarts via named volume.
+- M0 (amended §§37–40): `docker compose up` from clean clone → web + Postgres + Better Auth GitHub login (127.0.0.1:3000) + migrations + seed + CLI bootstrap green; DB survives restarts via named volume; `pnpm test:m0` (unit → integration → removal → license → E2E smoke) green. License stays MIT (§35) — any Apache-2.0 mention elsewhere is stale.
 - M1 (amended): Capability Registry + Event Bus + agent adapters + **CLI and MCP interfaces as equal consumers** (§36) + handshake.
 - M2 (locked): FIRST REAL GAME LOOP = full Bounty vertical slice (Issue → Bounty → Discover → Claim → Coding → PR → Review → Merge → Reward → Activity/History). "Reward" is the payoff at the END of the first playable loop, never the first feature.
 
@@ -813,6 +813,48 @@ Rationale: Next.js + DB + CLI + MCP/worker later = too many moving parts for "in
 ```
 
 Services (M0): `web` (Next.js dev, bind-mount + Compose Watch/HMR) + `postgres` (local PG, named volume `agent-battle-postgres-data`, survives restarts). LATER only when needed: `worker` (background jobs), standalone MCP server, queue. DB modes: **default local = container Postgres** (offline-capable); **cloud/preview = Neon branch** per-developer/per-PR (`neonctl link/checkout/env pull` workflow) — Neon is never a local-run dependency. Compose may also run lint/test parity services for CI/local sameness. Invariant: Docker lives in the **infrastructure layer** — features never import Docker/Compose/Postgres-container concepts, only repository/capability interfaces (§33). M0 DoD gains: `docker compose up` from clean clone → web + migrations + seed + CLI bootstrap all green; `docker compose down && docker compose up` preserves local DB via the named volume.
+
+## 38. Auth stack lock: Better Auth + GitHub OAuth + PostgreSQL (no hand-rolled OAuth)
+
+The plan previously said "GitHub OAuth" without naming a framework. Locked: **Better Auth** — Next.js-native (`/api/auth/[...all]` mount), GitHub OAuth built-in, session management included, later extensible to passkey / API key / JWT / organizations / roles, and aligned with the MCP/agent-auth roadmap.
+
+```
+Human ──GitHub OAuth──▶ Better Auth ──┬── User ──▶ Agent extension ──▶ Quest/Bounty/Progression/Battle/Guild
+                                      └── Session (human web session; NOT agent session)
+```
+
+Hard separations (review issue — enforce in code review):
+- **Better Auth owns User/Auth/human-Session only.** Game domain stays in extensions.
+- **GitHub OAuth token is never Agent identity.** `User` (human) → `Agent` (persistent character: XP/level/rep + credential + sessions) → `Session` (one run) → `Credential` (token the agent calls back with). Example: `User#42 → Agent "CodeKnight" (1250 XP, Lv 7, Rep 83) → Sessions #a1/#b7`.
+- Agent credentials: hash + scopes + expiry in `agent_credentials` (§21); issuance/rotation endpoints under the Agent extension, not inside Better Auth config.
+
+M0 composition (amends §33 P0 list): Next.js, Postgres/Neon, **Better Auth**, GitHub OAuth, User identity, Agent identity, Agent credential, Agent session, Event Bus, Extension API, CLI, local Docker dev env.
+
+## 39. Local GitHub OAuth contract (M0 contributor path)
+
+Local flow every contributor must get green on a clean clone:
+
+```
+127.0.0.1:3000 ──▶ GitHub OAuth ──▶ /api/auth/[...all]/callback ──▶ local DB (container Postgres)
+```
+
+- GitHub OAuth App with homepage `http://127.0.0.1:3000` + callback `http://127.0.0.1:3000/api/auth/callback/github` (document exact URLs in `.env.example` comments; support `localhost` alias note for GitHub's callback matching).
+- `.env.example` keys: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=http://127.0.0.1:3000`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `DATABASE_URL` (local container default; Neon branch URL for preview).
+- First-login bootstrap: new GitHub user → `users` row → empty agent list → dashboard prompts CLI/MCP connect (§4). No manual SQL.
+- Failure modes documented in `apps/web/README.md`: wrong callback URL (GitHub error `redirect_uri_mismatch`), missing secret (Better Auth boot error), DB unreachable (migration/seed step missed §40).
+
+## 40. Local testing contract (M0 — Docker Compose is the gate)
+
+Single canonical pipeline; CI runs the same steps inside the same images:
+
+```
+docker compose up ──▶ migrations ──▶ seed ──▶ unit (vitest) ──▶ integration (+Postgres service)
+ ──▶ removal-test (§20) ──▶ license check (§28.3) ──▶ E2E smoke (login → connect → claim → replay render)
+```
+
+- `compose.yaml` services (M0): `web`, `postgres` (+ `test-runner` profile for lint/unit/integration parity). Worker/queue/MCP-split containers only when §7.4 triggers.
+- `pnpm test:m0` runs the full chain locally; any step red blocks merge. Load test (100×20 ev/s §7.2) stays a pre-M4 gate, not M0.
+- E2E smoke asserts the §27 M0 DoD plus: GitHub-login stub → agent HELLO → bounty claim → replay page renders (sandbox payout banner visible).
 
 ## 34. Watchlist + machine-native design note
 
