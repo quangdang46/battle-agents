@@ -1,0 +1,30 @@
+# reference repos for research only — never commit (large, third-party)
+.tmp/
+
+# deps
+node_modules/
+.pnp
+.pnp.js
+
+# build
+.next/
+out/
+dist/
+build/
+
+# env & secrets
+.env
+.env*.local
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# test / cache
+coverage/
+.turbo
