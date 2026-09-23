@@ -1,0 +1,75 @@
+# M0 test profile — plan section 40.
+#
+# `pnpm test:m0` on a contributor machine and the `test-m0` CI job both execute
+# scripts/test-m0.sh, the same file with the same stage order. This profile is
+# what makes that a parity claim rather than a slogan: the CI job runs the
+# pipeline as the `m0-test-runner` service defined below, and that service runs
+# the repository's own script — not a CI-only re-implementation of it.
+#
+# The file composes by addition with compose.yaml (ba-docker-local-dev-y28):
+#   - it sets no `name:`, so the project name comes from the base file and the
+#     pipeline reuses the stack the contributor already has running instead of
+#     cloning it under a second project name;
+#   - its service is `m0-test-runner`, not `test-runner`, so it does not
+#     overwrite the base stack's own test-runner service;
+#   - `postgres-test` publishes 5433 because the base stack publishes 5432.
+#
+# The pipeline talks to `postgres-test`, not to the base `postgres`, so
+# migrations, seed and integration runs can never mutate the developer's local
+# database. The credentials below are throwaway values for a container bound to
+# localhost; they are not the contributor's Better Auth or GitHub OAuth secrets
+# (section 39) and must never be reused as such.
+
+services:
+  postgres-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: battle_test
+    ports:
+      - '${M0_PG_PUBLISHED_PORT:-5433}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d battle_test']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+
+  m0-test-runner:
+    image: node:22-bookworm-slim
+    profiles:
+      - test
+    working_dir: /workspace
+    # `set -e` is load-bearing: a failed install must abort the container with
+    # pnpm's own error, not fall through into a pipeline that runs against a
+    # half-provisioned tree and reports confusing downstream failures instead.
+    # The frozen install gives the container its own node_modules in a volume, so
+    # a Linux install never rewrites the host's (possibly macOS) install.
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        corepack enable
+        pnpm install --frozen-lockfile
+        exec bash scripts/test-m0.sh
+    environment:
+      M0_IN_CONTAINER: '1'
+      M0_PG_HOST: postgres-test
+      M0_PG_PORT: '5432'
+      DATABASE_URL: postgres://postgres:postgres@postgres-test:5432/battle_test
+      CI: 'true'
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+      - m0-test-runner-node-modules:/workspace/node_modules
+      - m0-test-runner-pnpm-store:/root/.local/share/pnpm/store
+
+volumes:
+  postgres-test-data:
+  m0-test-runner-node-modules:
+  m0-test-runner-pnpm-store:

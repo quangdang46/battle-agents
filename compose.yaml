@@ -1,0 +1,85 @@
+# Locked local contract: git clone -> cp .env.example .env -> docker compose up
+#
+# Docker is the infrastructure layer only. Features never import Compose or
+# Postgres-container concepts; they depend on repository interfaces alone.
+
+name: battle-agents
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-battle_agents}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-battle_agents}
+      POSTGRES_DB: ${POSTGRES_DB:-battle_agents}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - agent-battle-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-battle_agents} -d ${POSTGRES_DB:-battle_agents}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+      # Container-to-container host, so DATABASE_URL is set here rather than
+      # being duplicated in .env where it would point at localhost.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-battle_agents}:${POSTGRES_PASSWORD:-battle_agents}@postgres:5432/${POSTGRES_DB:-battle_agents}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    volumes:
+      - .:/app
+      - agent-battle-pnpm-store:/pnpm/store
+      - agent-battle-node-modules:/app/node_modules
+    command: ['dev']
+
+  test-runner:
+    profiles: ['test']
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CI: '1'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-battle_agents}:${POSTGRES_PASSWORD:-battle_agents}@postgres:5432/${POSTGRES_DB:-battle_agents}
+    volumes:
+      - .:/app
+      - agent-battle-pnpm-store:/pnpm/store
+      - agent-battle-node-modules:/app/node_modules
+    command: ['verify']
+
+volumes:
+  # Named so the database survives `docker compose down && docker compose up`.
+  agent-battle-postgres-data:
+  # Kept out of the bind mount: pnpm's symlinked store must not be written
+  # through to the host checkout.
+  agent-battle-pnpm-store:
+  agent-battle-node-modules:

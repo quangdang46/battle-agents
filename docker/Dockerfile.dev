@@ -1,0 +1,27 @@
+# Development image: toolchain only.
+#
+# Source arrives through a bind mount and dependencies through a named volume,
+# so editing a file never invalidates a layer and `docker compose up` works on a
+# clean clone with no host Node install.
+FROM node:22-alpine
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=/pnpm:$PATH
+# pnpm ignores PNPM_HOME when choosing the store, so the store would land in
+# the bind mount and pollute the host checkout. Point it at the named volume.
+ENV PNPM_STORE_DIR=/pnpm/store
+ENV npm_config_store_dir=/pnpm/store
+ENV CI=1
+ENV WATCHPACK_POLLING=true
+ENV CHOKIDAR_USEPOLLING=true
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+
+WORKDIR /app
+
+COPY docker/scripts/entrypoint.sh /usr/local/bin/battle-agents/entrypoint.sh
+RUN chmod +x /usr/local/bin/battle-agents/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/battle-agents/entrypoint.sh"]
+CMD ["dev"]

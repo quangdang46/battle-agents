@@ -1,0 +1,406 @@
+import { sql } from 'drizzle-orm';
+
+import { closeDatabasePool, createDatabase, createDatabasePool } from './client.js';
+import { applyMigrations } from './migrate.js';
+import {
+  FEATURE_TABLES,
+  OWNED_TABLES,
+  PLATFORM_TABLES,
+  PLATFORM_TABLES_OWNING_USER_ID,
+} from './schema/ownership.js';
+import { seedDatabase } from './seed/seed.js';
+import { SEEDED_BOUNTY_TOTAL_CENTS, SEED_BOUNTY } from './seed/fixtures.js';
+import type { Database } from './client.js';
+
+const PUBLIC_SCHEMA = 'public';
+const MONEY_FLOAT_TYPES: readonly string[] = ['numeric', 'real', 'double precision'];
+const MONEY_COLUMN_TABLES: readonly string[] = ['bounties', 'bounty_funds'];
+const REQUIRED_MONEY_COLUMNS: readonly string[] = ['bounty_funds.amount_cents'];
+const EVENTS_SEQUENCE_TABLE = 'event_log';
+const EVENT_LOG_PROBE_TYPE = 'verify.probe';
+const EVENT_LOG_PROBE_ACTOR = 'verify';
+
+export class SchemaVerificationError extends Error {
+  constructor(failures: readonly string[]) {
+    super(`Schema verification failed:\n${failures.map((failure) => `  - ${failure}`).join('\n')}`);
+    this.name = 'SchemaVerificationError';
+  }
+}
+
+interface TableNameRow {
+  readonly table_name: string;
+}
+
+interface ColumnRow {
+  readonly table_name: string;
+  readonly column_name: string;
+  readonly data_type: string;
+}
+
+interface ForeignKeyRow extends ColumnRow {
+  readonly foreign_table_name: string;
+  readonly foreign_column_name: string;
+}
+
+interface PrimaryKeyRow extends ColumnRow {
+  readonly ordinal_position: number;
+}
+
+interface CheckConstraintRow {
+  readonly table_name: string;
+  readonly check_clause: string;
+}
+
+interface CountRow {
+  readonly row_count: number;
+}
+
+interface ProbeIdRow {
+  readonly id: number;
+}
+
+interface FundingTotalRow {
+  readonly bounty_id: string;
+  readonly funded_cents: number;
+  readonly sponsor_count: number;
+}
+
+export interface SchemaSnapshot {
+  readonly tableNames: readonly string[];
+  readonly columns: readonly ColumnRow[];
+  readonly foreignKeys: readonly ForeignKeyRow[];
+  readonly primaryKeys: readonly PrimaryKeyRow[];
+  readonly checkConstraints: readonly CheckConstraintRow[];
+}
+
+async function readRows<TRow>(result: unknown, label: string): Promise<readonly TRow[]> {
+  if (typeof result !== 'object' || result === null || !('rows' in result)) {
+    throw new Error(`Expected ${label} to return a row array`);
+  }
+  const rows: unknown = (result as { rows: unknown }).rows;
+  if (!Array.isArray(rows)) {
+    throw new Error(`Expected ${label} rows to be an array`);
+  }
+  return rows as readonly TRow[];
+}
+
+async function readSchemaSnapshot(database: Database): Promise<SchemaSnapshot> {
+  const tableNames = await readRows<TableNameRow>(
+    await database.execute(sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = ${PUBLIC_SCHEMA} AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `),
+    'tables',
+  );
+
+  const columns = await readRows<ColumnRow>(
+    await database.execute(sql`
+      SELECT table_name, column_name, data_type FROM information_schema.columns
+      WHERE table_schema = ${PUBLIC_SCHEMA}
+      ORDER BY table_name, ordinal_position
+    `),
+    'columns',
+  );
+
+  const foreignKeys = await readRows<ForeignKeyRow>(
+    await database.execute(sql`
+      SELECT tc.table_name, kcu.column_name, ccu.table_name AS foreign_table_name,
+             ccu.column_name AS foreign_column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+      WHERE tc.table_schema = ${PUBLIC_SCHEMA} AND tc.constraint_type = 'FOREIGN KEY'
+      ORDER BY tc.table_name, kcu.column_name
+    `),
+    'foreign keys',
+  );
+
+  const primaryKeys = await readRows<PrimaryKeyRow>(
+    await database.execute(sql`
+      SELECT tc.table_name, kcu.column_name, kcu.ordinal_position
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+      WHERE tc.table_schema = ${PUBLIC_SCHEMA} AND tc.constraint_type = 'PRIMARY KEY'
+      ORDER BY tc.table_name, kcu.ordinal_position
+    `),
+    'primary keys',
+  );
+
+  const checkConstraints = await readRows<CheckConstraintRow>(
+    await database.execute(sql`
+      SELECT tc.table_name, cc.check_clause
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.check_constraints cc
+        ON cc.constraint_name = tc.constraint_name AND cc.constraint_schema = tc.table_schema
+      WHERE tc.table_schema = ${PUBLIC_SCHEMA} AND tc.constraint_type = 'CHECK'
+      ORDER BY tc.table_name, cc.check_clause
+    `),
+    'check constraints',
+  );
+
+  return {
+    tableNames: tableNames.map((row) => row.table_name),
+    columns,
+    foreignKeys,
+    primaryKeys,
+    checkConstraints,
+  };
+}
+
+function columnNames(snapshot: SchemaSnapshot, tableName: string): readonly string[] {
+  return snapshot.columns
+    .filter((column) => column.table_name === tableName)
+    .map((column) => column.column_name);
+}
+
+function findForeignKey(
+  snapshot: SchemaSnapshot,
+  tableName: string,
+  columnName: string,
+): ForeignKeyRow | undefined {
+  return snapshot.foreignKeys.find(
+    (key) => key.table_name === tableName && key.column_name === columnName,
+  );
+}
+
+export function checkTablesExist(snapshot: SchemaSnapshot): readonly string[] {
+  const actual = new Set(snapshot.tableNames);
+  return OWNED_TABLES.filter((table) => !actual.has(table)).map(
+    (table) => `missing table "${table}" from the platform/feature ownership manifest`,
+  );
+}
+
+export function checkAgentIdentityInvariant(snapshot: SchemaSnapshot): readonly string[] {
+  const failures: string[] = [];
+  const sessionColumns = columnNames(snapshot, 'sessions');
+  const agentIdKey = findForeignKey(snapshot, 'sessions', 'agent_id');
+
+  if (!sessionColumns.includes('agent_id')) {
+    failures.push('sessions.agent_id is missing; agent identity must hang off agents.id');
+  }
+  if (agentIdKey === undefined || agentIdKey.foreign_table_name !== 'agents') {
+    failures.push('sessions.agent_id must reference agents.id');
+  }
+
+  const userScoped = sessionColumns.filter((column) => column.includes('user'));
+  if (userScoped.length > 0) {
+    failures.push(`sessions must carry no user identity column, found: ${userScoped.join(', ')}`);
+  }
+  return failures;
+}
+
+export function checkUserIdOwnership(snapshot: SchemaSnapshot): readonly string[] {
+  const allowed = new Set<string>(PLATFORM_TABLES_OWNING_USER_ID);
+  return snapshot.columns
+    .filter((column) => column.column_name === 'user_id' && !allowed.has(column.table_name))
+    .map((column) => `table "${column.table_name}" owns a user_id column outside the platform set`);
+}
+
+export function checkCredentialStoresOnlyHashes(snapshot: SchemaSnapshot): readonly string[] {
+  const columns = columnNames(snapshot, 'agent_credentials');
+  if (!columns.includes('token_hash')) {
+    return ['agent_credentials.token_hash is missing'];
+  }
+  const rawTokenColumns = columns.filter(
+    (column) => column.includes('token') && column !== 'token_hash',
+  );
+  return rawTokenColumns.map(
+    (column) => `agent_credentials must not store a raw token, found column "${column}"`,
+  );
+}
+
+export function checkMoneyIsIntegerCents(snapshot: SchemaSnapshot): readonly string[] {
+  const failures: string[] = [];
+  const moneyColumns = snapshot.columns.filter((column) =>
+    MONEY_COLUMN_TABLES.includes(column.table_name),
+  );
+
+  for (const column of moneyColumns) {
+    if (MONEY_FLOAT_TYPES.includes(column.data_type)) {
+      failures.push(
+        `${column.table_name}.${column.column_name} is ${column.data_type}; money must be integer cents`,
+      );
+    }
+  }
+
+  const present = new Set(
+    moneyColumns
+      .filter((column) => column.column_name.endsWith('_cents'))
+      .map((column) => `${column.table_name}.${column.column_name}`),
+  );
+  for (const required of REQUIRED_MONEY_COLUMNS) {
+    if (!present.has(required)) {
+      failures.push(`missing required money column "${required}"`);
+    }
+  }
+
+  if (columnNames(snapshot, 'bounties').includes('amount_cents')) {
+    failures.push(
+      'bounties.amount_cents stores a drifting scalar; the total must be derived from bounty_funds',
+    );
+  }
+  return failures;
+}
+
+export function checkBattleParticipantIdentity(snapshot: SchemaSnapshot): readonly string[] {
+  const failures: string[] = [];
+  const participants = columnNames(snapshot, 'battle_participants');
+  const keyColumns = snapshot.primaryKeys
+    .filter((key) => key.table_name === 'battle_participants')
+    .sort((left, right) => left.ordinal_position - right.ordinal_position)
+    .map((key) => key.column_name);
+
+  if (keyColumns.join(',') !== 'battle_id,session_id') {
+    failures.push(
+      `battle_participants primary key must be (battle_id, session_id), found (${keyColumns.join(', ')})`,
+    );
+  }
+  if (participants.includes('agent_id')) {
+    failures.push('battle_participants must reference sessions, not agents');
+  }
+
+  const sessionKey = findForeignKey(snapshot, 'battle_participants', 'session_id');
+  if (sessionKey?.foreign_table_name !== 'sessions') {
+    failures.push('battle_participants.session_id must reference sessions.id');
+  }
+  return failures;
+}
+
+export function checkPlatformAndFeatureSplit(snapshot: SchemaSnapshot): readonly string[] {
+  const managed = new Set<string>([...PLATFORM_TABLES, ...FEATURE_TABLES]);
+  return snapshot.tableNames
+    .filter((table) => !managed.has(table) && !table.startsWith('drizzle'))
+    .map((table) => `table "${table}" is not assigned to the platform or a feature`);
+}
+
+async function readFundingTotal(database: Database): Promise<FundingTotalRow | undefined> {
+  try {
+    const rows = await readRows<FundingTotalRow>(
+      await database.execute(sql`
+        SELECT bounty_id, funded_cents, sponsor_count FROM bounty_funding_totals
+        WHERE bounty_id = ${SEED_BOUNTY.id}
+      `),
+      'bounty funding totals',
+    );
+    return rows[0];
+  } catch {
+    return undefined;
+  }
+}
+
+async function countRowsOwnedTables(database: Database): Promise<readonly number[]> {
+  const counts: number[] = [];
+  for (const table of OWNED_TABLES) {
+    const rows = await readRows<CountRow>(
+      await database.execute(
+        sql`SELECT COUNT(*)::integer AS row_count FROM ${sql.identifier(table)}`,
+      ),
+      `count for ${table}`,
+    );
+    counts.push(rows[0]?.row_count ?? 0);
+  }
+  return counts;
+}
+
+async function checkSeedIsIdempotent(database: Database): Promise<readonly string[]> {
+  await seedDatabase(database);
+  const firstRun = await countRowsOwnedTables(database);
+  await seedDatabase(database);
+  const secondRun = await countRowsOwnedTables(database);
+
+  return firstRun
+    .map((count, index) => ({
+      table: OWNED_TABLES[index] ?? 'unknown',
+      count,
+      after: secondRun[index],
+    }))
+    .filter(({ count, after }) => count !== after)
+    .map(
+      ({ table, count, after }) =>
+        `re-running the seed changed "${table}" from ${String(count)} to ${String(after)} rows`,
+    );
+}
+
+async function checkEventLogSequenceIsWritable(database: Database): Promise<readonly string[]> {
+  try {
+    const inserted = await database.execute(sql`
+      INSERT INTO ${sql.identifier(EVENTS_SEQUENCE_TABLE)} (type, actor_id)
+      VALUES (${EVENT_LOG_PROBE_TYPE}, ${EVENT_LOG_PROBE_ACTOR})
+      RETURNING id
+    `);
+    const rows = await readRows<ProbeIdRow>(inserted, 'event log probe');
+    return rows.length === 1
+      ? []
+      : ['event_log sequence is not writable after seeding explicit ids'];
+  } catch {
+    return ['event_log sequence is not writable after seeding explicit ids'];
+  } finally {
+    await removeEventLogProbe(database);
+  }
+}
+
+async function removeEventLogProbe(database: Database): Promise<void> {
+  await database.execute(sql`
+    DELETE FROM ${sql.identifier(EVENTS_SEQUENCE_TABLE)}
+    WHERE type = ${EVENT_LOG_PROBE_TYPE} AND actor_id = ${EVENT_LOG_PROBE_ACTOR}
+  `);
+}
+
+export async function runSchemaVerification(database: Database): Promise<readonly string[]> {
+  await applyMigrations(database);
+  const snapshot = await readSchemaSnapshot(database);
+  const funding = await readFundingTotal(database);
+
+  const failures: string[] = [
+    ...checkTablesExist(snapshot),
+    ...checkPlatformAndFeatureSplit(snapshot),
+    ...checkAgentIdentityInvariant(snapshot),
+    ...checkUserIdOwnership(snapshot),
+    ...checkCredentialStoresOnlyHashes(snapshot),
+    ...checkMoneyIsIntegerCents(snapshot),
+    ...checkBattleParticipantIdentity(snapshot),
+  ];
+
+  if (funding === undefined) {
+    failures.push('bounty_funding_totals view is missing or returned no row for the seeded bounty');
+  } else {
+    if (funding.funded_cents !== SEEDED_BOUNTY_TOTAL_CENTS) {
+      failures.push(
+        `bounty total should derive to ${String(SEEDED_BOUNTY_TOTAL_CENTS)} cents, ` +
+          `got ${String(funding.funded_cents)}`,
+      );
+    }
+    if (funding.sponsor_count !== 2) {
+      failures.push(`seeded bounty should have 2 sponsors, got ${String(funding.sponsor_count)}`);
+    }
+  }
+
+  failures.push(...(await checkSeedIsIdempotent(database)));
+  failures.push(...(await checkEventLogSequenceIsWritable(database)));
+  return failures;
+}
+
+async function main(): Promise<void> {
+  const pool = createDatabasePool();
+  try {
+    const database = createDatabase(pool);
+    const failures = await runSchemaVerification(database);
+    if (failures.length > 0) {
+      throw new SchemaVerificationError(failures);
+    }
+    process.stdout.write('Schema verification passed.\n');
+  } finally {
+    await closeDatabasePool(pool);
+  }
+}
+
+try {
+  await main();
+} catch (error: unknown) {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
+}

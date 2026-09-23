@@ -162,7 +162,7 @@ Three identities, three questions: Human login answers "who owns this Agent?"; A
 
 ## 4. Auth and onboarding
 
-Target UX (no separate CLI required if MCP suffices):
+Target UX. NOTE: the CLI is P0 foundation (section 31) and is NOT optional; MCP is the later adapter on the same protocol (section 33 P3). The shortest onboarding is login -> add MCP -> authorize, but the CLI is a first-class surface from P0, not a fallback. Corrected 2026-09-24; the earlier 'no separate CLI required' wording contradicted section 31.
 
 ```
 agentbattle.gg -> [Continue with GitHub] -> Dashboard "Connect your Coding Agent"
@@ -172,7 +172,7 @@ agentbattle.gg -> [Continue with GitHub] -> Dashboard "Connect your Coding Agent
 -> terminal: connected (Agent, Account, Project) -> "You can now enter the arena."
 ```
 
-One account fans out to Claude ONLINE + Codex ONLINE + OpenCode OFFLINE + Pi ONLINE with no per-session GitHub re-login: credential authorizes the installation once; each process/session only handshakes (authenticate -> identify installation -> identify agent -> create/resume session). Alternative install path retained: npx agent-battle install with agent auto-detect checklist + local game server + MCP registration (useful for local-first users). Never require editing the user's project repo.
+One account fans out to Claude ONLINE + Codex ONLINE + OpenCode OFFLINE + Pi ONLINE with no per-session GitHub re-login: credential authorizes the installation once; each process/session only handshakes (authenticate -> identify installation -> identify agent -> create/resume session). The `install` verb is NOT one of the three CLI roles in section 31 (agent runtime; platform interaction; dev/admin). Either add it explicitly to section 31 or drop it. Until decided, do not build a separate installer: `init` covers provisioning and MCP registration is a protocol concern, not a CLI command. Open question, flagged 2026-09-24. Never require editing the user's project repo.
 
 ## 5. Telemetry plane vs control plane
 
@@ -212,6 +212,19 @@ Agents -> Next.js Event Gateway -> {Realtime layer (WS/SSE) -> Browser} + {batch
 
 Neon = durable state (users/agents/installations/projects/sessions/battles/battle_participants/quests/bounties/agent_stats/event_log for KEY events only: battle/session start+finish, test pass/fail, level_up). Transient (cursor/streaming/thinking/frames/heartbeat) never INSERTs. Realtime is NOT Neon's job. MVP realtime = SSE (POST /api/events -> fan-out -> Game UI), simpler than WS.
 
+**REALTIME IS A HYBRID, NOT SSE-ONLY (corrected 2026-09-24).** The research specifies a per-channel split (export lines 13727-13733) and explicitly calls it better than forcing SSE over the whole system:
+```text
+Normal data        -> HTTP/REST
+Server -> browser  -> SSE
+Interactive battle -> WebSocket
+Agent -> platform  -> MCP / CLI
+Agent telemetry    -> Hooks
+Internal events    -> Event Bus
+```
+SSE covers server-to-browser push. **Interactive battle uses WebSocket**, because a player both sends actions and receives events continuously, and SSE is one-way. The earlier plan text collapsed this to SSE everywhere and lost the distinction.
+
+The 'one shared SSE connection' rule is compatible and still applies: do NOT open a separate SSE connection per UI component, the same way it does not forbid WebSocket for the battle channel. Scale-to-zero on the Neon free tier will drop both connection types, so reconnect-with-backoff is required for SSE and WebSocket alike (see 7.5).
+
 ### 7.3 Schema (initial)
 
 users, agents, installations, projects, sessions, battles, battle_participants, quests, bounties(+sponsors/funds), agent_stats, inventories, achievements, messages, event_log(key events). Session row carries agent_id+installation_id+project_id+started/ended+status. Battle participants reference session_ids. Bounty object per 11.1.
@@ -219,6 +232,25 @@ users, agents, installations, projects, sessions, battles, battle_participants, 
 ### 7.4 Scale-up plan (only when measured)
 
 Phase 1 (MVP): Vercel Next.js (Web+API+Auth+MCP+SSE) + Neon. Phase 2 (only after benchmark proves event throughput is the bottleneck): Agents -> Gateway -> {Next.js/Vercel, Realtime service, Queue} -> Neon. Do NOT add Redis/Upstash preemptively ("don't choose Redis just because realtime might need Redis").
+
+### 7.5 Free-tier constraints (verified 2026-09-24, and they are binding)
+
+These are not advice, they change design decisions, so they are recorded here.
+
+**Vercel Hobby is personal, non-commercial ONLY.** Vercel ToS section 4: "You shall only use the Services under a Hobby plan for your personal or non-commercial use." The Fair Use Guidelines are blunter: "Hobby teams are restricted to non-commercial personal use only. All commercial usage of the platform requires either a Pro or Enterprise plan", and they define commercial usage to include any method of requesting or processing payment, plus donations.
+
+CONSEQUENCE FOR SECTION 11: bounty payouts are what make this product commercial. The resolution is a hard architectural boundary, not a legal opinion:
+- ALLOWED on Hobby: Agent Battle records bounties, runs the game, tracks reputation and history, and DISPLAYS reward amounts.
+- FORBIDDEN on Hobby: Agent Battle itself processing, routing, or holding money.
+- The payout rail therefore stays OUTSIDE the platform. Sponsors pay solvers directly on GitHub; Agent Battle observes the outcome. Section 17.5's "payout: manual/sandbox" for M2 is not merely prudent, it is the ONLY arrangement that keeps Hobby compliant. Any future in-platform payment feature forces a move to Pro.
+
+**Neon Free limits, each with a design consequence:**
+- Scale to zero after 5 minutes and it CANNOT be disabled. Therefore an SSE connection WILL be dropped by the platform. Reconnect with backoff is a correctness requirement, not a nicety, and the browser client must treat a dropped stream as normal rather than as an error.
+- 0.5 GB storage per project, and exceeding it makes writes FAIL with the project suspended. With ~20 events per agent per second, `event_log` will reach that ceiling quickly, so the PERSISTED_EVENT_TYPES filter and the retention policy in section 30 are P0 deliverables rather than later optimization. Every unbounded table needs a retention rule before M0.
+- 10 branches per project maximum. The per-PR preview branch strategy in section 37 must include branch cleanup, or preview branches will consume the quota.
+- 100 CU-hours per project per month, about 0.25 CU for 400 hours. Not a constraint at 5 users; noted so nobody treats it as one.
+
+**Heavy coding workload must not run inside a Vercel Function.** Cloning a repo, installing dependencies, running a test suite, and a production build are a different workload class from serving a web request. The battle judge and any agent execution belong in a Job or Worker, not a request handler. Section 37 already defers worker containers until scale-up triggers; the judge is one of those triggers.
 
 ## 8. Frontend and game client
 
@@ -331,7 +363,11 @@ Same API key = same Agent across processes (register -> save key -> Bearer every
 
 ## 14. Assets
 
-Sources: OpenGameArt (fast prototyping: characters/tilesets/RPG maps/UI/SFX), itch.io (largest: pixel character/RPG, cyberpunk/arena tilesets, UI, battle VFX keywords), Kenney (clean consistent packs: characters/UI/icons/buildings/particles), CraftPix/GameDevMarket (commercial production art), GitHub (CC0 packs — VERIFY each license, never assume). Direction: cyberpunk / dev-workstation / RPG-arena; tentative skins Claude->Mage, Codex->Knight, Gemini->Alchemist, OpenCode->Rogue, Pi->Hacker — skins ONLY, never hardcode class to model (behavior->build per 10.2). Conversation offered a curated 10-20 pack shortlist (free/CC0, single style) as follow-up — do that before commissioning art. License hygiene: code MIT; asset packs keep their own licenses, tracked separately.
+Sources: OpenGameArt (fast prototyping: characters/tilesets/RPG maps/UI/SFX), itch.io (largest: pixel character/RPG, cyberpunk/arena tilesets, UI, battle VFX keywords), Kenney (clean consistent packs: characters/UI/icons/buildings/particles), CraftPix/GameDevMarket (commercial production art), GitHub (CC0 packs — VERIFY each license, never assume). MEDIUM DECIDED 2026-09-24: **2D pixel art is the rendering medium; cyberpunk / dev-workstation / RPG-arena is the mood applied to it.** The plan named a mood but never a medium, and the two do not conflict: pixel sprites lit by a neon cyberpunk palette is one coherent direction. Pixel was already de facto chosen by section 19's PixiJS plus tilemap layout, section 25's 16x16 sprites, and the vendored tiny-swords-cc0 pack in section 28.1.
+
+THE SPLIT, and it does not bend toward a fully retro UI: pixel art for the game world, characters, items, tilesets and VFX; the dashboard, bounty board and auth screens stay modern, clean and responsive. A site that is retro all the way down is harder to use and reads as a costume. Section 9's skeletal runtime is compatible with pixel sprites and is NOT superseded by this decision: sprite attachments are what a skeleton poses. DESIGN.md is the binding source for visual decisions; this section records the decision and the reasoning.
+
+Direction: cyberpunk / dev-workstation / RPG-arena; tentative skins Claude->Mage, Codex->Knight, Gemini->Alchemist, OpenCode->Rogue, Pi->Hacker — skins ONLY, never hardcode class to model (behavior->build per 10.2). Conversation offered a curated 10-20 pack shortlist (free/CC0, single style) as follow-up — do that before commissioning art. License hygiene: code MIT; asset packs keep their own licenses, tracked separately.
 
 ## 15. Milestones, slices, phases
 
@@ -402,6 +438,11 @@ User (GitHub human) / Agent (persistent character) / Session (ephemeral run) / I
 
 ## 19. Implementation — monorepo layout (target)
 
+RATIFIED 2026-09-24, because it was previously ambiguous and the ambiguity blocks the dependency rule:
+- **Each `packages/features/<name>/` is a real workspace package with its own `package.json`**, not a bare directory. A bare folder makes cross-feature imports unanalyzable by any tool. The scaffold has already built them this way; ratify it so a later agent does not 'simplify' it back and invert the rule.
+- **TypeScript is pinned to 7.0.2** (the native Go compiler line). The plan previously named no version at all, which invited drift. 7.x is a major rewrite, so any tool that shells out to the `tsc` binary for formatting or linting must be verified against it rather than assumed to work.
+- **No `turbo.json`.** Build is `tsc` plus `pnpm -r` plus a vitest aggregator. No reference repo in `.tmp/` uses turbo, and an unused orchestrator is dead weight (G9).
+
 ```
 battle-agents/
   COMPREHENSIVE_PLAN_FOR_BATTLE_AGENTS.md
@@ -423,7 +464,7 @@ battle-agents/
         (app)/agents/[agentId]/page.tsx
         (app)/guilds/page.tsx
         api/
-          auth/[...nextauth]/route.ts
+          auth/[...all]/route.ts                 # Better Auth catch-all (NOT [...nextauth], that is NextAuth's convention)
           events/route.ts            # POST telemetry ingest (batched)
           events/stream/route.ts     # SSE fan-out
           sessions/route.ts          # HELLO handshake (resume vs create)
@@ -518,37 +559,224 @@ export interface GameFeature {
 }
 ```
 
-`packages/core/src/runtime.ts`:
+`packages/core/src/runtime.ts`, REWRITTEN 2026-09-24. The original section 20 sketch did not compile: it referenced `ctx` and `pushToList` without defining either, and used four types (`RuntimeContext`, `StateStore`, `EventBus`, `Logger`) that the plan never defined anywhere. Section 29.1 tells implementers to FREEZE this contract before any feature code, so shipping it uncompilable would have invited agents to invent `RuntimeContext` and `install()` and then treat those inventions as the contract. All six defects are fixed below.
 
 ```ts
-export function createRuntime(opts: { extensions: GameFeature[]; store: StateStore; bus: EventBus; log?: Logger }) {
+// ---- types the original sketch referenced but never defined ----
+
+export interface Logger {
+  warn(msg: string): void;
+  info?(msg: string): void;
+  error?(msg: string, err?: unknown): void;
+}
+
+/** Persistence boundary. Note the contract on append(): it MUST apply the
+ *  persist filter. It is NOT a raw "write every event" sink. See
+ *  packages/core/src/persistence.ts and PERSISTED_EVENT_TYPES in section 21. */
+export interface StateStore {
+  append(evt: GameEvent): Promise<void>;
+  load<S>(feature: string): S | undefined;   // namespaced per-feature slice
+  save<S>(feature: string, state: S): Promise<void>;
+}
+
+export interface EventBus {
+  publish(evt: GameEvent): void;             // transient fan-out (SSE/WS)
+  subscribe(fn: (evt: GameEvent) => void): () => void;
+}
+
+export interface Runtime {
+  capabilities(): string[];
+  actions(): string[];
+  degraded(): ReadonlyMap<string, readonly string[]>;
+  install(ext: GameFeature): void;
+  uninstall(id: string): void;
+  dispatch(cmd: Command): Promise<GameEvent[]>;
+  emit(evt: GameEvent): Promise<void>;
+  runAction<I, O>(id: string, input: I): Promise<O>;
+}
+
+export interface RuntimeContext {
+  readonly runtime: Runtime;   // back-reference, so a feature can install() at runtime
+  readonly store: StateStore;
+  readonly bus: EventBus;
+  readonly log?: Logger;
+  now(): string;               // injectable clock, keeps tests deterministic (T5, T9)
+}
+
+/** Section 32's typed action. Without this registry, section 32 was not
+ *  implementable on top of section 20: the old code had no place to put
+ *  {input, output, permissions}. */
+export type ActionDef<I = unknown, O = unknown> = {
+  id: string;                  // dotted, e.g. "quest.claim"
+  input: I;
+  output: O;
+  permissions: string[];
+  run: (input: I, ctx: RuntimeContext) => Promise<O>;
+};
+
+/** GameFeature gains one optional member: actionDefs?: ActionDef[] */
+
+/** Author-side factory for section 32. Without it, section 32 locks
+ *  defineAction({id, input, output, permissions}) while section 20 offers no
+ *  such function, so every feature author would hand-roll the object and the
+ *  validation would be re-invented per feature. */
+export function defineAction<I, O>(def: {
+  id: string;
+  input: I;
+  output: O;
+  permissions: string[];
+  run: (input: I, ctx: RuntimeContext) => Promise<O>;
+}): ActionDef<I, O> {
+  if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(def.id)) {
+    // Dotted, lowercase, at least two segments: "quest.claim", "battle.accept".
+    // A bare "claim" would collide the moment two features both have one.
+    throw new Error(`action id must be dotted and lowercase, got "${def.id}"`);
+  }
+  if (def.permissions.length === 0) {
+    // An action with no declared permission is an action nobody can authorize.
+    throw new Error(`action ${def.id} declares no permissions`);
+  }
+  return def;
+}
+
+function addHandler<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
+export function createRuntime(opts: {
+  extensions: GameFeature[];
+  store: StateStore;
+  bus: EventBus;
+  log?: Logger;
+}): Runtime {
   const commands = new Map<string, CommandHandler>();
   const handlers = new Map<string, EventHandler[]>();
-  const caps = new Map<string, string>(); // capability -> feature id
-  for (const ext of opts.extensions) {
-    for (const c of ext.commands ?? []) { if (commands.has(c.type)) throw new Error(`duplicate command ${c.type}`); commands.set(c.type, c); }
-    for (const h of ext.eventHandlers ?? []) pushToList(handlers, h.on, h);
-    for (const cap of ext.capabilities ?? []) caps.set(cap.name, ext.id);
-    const missing = (ext.requires ?? []).filter(r => !caps.has(r));
-    if (missing.length) opts.log?.warn(`[core] feature ${ext.id} degraded, missing: ${missing.join(",")}`);
+  const caps = new Map<string, string>();        // capability -> owning feature id
+  const actions = new Map<string, ActionDef>();  // action id -> typed action (section 32)
+  const degradedFeatures = new Map<string, string[]>();
+  const owned = new Map<string, { commands: string[]; actions: string[]; caps: string[]; handlers: string[] }>();
+
+  let runtime: Runtime;
+  const ctx: RuntimeContext = {
+    runtime,                       // assigned below, before any handler can run
+    store: opts.store,
+    bus: opts.bus,
+    log: opts.log,
+    now: () => new Date().toISOString(),
+  };
+
+  function register(ext: GameFeature): void {
+    const mine = { commands: [] as string[], actions: [] as string[], caps: [] as string[], handlers: [] as string[] };
+    for (const c of ext.commands ?? []) {
+      if (commands.has(c.type)) throw new Error(`duplicate command ${c.type}`);
+      commands.set(c.type, c);
+      mine.commands.push(c.type);
+    }
+    for (const h of ext.eventHandlers ?? []) { addHandler(handlers, h.on, h); mine.handlers.push(h.on); }
+    for (const cap of ext.capabilities ?? []) { caps.set(cap.name, ext.id); mine.caps.push(cap.name); }
+    for (const a of ext.actionDefs ?? []) {
+      if (actions.has(a.id)) throw new Error(`duplicate action ${a.id}`);
+      actions.set(a.id, a);
+      mine.actions.push(a.id);
+    }
+    owned.set(ext.id, mine);
   }
-  return {
-    capabilities: [...caps.keys()],
-    async dispatch(cmd: Command) {
-      const h = commands.get(cmd.type); if (!h) throw new Error(`unknown command ${cmd.type}`);
+
+  function unregister(id: string): void {
+    const mine = owned.get(id);
+    if (!mine) return;
+    for (const type of mine.commands) commands.delete(type);
+    for (const actionId of mine.actions) actions.delete(actionId);
+    for (const name of mine.caps) caps.delete(name);
+    for (const evtType of mine.handlers) {
+      const list = handlers.get(evtType);
+      if (list) { handlers.set(evtType, list.filter((h) => owned.get(id) !== undefined)); }
+    }
+    owned.delete(id);
+  }
+
+  /* TWO-PASS capability resolution.
+   * The original checked `requires` immediately after registering each feature's
+   * own capabilities, so a feature ordered BEFORE its provider in extensions[]
+   * was falsely reported as degraded. Section 24 calls that warning the
+   * removal-test proof, so an order-dependent warning means the one signal that
+   * detects a missing capability cannot tell "wrong array order" from "genuinely
+   * absent". Resolution therefore runs after the whole batch is registered, and
+   * again after every install()/uninstall(). */
+  function revalidateCapabilities(): void {
+    degradedFeatures.clear();
+    for (const ext of opts.extensions) {
+      const missing = (ext.requires ?? []).filter((r) => !caps.has(r));
+      if (missing.length) {
+        degradedFeatures.set(ext.id, missing);
+        opts.log?.warn(`[core] feature ${ext.id} degraded, missing: ${missing.join(", ")}`);
+      }
+    }
+  }
+
+  for (const ext of opts.extensions) register(ext);
+  revalidateCapabilities();
+
+  runtime = {
+    capabilities: () => [...caps.keys()],
+    actions: () => [...actions.keys()],
+    degraded: () => new Map(degradedFeatures),
+
+    install(ext: GameFeature): void {
+      if (owned.has(ext.id)) throw new Error(`feature ${ext.id} already installed`);
+      register(ext);
+      revalidateCapabilities();
+    },
+
+    uninstall(id: string): void {
+      unregister(id);
+      revalidateCapabilities();
+    },
+
+    async dispatch(cmd: Command): Promise<GameEvent[]> {
+      const h = commands.get(cmd.type);
+      if (!h) throw new Error(`unknown command ${cmd.type}`);
       const evts = await h.handle(cmd, ctx);
       for (const e of evts) await this.emit(e);
       return evts;
     },
-    async emit(evt: GameEvent) {
-      await opts.store.append(evt);                       // event_log (key events only — see §7.2 filter)
+
+    async emit(evt: GameEvent): Promise<void> {
+      // store.append() applies PERSISTED_EVENT_TYPES (section 21). Transient
+      // events (thinking, waiting, streaming, heartbeat, cursor) are published
+      // to the bus but MUST NOT reach the database. See the persist filter
+      // bead. Ordering: persist first, then handlers, then fan-out.
+      await opts.store.append(evt);
       for (const h of handlers.get(evt.type) ?? []) await h.handle(evt, ctx);
-      opts.bus.publish(evt);                              // SSE/WS fan-out (transient allowed)
+      opts.bus.publish(evt);
     },
-    uninstall(id: string) { /* remove feature's handlers; removal test hooks here */ },
+
+    async runAction<I, O>(id: string, input: I): Promise<O> {
+      const a = actions.get(id) as ActionDef<I, O> | undefined;
+      if (!a) throw new Error(`unknown action ${id}`);
+      return a.run(input, ctx);
+    },
   };
+
+  return runtime;
 }
 ```
+
+CONTRACT 1 ACCEPTANCE CHECKLIST (2026-09-24). `packages/core/` is not done until every line passes. This exists because the original section 20 shipped uncompilable, and a checklist is cheaper than re-auditing prose:
+1. `RuntimeContext`, `StateStore`, `EventBus`, `Logger` are DEFINED, not merely referenced in a type position.
+2. `addHandler` (the replacement for the undefined `pushToList`) is defined.
+3. `ctx` is constructed before any handler can execute, not assumed.
+4. `install()` and `uninstall()` both exist and are symmetric across commands, actions, capabilities and event handlers.
+5. `requires` resolution is order-independent. TEST BY REVERSING the array: `battle` listed BEFORE `reputation` must NOT produce a degraded warning. A single-pass check fails this and reports a false degradation, which would poison the one signal section 24 relies on.
+6. The `PERSISTED_EVENT_TYPES` filter is real code in `packages/core/src/persistence.ts`. TEST: emit a transient event and assert the store did NOT receive it. A comment is not an implementation.
+7. `defineAction` and `ActionDef` exist and are exported, so section 32 has something to stand on.
+8. `pnpm -r typecheck` passes.
+
+REMOVAL TEST, precisely specified (2026-09-24): `scripts/removal-test.sh` iterates `packages/features/*`; for each one it must (1) remove that feature's entry from the `extensions[]` array in the composition root, (2) run `tsc --noEmit && vitest run`, (3) restore both the entry and the directory, even on failure. Removing the directory alone is not sufficient, because the composition root would still import the missing module. Capability-degraded warnings are EXPECTED output after removal and must not fail the run; only type errors and test failures may.
+
+PERSIST FILTER placement: the filter lives in `packages/core/src/persistence.ts`, not inside the feature layer and not in a route handler. `StateStore.append()` is the ONLY database write path in the platform, so the filter cannot be bypassed.
 
 Removal test (CI): `scripts/removal-test.sh` — for each `packages/features/*`, temporarily move it away and run `tsc --noEmit && vitest run`; must stay green (except capability-degraded warnings).
 
@@ -755,7 +983,11 @@ Implementation: `event_log` table (§21) + `features/activity/` extension (owns 
 
 ## 31. CLI is P0 foundation (not later tooling)
 
-CLI (`agent-battle`) is the agent's daily runtime entry point and ships in P0 alongside API — **MCP does not have to be P0**; protocol/API + CLI first, MCP as an adapter on the same protocol later (keeps core cleaner, Pi-consistent).
+CLI (`agent-battle`) is the agent's daily runtime entry point and ships in P0 alongside API.
+
+**CORRECTION 2026-09-24: MCP IS P0, not P3.** This section previously quoted research line 10994 ('MCP does not have to be P0'), which was the MIDDLE state. The research demoted MCP at 10986-10994 and then RAISED IT BACK at research lines 11272-11294, whose final P0 list reads `Interfaces: Public API, CLI, MCP`, followed by the line that matters most: 'do not design the game first and bolt MCP/CLI on later; design the game assuming the agent can ONLY play through the protocol/tool interface.' Evidence path in the source export: line 10735 put MCP in P0, 10986 moved it to P3, 11272 restored it to P0. P0 therefore contains Public API, CLI **and** MCP as three equal interface consumers.
+
+MCP is still an ADAPTER over the protocol (it dispatches through the capability registry, never through game code), which is what the original 'adapter' wording was reaching for. The error was the PHASE, not the architecture: calling it P3 implied gameplay could be built without it.
 
 ```
 Web App (Next.js) ─┐
@@ -789,9 +1021,17 @@ CORE → Extension Contract → GAME extensions | INTERFACE extensions | INFRAST
 - `interfaces/{cli,mcp,api,websocket}/` — capability CONSUMERS/adapters; adding a feature never edits them (only composition/manifest registration).
 - `infrastructure/{postgres,github,auth,notifications,...}` — integrations behind boundaries.
 
+TAXONOMY-TO-DISK MAPPING (added 2026-09-24; section 33 is conceptual, section 19 is physical):
+- `extensions/` = the directory `packages/features/`. KEEP THE NAME `features/` everywhere. Renaming to `extensions/` would churn section 19, section 24, the removal test and the CI scripts for no gain.
+- `interfaces/cli` = `packages/cli/` (section 31 and 37 already use this path; section 33 used the bare `cli/` in one sentence, which contradicted its own taxonomy).
+- `interfaces/mcp` = `packages/mcp-server/`. `interfaces/api` + `interfaces/websocket` = `apps/web/` (Route Handlers and the SSE stream).
+- `packages/adapters/*` = interface adapters: they read a harness's native events and emit normalized AgentEvent. They are NOT gameplay and NOT core.
+- `packages/protocol/` = the shared versioned contract (AgentEvent union, tool map, version pin). It is a CONTRACT, not a feature, not an interface.
+- `packages/game-client/` = presentation: the PixiJS world. It consumes events and never mutates state.
+
 Test (CI + review checklist): **adding a feature that forces edits to `core/`, `cli/`, or `mcp/` implementations = architecture failure**. Allowed: composition-root/manifest one-liners. Feature layout gains two optional dirs: `application/` (command/query handlers = the single domain implementation all surfaces share) and `cli/`+`mcp/` contribution fragments ONLY if the interface-adapter pattern needs per-feature metadata (default: pure registry entries, no code).
 
-Revised build order: **P0** Core Runtime, Extension API, Capability Registry, User/GitHub Auth, Agent Identity, Agent Credentials, Session, Activity/Event Log, Public API, CLI (login/init/start/status/doctor). **P1** Agent, Quest, Bounty, Progression, Reputation (each exposing CLI/MCP-consumable capabilities from birth — design machine-native, never "game first, protocol later"). **P2** Battle, Guild, World, Animation, Social. **P3** MCP adapter, Skills (`skill.md` family as onboarding layer: instructions ≠ transport ≠ protocol ≠ runtime — never conflated), Adapters per harness, External extension packages, Third-party worlds, Public protocol/SDK. Explicitly NOT now: marketplace, distributed events, microservices, dynamic loading.
+Revised build order: **P0** Core Runtime, Extension API, Capability Registry, User/GitHub Auth, Agent Identity, Agent Credentials, Session, Activity/Event Log, Public API, **CLI (login/init/start/status/doctor), MCP adapter** (all three are P0 interface consumers; see the section 31 correction). **P1** Agent, Quest, Bounty, Progression, Reputation (each exposing CLI/MCP-consumable capabilities from birth — design machine-native, never "game first, protocol later"). **P2** Battle, Guild, World, Animation, Social. **P3** Skills (`skill.md` family as onboarding layer: instructions ≠ transport ≠ protocol ≠ runtime — never conflated), Adapters per harness, External extension packages, Third-party worlds, Public protocol/SDK. Explicitly NOT now: marketplace, distributed events, microservices, dynamic loading.
 
 ## 35. License lock (decided: MIT — supersedes any Apache-2.0 mention)
 
@@ -840,6 +1080,10 @@ Local flow every contributor must get green on a clean clone:
 
 - GitHub OAuth App with homepage `http://127.0.0.1:3000` + callback `http://127.0.0.1:3000/api/auth/callback/github` (document exact URLs in `.env.example` comments; support `localhost` alias note for GitHub's callback matching).
 - `.env.example` keys: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=http://127.0.0.1:3000`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `DATABASE_URL` (local container default; Neon branch URL for preview).
+- USE `127.0.0.1`, NOT `localhost`, in every registered callback URL. GitHub recommends 127.0.0.1 or ::1 for loopback OAuth, and it treats them as different origins.
+- REGISTER TWO SEPARATE OAuth Apps, do not share one (2026-09-24). A development app with homepage `http://127.0.0.1:3000` and callback `http://127.0.0.1:3000/api/auth/callback/github`, and a production app for the deployed origin. Keep the credentials in separate env scopes (`GITHUB_CLIENT_ID=DEV_...` locally, `=PROD_...` in Vercel). A shared app means a local test can silently invalidate the production callback configuration.
+- The callback is a LOOPBACK redirect: the browser returns to 127.0.0.1 on the developer's own machine, and Docker port mapping carries it into the container. Docker does not make OAuth harder; `ports: - "3000:3000"` is all that is required.
+- Postgres in Compose needs a `healthcheck` plus `depends_on: { condition: service_healthy }` for the web service, otherwise the first boot races migrations against an unready database (the 'DB unreachable' failure mode in the same section).
 - First-login bootstrap: new GitHub user → `users` row → empty agent list → dashboard prompts CLI/MCP connect (§4). No manual SQL.
 - Failure modes documented in `apps/web/README.md`: wrong callback URL (GitHub error `redirect_uri_mismatch`), missing secret (Better Auth boot error), DB unreachable (migration/seed step missed §40).
 
@@ -854,7 +1098,9 @@ docker compose up ──▶ migrations ──▶ seed ──▶ unit (vitest) �
 
 - `compose.yaml` services (M0): `web`, `postgres` (+ `test-runner` profile for lint/unit/integration parity). Worker/queue/MCP-split containers only when §7.4 triggers.
 - `pnpm test:m0` runs the full chain locally; any step red blocks merge. Load test (100×20 ev/s §7.2) stays a pre-M4 gate, not M0.
-- E2E smoke asserts the §27 M0 DoD plus: GitHub-login stub → agent HELLO → bounty claim → replay page renders (sandbox payout banner visible).
+- E2E smoke for M0 asserts ONLY what M0 can produce: GitHub login (stubbed) → users row → empty agent list → agent HELLO creates a session → logout → login again shows the SAME user and the SAME agents. The bounty-claim and replay-render assertions are NOT M0: bounty is M2 and replay is M4, so asserting them in the M0 smoke made `pnpm test:m0` impossible to pass before M2 and M4 were complete. They move to `pnpm test:m2` and `pnpm test:m4` respectively (added 2026-09-24).
+- The M0 removal test is also near-vacuous (there are no features yet) and the license check is near-vacuous (nothing vendored yet). Both must still RUN and pass, so a broken script is caught early, but neither proves anything until M1/M2. Stated plainly so nobody reads a green M0 as architectural validation.
+- OAuth testing intent (2026-09-24, corrected): the automated CI smoke uses a GitHub-login STUB because bulk test cases must not depend on a live OAuth round trip. But local development SHOULD exercise the REAL GitHub OAuth flow end to end, including the loopback callback to 127.0.0.1. The stub is for CI throughput, not the default way to verify auth works.
 
 ## 34. Watchlist + machine-native design note
 

@@ -1,0 +1,517 @@
+#!/usr/bin/env bash
+#
+# Canonical M0 test pipeline — plan section 40.
+#
+#   compose -> migrations -> seed -> unit -> integration -> removal-test -> license -> e2e-smoke
+#
+# Contributors run this file directly through `pnpm test:m0`; CI runs this same
+# file as the command of the compose `m0-test-runner` service. Same file, same
+# stage order, same exit code in both places — that is the whole point of the
+# local/CI parity contract.
+#
+# Guarantees this script is responsible for:
+#   - stages execute in the order above, never out of order;
+#   - every executed stage writes a marker under `.tmp/m0-stages/`, and a run may
+#     only report the M0 gate green when a marker exists for all eight stages, so
+#     no stage can be skipped silently;
+#   - a red stage names itself in the summary, in the stderr verdict, and in the
+#     exit code.
+#
+# A stage whose implementation does not exist in this tree yet is reported as
+# `unimplemented` and fails the run. That is deliberate: a missing stage and a
+# passing stage must never look the same.
+
+set -Eeuo pipefail
+
+SCRIPT_NAME="$(basename -- "${BASH_SOURCE[0]}")"
+readonly SCRIPT_NAME
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly REPO_ROOT
+
+readonly PIPELINE_ID="m0"
+readonly MARKER_SUBDIR=".tmp/m0-stages"
+readonly MARKER_SUFFIX=".marker"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+readonly RUN_ID
+
+# Order is the contract. Do not reorder without amending plan section 40.
+readonly CANONICAL_STAGES=(
+  compose
+  migrations
+  seed
+  unit
+  integration
+  removal-test
+  license
+  e2e-smoke
+)
+
+readonly STATUS_PASS="pass"
+readonly STATUS_FAIL="fail"
+readonly STATUS_UNIMPLEMENTED="unimplemented"
+
+readonly COMPOSE_BASE_FILE="compose.yaml"
+readonly COMPOSE_TEST_FILE="compose.test.yaml"
+readonly COMPOSE_PROFILE="test"
+# Distinct from the base stack's own `test-runner` service so the two files
+# compose by addition instead of one overwriting the other.
+readonly TEST_RUNNER_SERVICE="m0-test-runner"
+
+readonly PG_HOST_ENV="M0_PG_HOST"
+readonly PG_PORT_ENV="M0_PG_PORT"
+readonly PG_PUBLISHED_PORT_ENV="M0_PG_PUBLISHED_PORT"
+readonly PG_PUBLISHED_PORT_DEFAULT="5433"
+readonly PG_WAIT_ATTEMPTS=30
+readonly PG_WAIT_INTERVAL_SECONDS=1
+
+readonly IN_CONTAINER_ENV="M0_IN_CONTAINER"
+readonly STAGES_ENV="M0_STAGES"
+readonly RESUME_ENV="M0_RESUME"
+readonly MARKER_DIR_ENV="M0_MARKER_DIR"
+readonly DATABASE_URL_ENV="M0_DATABASE_URL"
+
+# Beads that own each delegated stage, so a red pipeline names who owes the work.
+readonly OWNER_DB="ba-db-schema-drizzle-fki"
+readonly OWNER_REMOVAL_TEST="ba-removal-test-e33"
+readonly OWNER_LICENSE="ba-license-hygiene-qy7"
+readonly OWNER_WEB="ba-web-ui-surface-t3w"
+
+SELECTED_STAGES=()
+RESULT_STATUS=()
+RESULT_ELAPSED=()
+RESULT_NOTE=()
+COMPOSE_FILE_ARGS=()
+CANDIDATE_FOUND=0
+STAGE_STATUS="$STATUS_FAIL"
+
+cd -- "$REPO_ROOT"
+
+# --- output helpers ----------------------------------------------------------
+
+note() {
+  printf '%s\n' "$*"
+}
+
+fail() {
+  printf '%s: %s\n' "$SCRIPT_NAME" "$*" >&2
+  exit 1
+}
+
+# --- environment resolution --------------------------------------------------
+
+# Inside the compose `test-runner` service the stack is already up, so the compose
+# stage verifies it rather than starting it. That keeps `docker compose up` in
+# the chain in both environments instead of letting the container re-enter Docker.
+running_in_test_runner() {
+  [ "${!IN_CONTAINER_ENV:-}" = "1" ]
+}
+
+resolve_compose_file_args() {
+  COMPOSE_FILE_ARGS=()
+  if [ -f "$COMPOSE_BASE_FILE" ]; then
+    COMPOSE_FILE_ARGS+=(-f "$COMPOSE_BASE_FILE")
+  fi
+  COMPOSE_FILE_ARGS+=(-f "$COMPOSE_TEST_FILE")
+}
+
+# The compose file is contributed by ba-docker-local-dev-y28; this script only
+# reads it, so its absence is not fatal while the stack lives in the test profile.
+has_compose_files() {
+  local file_arg
+  for file_arg in "${COMPOSE_FILE_ARGS[@]}"; do
+    if [ -f "${file_arg#-f}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    fail "docker is required to run the M0 pipeline (https://docs.docker.com/get-docker/)"
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    fail "docker compose v2+ is required to run the M0 pipeline"
+  fi
+}
+
+# Migrations, seed and integration all talk to the compose Postgres. An explicit
+# DATABASE_URL in the environment (the test-runner service sets one) wins, so the
+# in-network URL is never overwritten with the published-port URL.
+default_test_database_url() {
+  local published_port="${!PG_PUBLISHED_PORT_ENV:-$PG_PUBLISHED_PORT_DEFAULT}"
+  printf 'postgres://postgres:postgres@127.0.0.1:%s/battle_test\n' "$published_port"
+}
+
+setup_database_url() {
+  if [ -z "${DATABASE_URL:-}" ]; then
+    DATABASE_URL="${!DATABASE_URL_ENV:-$(default_test_database_url)}"
+  fi
+  export DATABASE_URL
+}
+
+# --- stage markers -----------------------------------------------------------
+
+marker_dir() {
+  if [ -n "${!MARKER_DIR_ENV:-}" ]; then
+    printf '%s\n' "${!MARKER_DIR_ENV}"
+    return
+  fi
+  printf '%s\n' "$REPO_ROOT/$MARKER_SUBDIR"
+}
+
+marker_path() {
+  printf '%s/%s%s\n' "$(marker_dir)" "$1" "$MARKER_SUFFIX"
+}
+
+marker_field() {
+  local path
+  path="$(marker_path "$1")"
+  if [ ! -f "$path" ]; then
+    return 1
+  fi
+  grep -m1 "^$2=" "$path" | cut -d= -f2- || true
+}
+
+write_marker() {
+  local stage=$1 status=$2 started=$3 elapsed=$4
+  local dir
+  dir="$(marker_dir)"
+  mkdir -p -- "$dir"
+  {
+    printf 'stage=%s\n' "$stage"
+    printf 'status=%s\n' "$status"
+    printf 'run_id=%s\n' "$RUN_ID"
+    printf 'started=%s\n' "$started"
+    printf 'elapsed_seconds=%s\n' "$elapsed"
+  } >"$(marker_path "$stage")"
+}
+
+# A fresh run must not inherit markers from a previous one, otherwise an
+# unexecuted stage could pass the completeness check below.
+prepare_marker_dir() {
+  mkdir -p -- "$(marker_dir)"
+  if [ "${!RESUME_ENV:-}" = "1" ]; then
+    return
+  fi
+  local path
+  for path in "$(marker_dir)"/*"$MARKER_SUFFIX"; do
+    if [ -e "$path" ]; then
+      rm -f -- "$path"
+    fi
+  done
+}
+
+# --- stage selection ---------------------------------------------------------
+
+is_known_stage() {
+  local candidate=$1 known
+  for known in "${CANONICAL_STAGES[@]}"; do
+    if [ "$known" = "$candidate" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# M0_STAGES is the resume lever: a contributor re-running after a late failure
+# passes "unit integration". Selection is re-sorted into canonical order so the
+# chain can never execute out of sequence.
+resolve_selected_stages() {
+  local requested="${!STAGES_ENV:-}"
+  local normalized=${requested//,/ }
+  local -a requested_names=()
+  SELECTED_STAGES=()
+  if [ -z "$normalized" ]; then
+    SELECTED_STAGES=("${CANONICAL_STAGES[@]}")
+    return
+  fi
+  read -r -a requested_names <<<"$normalized"
+  local name known
+  for name in "${requested_names[@]}"; do
+    if ! is_known_stage "$name"; then
+      fail "unknown stage '$name'; valid stages: ${CANONICAL_STAGES[*]}"
+    fi
+  done
+  for known in "${CANONICAL_STAGES[@]}"; do
+    for name in "${requested_names[@]}"; do
+      if [ "$known" = "$name" ]; then
+        SELECTED_STAGES+=("$known")
+      fi
+    done
+  done
+}
+
+stages_not_selected() {
+  local known name not_selected=()
+  for known in "${CANONICAL_STAGES[@]}"; do
+    for name in "${SELECTED_STAGES[@]}"; do
+      if [ "$known" = "$name" ]; then
+        continue 2
+      fi
+    done
+    not_selected+=("$known")
+  done
+  printf '%s' "${not_selected[*]:-}"
+}
+
+# --- delegated stage resolution ---------------------------------------------
+
+pnpm_script_defined() {
+  node -e '
+    const fs = require("node:fs");
+    const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    process.exit(manifest.scripts && manifest.scripts[process.argv[2]] ? 0 : 1);
+  ' "$REPO_ROOT/package.json" "$1"
+}
+
+run_pnpm_script() {
+  local name=$1
+  if ! pnpm_script_defined "$name"; then
+    return 0
+  fi
+  CANDIDATE_FOUND=1
+  printf '  -> pnpm run %s\n' "$name"
+  pnpm run "$name"
+}
+
+run_repo_script() {
+  local path=$1
+  if [ ! -f "$REPO_ROOT/$path" ]; then
+    return 0
+  fi
+  CANDIDATE_FOUND=1
+  printf '  -> bash %s\n' "$path"
+  bash "$REPO_ROOT/$path"
+}
+
+run_candidate() {
+  case "$1" in
+    script:*) run_pnpm_script "${1#script:}" ;;
+    file:*) run_repo_script "${1#file:}" ;;
+    *) fail "unknown stage candidate kind: $1" ;;
+  esac
+}
+
+# Availability and success are separate facts. Deciding them by exit code alone
+# would misread a command that legitimately exits 127 — a missing binary inside
+# a stage, say — as "this candidate does not exist" and report the stage as
+# unimplemented, hiding the real failure.
+run_delegated() {
+  local stage=$1 owner=$2
+  shift 2
+  local candidate exit_code
+  CANDIDATE_FOUND=0
+  for candidate in "$@"; do
+    exit_code=0
+    run_candidate "$candidate" || exit_code=$?
+    if [ "$CANDIDATE_FOUND" = "1" ]; then
+      return "$exit_code"
+    fi
+  done
+  stage_unimplemented "$stage" "$owner"
+}
+
+stage_unimplemented() {
+  STAGE_STATUS="$STATUS_UNIMPLEMENTED"
+  printf '  %s has no implementation in this tree yet (owned by %s).\n' "$1" "$2"
+  printf '  Reported red on purpose: an absent stage must not read as a passing one.\n'
+  return 1
+}
+
+# --- stage implementations ---------------------------------------------------
+
+wait_for_test_postgres() {
+  local host="${!PG_HOST_ENV:-}" port="${!PG_PORT_ENV:-}" attempt
+  if [ -z "$host" ] || [ -z "$port" ]; then
+    note "  $PG_HOST_ENV/$PG_PORT_ENV are unset; skipping the reachability probe."
+    return 0
+  fi
+  for ((attempt = 1; attempt <= PG_WAIT_ATTEMPTS; attempt++)); do
+    if (exec 3<>"/dev/tcp/$host/$port") 2>/dev/null; then
+      return 0
+    fi
+    sleep "$PG_WAIT_INTERVAL_SECONDS"
+  done
+  note "  Postgres at $host:$port did not accept connections within ${PG_WAIT_ATTEMPTS}s."
+  return 1
+}
+
+start_compose_stack() {
+  resolve_compose_file_args
+  if ! has_compose_files; then
+    note "  Neither $COMPOSE_TEST_FILE nor $COMPOSE_BASE_FILE exists in this tree."
+    return 1
+  fi
+  require_docker
+  # The test profile is deliberately not activated here: it holds the test-runner
+  # service, and bringing that up from inside the pipeline would start a second
+  # copy of the pipeline against itself. CI activates the profile explicitly.
+  printf '  -> docker compose %s up -d --wait\n' "${COMPOSE_FILE_ARGS[*]}"
+  docker compose "${COMPOSE_FILE_ARGS[@]}" up -d --wait
+  note "  to run this same pipeline in the $COMPOSE_PROFILE profile instead:"
+  note "     docker compose ${COMPOSE_FILE_ARGS[*]} --profile $COMPOSE_PROFILE run --rm $TEST_RUNNER_SERVICE"
+}
+
+run_stage_compose() {
+  if running_in_test_runner; then
+    note "  stack already up: this run is inside the compose $TEST_RUNNER_SERVICE service."
+    wait_for_test_postgres
+    return $?
+  fi
+  start_compose_stack
+}
+
+run_stage_migrations() {
+  run_delegated migrations "$OWNER_DB" file:scripts/migrate.sh script:db:migrate
+}
+
+run_stage_seed() {
+  run_delegated seed "$OWNER_DB" file:scripts/seed.sh script:db:seed
+}
+
+# tsc runs first so a type error is reported as a unit-stage failure rather than
+# surfacing later as a confusing removal-test or integration failure.
+run_stage_unit() {
+  printf '  -> pnpm run typecheck\n'
+  pnpm run typecheck
+  printf '  -> pnpm run test\n'
+  pnpm run test
+}
+
+run_stage_integration() {
+  run_delegated integration "$OWNER_DB" script:test:integration file:scripts/integration-test.sh
+}
+
+run_stage_removal_test() {
+  run_delegated removal-test "$OWNER_REMOVAL_TEST" script:removal-test file:scripts/removal-test.sh
+}
+
+run_stage_license() {
+  run_delegated license "$OWNER_LICENSE" file:scripts/check-licenses.sh script:check:licenses
+}
+
+run_stage_e2e_smoke() {
+  run_delegated e2e-smoke "$OWNER_WEB" file:scripts/e2e-smoke.sh script:test:e2e
+}
+
+# --- execution ---------------------------------------------------------------
+
+# The stage-name to runner mapping is the contract, so it is written out rather
+# than derived by name: a stage added to CANONICAL_STAGES without a runner here
+# fails loudly instead of resolving to nothing.
+run_stage() {
+  case "$1" in
+    compose) run_stage_compose ;;
+    migrations) run_stage_migrations ;;
+    seed) run_stage_seed ;;
+    unit) run_stage_unit ;;
+    integration) run_stage_integration ;;
+    removal-test) run_stage_removal_test ;;
+    license) run_stage_license ;;
+    e2e-smoke) run_stage_e2e_smoke ;;
+    *) fail "no runner registered for stage '$1'" ;;
+  esac
+}
+
+# Resuming reuses a green marker from an earlier run so a late failure does not
+# cost the whole chain again. Only a `pass` marker is reusable.
+already_completed() {
+  if [ "${!RESUME_ENV:-}" != "1" ]; then
+    return 1
+  fi
+  [ "$(marker_field "$1" status || true)" = "$STATUS_PASS" ]
+}
+
+execute_stage() {
+  local stage=$1 index=$2
+  local started elapsed_seconds exit_code=0 status note_text=""
+  started=$(date -u +%s)
+  printf '\n=== %s stage %d/%d: %s ===\n' "$PIPELINE_ID" "$index" "${#SELECTED_STAGES[@]}" "$stage"
+  STAGE_STATUS="$STATUS_FAIL"
+  run_stage "$stage" || exit_code=$?
+  elapsed_seconds=$(($(date -u +%s) - started))
+  status=$STAGE_STATUS
+  if [ "$exit_code" -eq 0 ]; then
+    status="$STATUS_PASS"
+  fi
+  if [ "$status" = "$STATUS_UNIMPLEMENTED" ]; then
+    note_text="no implementation in tree"
+  fi
+  write_marker "$stage" "$status" "$started" "$elapsed_seconds"
+  RESULT_STATUS+=("$status")
+  RESULT_ELAPSED+=("$elapsed_seconds")
+  RESULT_NOTE+=("$note_text")
+  printf '\n  [%s] %s (%ss)\n' "$stage" "$status" "$elapsed_seconds"
+}
+
+record_resumed_stage() {
+  local stage=$1
+  RESULT_STATUS+=("$STATUS_PASS")
+  RESULT_ELAPSED+=("0")
+  RESULT_NOTE+=("resumed from marker run $(marker_field "$stage" run_id || printf 'unknown')")
+  printf '\n=== %s stage %s: %s (resumed) ===\n' "$PIPELINE_ID" "$stage" "$STATUS_PASS"
+}
+
+# --- reporting ---------------------------------------------------------------
+
+print_summary() {
+  local index stage
+  printf '\n=== %s stage summary (run %s) ===\n' "$PIPELINE_ID" "$RUN_ID"
+  printf '  %-14s %-14s %-6s %s\n' STAGE STATUS ELAPSED NOTE
+  for index in "${!SELECTED_STAGES[@]}"; do
+    stage="${SELECTED_STAGES[$index]}"
+    printf '  %-14s %-14s %-6s %s\n' \
+      "$stage" "${RESULT_STATUS[$index]}" "${RESULT_ELAPSED[$index]}" "${RESULT_NOTE[$index]}"
+  done
+  note "  markers: $(marker_dir)"
+}
+
+# Green requires every canonical stage to have run and passed. A partial run is
+# never reported as the M0 gate being green.
+final_verdict() {
+  local index stage
+  local -a red_stages=()
+  for index in "${!SELECTED_STAGES[@]}"; do
+    stage="${SELECTED_STAGES[$index]}"
+    if [ "${RESULT_STATUS[$index]}" != "$STATUS_PASS" ]; then
+      red_stages+=("$stage")
+    fi
+  done
+  local not_selected
+  not_selected="$(stages_not_selected)"
+  if [ "${#red_stages[@]}" -eq 0 ] && [ -z "$not_selected" ]; then
+    printf '%s pipeline GREEN: %d/%d stages passed.\n' \
+      "$PIPELINE_ID" "${#SELECTED_STAGES[@]}" "${#CANONICAL_STAGES[@]}"
+    return 0
+  fi
+  if [ "${#red_stages[@]}" -gt 0 ]; then
+    printf '%s pipeline RED: failing stage(s): %s\n' "$PIPELINE_ID" "${red_stages[*]}" >&2
+  fi
+  if [ -n "$not_selected" ]; then
+    printf '%s pipeline RED: stage(s) not run: %s\n' "$PIPELINE_ID" "$not_selected" >&2
+  fi
+  return 1
+}
+
+main() {
+  prepare_marker_dir
+  resolve_selected_stages
+  setup_database_url
+  note "$PIPELINE_ID pipeline: ${SELECTED_STAGES[*]}"
+  local index stage
+  for index in "${!SELECTED_STAGES[@]}"; do
+    stage="${SELECTED_STAGES[$index]}"
+    if already_completed "$stage"; then
+      record_resumed_stage "$stage"
+    else
+      execute_stage "$stage" "$((index + 1))"
+    fi
+  done
+  print_summary
+  local verdict=0
+  final_verdict || verdict=$?
+  exit "$verdict"
+}
+
+main "$@"

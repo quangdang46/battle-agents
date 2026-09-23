@@ -1,0 +1,12 @@
+dist
+node_modules
+pnpm-lock.yaml
+.tmp
+.beads
+
+# Hand-maintained documents, not generated code.
+COMPREHENSIVE_PLAN_FOR_BATTLE_AGENTS.md
+LICENSE
+
+# Drizzle emits the SQL and its snapshot journal; they are not hand-maintained.
+drizzle/migrations

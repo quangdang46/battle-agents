@@ -1,0 +1,39 @@
+{
+  "name": "battle-agents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "db:generate": "drizzle-kit generate --config=drizzle/drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=drizzle/drizzle.config.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:verify": "tsx drizzle/verify.ts",
+    "format": "prettier --write .",
+    "license-check": "bash scripts/check-licenses.sh",
+    "lint": "prettier --check .",
+    "removal-test": "bash scripts/removal-test.sh",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:m0": "bash scripts/test-m0.sh",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.3",
+    "pg": "^8.23.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

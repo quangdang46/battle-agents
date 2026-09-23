@@ -1,0 +1,35 @@
+# Build context must stay small and secret-free. Everything here is either
+# regenerated inside the image, restored from a named volume, or local-only.
+
+# Secrets: the container receives configuration through Compose `environment`,
+# never through a layer that can be pushed to a registry.
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output are installed/compiled inside the image.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+out
+build
+**/build
+coverage
+
+# Version control and agent state.
+.git
+.gitignore
+.beads
+.bv
+.vscode
+.idea
+
+# Vendored research repositories, never part of the build.
+.tmp
+
+# Logs and OS noise.
+*.log
+.DS_Store
+Thumbs.db

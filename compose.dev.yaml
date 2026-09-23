@@ -1,0 +1,33 @@
+# HMR/watch variant. Use with: docker compose -f compose.yaml -f compose.dev.yaml up
+#
+# `compose.yaml` already bind-mounts the source, so this file only adds the
+# watch layer: Compose syncs edited paths into the container and the bundler
+# watches the destination. Prefer this over polling for fast feedback.
+
+name: battle-agents
+
+services:
+  web:
+    develop:
+      watch:
+        - path: ./apps/web
+          action: sync
+          target: /app/apps/web
+        - path: ./packages
+          action: sync
+          target: /app/packages
+        - path: ./drizzle
+          action: sync
+          target: /app/drizzle
+        - path: ./tsconfig.base.json
+          action: sync
+          target: /app/tsconfig.base.json
+        - path: ./package.json
+          action: sync
+          target: /app/package.json
+    environment:
+      # Compose sync replaces files in place, which a native watcher misses on
+      # bind mounts; watching the synced copy keeps rebuilds firing.
+      WATCHPACK_POLLING: 'false'
+      CHOKIDAR_USEPOLLING: 'false'
+      WATCHPACK_WATCHER: 'watchpack'

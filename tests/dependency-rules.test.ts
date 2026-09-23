@@ -1,0 +1,219 @@
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { describe, expect, it } from 'vitest';
+
+const WORKSPACE_MARKER = 'pnpm-workspace.yaml';
+const CONTRACT_FILENAME = '.dependency-cruiser.cjs';
+const nodeRequire = createRequire(import.meta.url);
+
+// Walking up to the workspace marker keeps the gate working wherever this file
+// sits under `tests/`, so relocating the suite cannot make it scan nothing.
+function findRepoRoot(startDir: string): string {
+  let current = startDir;
+  for (;;) {
+    if (existsSync(join(current, WORKSPACE_MARKER))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      throw new Error(`No ${WORKSPACE_MARKER} found above ${startDir}`);
+    }
+    current = parent;
+  }
+}
+
+const REPO_ROOT = findRepoRoot(dirname(fileURLToPath(import.meta.url)));
+const CONTRACT_MODULE_PATH = join(REPO_ROOT, CONTRACT_FILENAME);
+
+interface WorkspacePackage {
+  readonly dir: string;
+  readonly name: string;
+}
+
+interface SourceFile {
+  readonly path: string;
+  readonly source: string;
+}
+
+interface Violation {
+  readonly rule: string;
+  readonly from: string;
+  readonly to: string;
+  readonly specifier: string | null;
+  readonly message: string;
+}
+
+interface CheckImportsInput {
+  readonly files: readonly SourceFile[];
+  readonly packages: readonly WorkspacePackage[];
+}
+
+interface LayerContract {
+  readonly FORBIDDEN: readonly { readonly name: string }[];
+  readonly checkImports: (input: CheckImportsInput) => readonly Violation[];
+  readonly discoverWorkspacePackages: (repoRoot: string) => readonly WorkspacePackage[];
+  readonly formatReport: (violations: readonly Violation[]) => string;
+  readonly listSourceFiles: (repoRoot: string) => readonly SourceFile[];
+}
+
+function isLayerContract(value: unknown): value is LayerContract {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    Array.isArray(candidate['FORBIDDEN']) &&
+    typeof candidate['checkImports'] === 'function' &&
+    typeof candidate['discoverWorkspacePackages'] === 'function' &&
+    typeof candidate['formatReport'] === 'function' &&
+    typeof candidate['listSourceFiles'] === 'function'
+  );
+}
+
+function loadContract(): LayerContract {
+  const loaded: unknown = nodeRequire(CONTRACT_MODULE_PATH);
+  if (!isLayerContract(loaded)) {
+    throw new Error(
+      `${CONTRACT_FILENAME} must export FORBIDDEN, checkImports, discoverWorkspacePackages, formatReport and listSourceFiles`,
+    );
+  }
+  return loaded;
+}
+
+const contract = loadContract();
+
+function sourceFile(path: string, specifiers: readonly string[]): SourceFile {
+  return { path, source: specifiers.map((specifier) => `import '${specifier}';`).join('\n') };
+}
+
+function summarize(
+  violations: readonly {
+    readonly rule: string;
+    readonly from: string;
+    readonly specifier: string | null;
+  }[],
+): string[] {
+  return violations
+    .map((violation) => `${violation.rule} ${violation.from} '${violation.specifier ?? ''}'`)
+    .sort();
+}
+
+const packages = contract.discoverWorkspacePackages(REPO_ROOT);
+
+// Held in memory rather than on disk so the deliberate violations below stay out
+// of the repository tsconfig, which typechecks every `tests/**/*.ts` file.
+const FIXTURE_FILES: readonly SourceFile[] = [
+  sourceFile('packages/features/quest/src/index.ts', ['@battle-agents/guild']),
+  sourceFile('packages/features/guild/src/index.ts', ['../../battle/src/index.js']),
+  sourceFile('packages/features/quest/src/infra.ts', [
+    '../../../infrastructure/postgres/src/index.js',
+  ]),
+  sourceFile('packages/features/battle/src/index.ts', [
+    '@battle-agents/core',
+    '@battle-agents/protocol',
+    './local.js',
+  ]),
+  sourceFile('packages/features/battle/src/local.ts', []),
+  sourceFile('packages/features/guild/src/registry.ts', ['@battle-agents/guild']),
+  sourceFile('packages/features/social/src/index.ts', []),
+  sourceFile('packages/core/src/registry.ts', ['@battle-agents/quest']),
+  sourceFile('packages/core/src/contracts.ts', ['@battle-agents/protocol']),
+  sourceFile('packages/adapters/claude/src/hooks.ts', ['@battle-agents/bounty']),
+  sourceFile('packages/adapters/codex/src/index.ts', ['@battle-agents/protocol']),
+  sourceFile('packages/cli/src/index.ts', ['@battle-agents/quest']),
+  sourceFile('packages/mcp-server/src/tools/discover.ts', [
+    '../../../features/social/src/index.js',
+  ]),
+  sourceFile('packages/infrastructure/postgres/src/index.ts', []),
+  sourceFile('packages/infrastructure/postgres/src/repository.ts', ['@battle-agents/progression']),
+  sourceFile('packages/infrastructure/postgres/src/schema.ts', ['@battle-agents/core']),
+  sourceFile('apps/web/src/index.ts', ['@battle-agents/battle']),
+  sourceFile('packages/game-client/src/view.ts', ['@battle-agents/animation']),
+];
+
+const EXPECTED_FIXTURE_VIOLATIONS = [
+  {
+    rule: 'no-adapter-game-code',
+    from: 'packages/adapters/claude/src/hooks.ts',
+    specifier: '@battle-agents/bounty',
+  },
+  {
+    rule: 'no-core-import-of-outer-layers',
+    from: 'packages/core/src/registry.ts',
+    specifier: '@battle-agents/quest',
+  },
+  {
+    rule: 'no-feature-cross-import',
+    from: 'packages/features/guild/src/index.ts',
+    specifier: '../../battle/src/index.js',
+  },
+  {
+    rule: 'no-feature-cross-import',
+    from: 'packages/features/quest/src/index.ts',
+    specifier: '@battle-agents/guild',
+  },
+  {
+    rule: 'no-feature-import-of-outer-layers',
+    from: 'packages/features/quest/src/infra.ts',
+    specifier: '../../../infrastructure/postgres/src/index.js',
+  },
+  {
+    rule: 'no-infrastructure-import-of-upper-layers',
+    from: 'packages/infrastructure/postgres/src/repository.ts',
+    specifier: '@battle-agents/progression',
+  },
+  {
+    rule: 'no-interface-feature-implementation',
+    from: 'packages/cli/src/index.ts',
+    specifier: '@battle-agents/quest',
+  },
+  {
+    rule: 'no-interface-feature-implementation',
+    from: 'packages/mcp-server/src/tools/discover.ts',
+    specifier: '../../../features/social/src/index.js',
+  },
+];
+
+describe('layering rule engine', () => {
+  const violations = contract.checkImports({ files: FIXTURE_FILES, packages });
+
+  it('catches every violation type in the fixture tree and nothing else', () => {
+    expect(summarize(violations)).toEqual(summarize(EXPECTED_FIXTURE_VIOLATIONS));
+  });
+
+  it('exercises every rule declared in the contract', () => {
+    const expectedRules = new Set(contract.FORBIDDEN.map((rule) => rule.name));
+    expect(new Set(violations.map((violation) => violation.rule))).toEqual(expectedRules);
+  });
+
+  it('names the violated rule in the report', () => {
+    for (const violation of violations) {
+      expect(violation.message).toContain(violation.rule);
+    }
+  });
+
+  it('reports a package that no layer covers', () => {
+    const unclassified = contract.checkImports({
+      files: [sourceFile('packages/legacy/src/index.ts', ['@battle-agents/core'])],
+      packages,
+    });
+    expect(summarize(unclassified)).toEqual([`unclassified-layer packages/legacy/src/index.ts ''`]);
+  });
+});
+
+describe('repository layering', () => {
+  const sourceFiles = contract.listSourceFiles(REPO_ROOT);
+  const violations = contract.checkImports({ files: sourceFiles, packages });
+
+  it('discovers the workspace packages and their sources', () => {
+    expect(packages.map((entry) => entry.dir)).toContain('packages/features/guild');
+    expect(sourceFiles.map((file) => file.path)).toContain('packages/core/src/index.ts');
+  });
+
+  it('reports no dependency violations', () => {
+    expect(contract.formatReport(violations)).toBe('');
+  });
+});

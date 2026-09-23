@@ -28,3 +28,9 @@ Thumbs.db
 # test / cache
 coverage/
 .turbo
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# pnpm local content-addressable store
+.pnpm-store/

@@ -1,0 +1,59 @@
+# M0 gate — plan section 40.
+#
+# This job runs the repository's own scripts/test-m0.sh as the compose
+# `m0-test-runner` service, so CI and `pnpm test:m0` execute the same file, in
+# the same image, with the same stage order. The job fails as soon as the
+# pipeline exits non-zero, which is how a red stage blocks the merge.
+#
+# The job activates the test profile and runs the runner service directly rather
+# than `docker compose up`: that is what starts only the services the pipeline
+# needs (postgres-test) instead of standing up the whole application stack, and
+# it keeps the gate hermetic. `pnpm test:m0` on a contributor machine runs the
+# full `docker compose up` as its first stage, so both paths are covered.
+
+name: m0
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: m0-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-m0:
+    name: pnpm test:m0
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the canonical M0 pipeline in the compose test-runner image
+        run: |
+          docker compose -f compose.yaml -f compose.test.yaml --profile test \
+            run --rm --name m0-run m0-test-runner
+
+      - name: Collect the per-stage markers
+        if: always()
+        run: |
+          mkdir -p m0-stage-markers
+          docker compose -f compose.yaml -f compose.test.yaml \
+            cp m0-run:/workspace/.tmp/m0-stages/. m0-stage-markers
+
+      - name: Upload the per-stage markers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m0-stage-markers
+          path: m0-stage-markers
+          if-no-files-found: ignore
+
+      - name: Tear down the test stack
+        if: always()
+        run: |
+          docker compose -f compose.yaml -f compose.test.yaml --profile test down --volumes --remove-orphans
