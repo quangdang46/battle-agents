@@ -22,6 +22,8 @@ const TOKEN_HASH_COLUMN = 'token_hash';
 const BOUNTIES_TABLE = 'bounties';
 const DENORMALIZED_TOTAL_COLUMN = 'amount_cents';
 const BOUNTY_FUNDS_TABLE = 'bounty_funds';
+const AGENTS_TABLE = 'agents';
+const SECRET_LIKE_COLUMN = /(token|secret|password|api_?key|credential)/i;
 const MONEY_COLUMN = 'amount_cents';
 const SESSIONS_TABLE = 'sessions';
 
@@ -64,29 +66,36 @@ describe('schema invariants', () => {
     expect(columns.has(FORBIDDEN_IDENTITY_COLUMN)).toBe(false);
   });
 
-  it('enforces sessions.agent_id as a foreign key to agents', async () => {
-    const result = await pool.query<{ constraint_name: string }>(
-      `SELECT tc.constraint_name
-         FROM information_schema.table_constraints tc
-         JOIN information_schema.key_column_usage kcu
-           ON kcu.constraint_name = tc.constraint_name
-          AND kcu.table_schema = tc.table_schema
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'public'
-          AND tc.table_name = $1
-          AND kcu.column_name = $2`,
+  it('enforces sessions.agent_id as a foreign key to agents specifically', async () => {
+    // Asserting only "some foreign key exists on agent_id" is weak enough to
+    // pass while the reference points somewhere inert, so the referenced table
+    // is resolved rather than assumed.
+    const result = await pool.query<{ referenced_table: string }>(
+      `SELECT ref.relname AS referenced_table
+         FROM pg_constraint con
+         JOIN pg_class src ON src.oid = con.conrelid
+         JOIN pg_class ref ON ref.oid = con.confrelid
+        WHERE con.contype = 'f'
+          AND src.relname = $1
+          AND con.conkey[1] = (
+            SELECT attnum FROM pg_attribute
+             WHERE attrelid = con.conrelid AND attname = $2
+          )`,
       [SESSIONS_TABLE, IDENTITY_COLUMN],
     );
     expect(result.rows.length).toBeGreaterThan(0);
+    expect(result.rows.map((row) => row.referenced_table)).toContain(AGENTS_TABLE);
   });
 
   it('stores a token hash on agent_credentials and exposes no plaintext token column', async () => {
     // A raw token in the database is a credential leak on first backup.
     const columns = await columnsOf(CREDENTIALS_TABLE);
     expect(columns.has(TOKEN_HASH_COLUMN)).toBe(true);
-    for (const forbidden of ['token', 'secret', 'api_key', 'bearer']) {
-      expect(columns.has(forbidden)).toBe(false);
-    }
+    // A fixed word list missed "access_token". Anything that smells like a
+    // credential has to be accounted for by name, and the only one that is
+    // allowed is the hash.
+    const secretish = [...columns].filter((column) => SECRET_LIKE_COLUMN.test(column));
+    expect(secretish).toEqual([TOKEN_HASH_COLUMN]);
   });
 
   it('derives a bounty total from funding rows rather than a drifting scalar', async () => {
@@ -94,6 +103,24 @@ describe('schema invariants', () => {
     // row, otherwise the displayed total can disagree with the fund rows.
     const columns = await columnsOf(BOUNTIES_TABLE);
     expect(columns.has(DENORMALIZED_TOTAL_COLUMN)).toBe(false);
+  });
+
+  it('keeps both the bounty and its funding rows', async () => {
+    // The previous assertions only ever looked at bounties, so deleting that
+    // table wholesale satisfied every one of them. Both halves of the pair are
+    // checked, and the funding rows are checked to actually reference bounties.
+    expect((await columnsOf(BOUNTIES_TABLE)).size).toBeGreaterThan(0);
+    expect((await columnsOf(BOUNTY_FUNDS_TABLE)).has(MONEY_COLUMN)).toBe(true);
+
+    const link = await pool.query<{ referenced_table: string }>(
+      `SELECT ref.relname AS referenced_table
+         FROM pg_constraint con
+         JOIN pg_class src ON src.oid = con.conrelid
+         JOIN pg_class ref ON ref.oid = con.confrelid
+        WHERE con.contype = 'f' AND src.relname = $1 AND ref.relname = $2`,
+      [BOUNTY_FUNDS_TABLE, BOUNTIES_TABLE],
+    );
+    expect(link.rows.length).toBeGreaterThan(0);
   });
 
   it('keeps money in integer cents on the funding rows', async () => {

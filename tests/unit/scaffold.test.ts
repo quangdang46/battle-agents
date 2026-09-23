@@ -141,11 +141,39 @@ function collectWorkspaceImports(packageDir: string): string[] {
     .filter((specifier) => specifier.startsWith(WORKSPACE_SCOPE));
 }
 
+// Comments and string literals are stripped before the vocabulary scan. Scanning
+// raw text produced a false positive the moment anyone wrote a comment such as
+// "a feature must not know about quests", which is exactly the kind of comment
+// this codebase wants, and a guard that cries wolf gets switched off.
+function stripCommentsAndLiterals(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/`(?:\\.|[^`\\])*`/g, '``')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""');
+}
+
+// English does not pluralise uniformly: "bounty" becomes "bounties" by dropping
+// the y, which a naive word+s or word+es pattern walks straight past. Generate
+// the real forms instead of guessing suffixes.
+function pluralPattern(word: string): RegExp {
+  const forms = [word, `${word}s`, `${word}es`];
+  if (word.endsWith('y')) {
+    forms.push(`${word.slice(0, -1)}ies`);
+  }
+  if (/(s|x|z|ch|sh)$/.test(word)) {
+    forms.push(`${word}es`);
+  }
+  const alternation = [...new Set(forms)].sort((a, b) => b.length - a.length).join('|');
+  return new RegExp(`\\b(?:${alternation})\\b`, 'i');
+}
+
 function findGameVocabulary(packageDir: string): string[] {
   const sourceDir = join(REPO_ROOT, packageDir, 'src');
   return listTypeScriptFiles(sourceDir).flatMap((file) => {
-    const source = readFileSync(file, 'utf8');
-    return GAME_VOCABULARY.filter((word) => new RegExp(`\\b${word}\\b`, 'i').test(source)).map(
+    const source = stripCommentsAndLiterals(readFileSync(file, 'utf8'));
+    return GAME_VOCABULARY.filter((word) => pluralPattern(word).test(source)).map(
       (word) => `${toRepoRelative(file)}: ${word}`,
     );
   });
