@@ -106,7 +106,10 @@ describe('schema invariants', () => {
         WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
       [BOUNTY_FUNDS_TABLE, MONEY_COLUMN],
     );
-    expect(result.rows.length).toBe(1);
-    expect(result.rows[0].data_type).toBe('integer');
+    // noUncheckedIndexedAccess is on, so rows[0] is T | undefined. Asserting
+    // length first does not narrow the type, so bind the value and assert on it.
+    const [moneyColumn] = result.rows;
+    expect(moneyColumn).toBeDefined();
+    expect(moneyColumn?.data_type).toBe('integer');
   });
 });

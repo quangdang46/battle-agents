@@ -41,6 +41,7 @@ readonly CANONICAL_STAGES=(
   seed
   unit
   integration
+  typecheck
   removal-test
   license
   e2e-smoke
@@ -75,6 +76,7 @@ readonly OWNER_DB="ba-db-schema-drizzle-fki"
 readonly OWNER_REMOVAL_TEST="ba-removal-test-e33"
 readonly OWNER_LICENSE="ba-license-hygiene-qy7"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
+readonly OWNER_CONTRACT="ba-contract-extension-api-w29"
 
 SELECTED_STAGES=()
 RESULT_STATUS=()
@@ -395,6 +397,10 @@ run_stage_seed() {
 
 # tsc runs first so a type error is reported as a unit-stage failure rather than
 # surfacing later as a confusing removal-test or integration failure.
+run_stage_typecheck() {
+  run_delegated typecheck "$OWNER_CONTRACT" script:typecheck
+}
+
 run_stage_unit() {
   printf '  -> pnpm run typecheck\n'
   pnpm run typecheck
@@ -428,6 +434,7 @@ run_stage() {
     compose) run_stage_compose ;;
     migrations) run_stage_migrations ;;
     seed) run_stage_seed ;;
+    typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;
     integration) run_stage_integration ;;
     removal-test) run_stage_removal_test ;;
