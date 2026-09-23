@@ -21,7 +21,7 @@ set -Eeuo pipefail
 
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly FEATURES_DIR="${REPO_ROOT}/packages/features"
-readonly STASH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/removal-test.XXXXXX")"
+readonly STASH_DIR="${REPO_ROOT}/.tmp/removal-stash"
 readonly TYPECHECK_CMD=(pnpm -r typecheck)
 readonly TEST_CMD=(pnpm vitest run --config vitest.unit.config.ts)
 
@@ -35,18 +35,62 @@ declare -a SKIPPED_FEATURES=()
 MOVED_PATH=""
 COMPOSITION_BACKUP=""
 
+# Signal exit codes follow the shell convention of 128 + signal number.
+# These are separate traps on purpose: with one `trap cleanup EXIT INT TERM`, a
+# signal runs cleanup but `$?` inside it is the status of the last completed
+# command, which is 0, so the script exits 0 on a stage that was killed
+# partway through and the pipeline records a pass it never earned.
+readonly EXIT_CODE_INTERRUPTED=130
+readonly EXIT_CODE_TERMINATED=143
+readonly EXIT_CODE_SIGHUP=129
+
 cleanup() {
-  local exit_code=$?
+  local exit_code=$1
+  restore_in_flight
+  # The stash is deliberately left in place on an abnormal exit. It is inside
+  # the repo rather than in TMPDIR so recover_stashed_features can find it on the
+  # next run, which is the only recovery path for SIGKILL.
+  if [[ ${exit_code} -eq 0 ]]; then
+    rm -rf "${STASH_DIR}"
+  fi
+  exit "${exit_code}"
+}
+
+restore_in_flight() {
   if [[ -n "${COMPOSITION_BACKUP}" && -f "${COMPOSITION_BACKUP}" ]]; then
     mv "${COMPOSITION_BACKUP}" "${COMPOSITION_BACKUP%.bak}"
+    COMPOSITION_BACKUP=""
   fi
   if [[ -n "${MOVED_PATH}" && -d "${STASH_DIR}/$(basename "${MOVED_PATH}")" ]]; then
     mv "${STASH_DIR}/$(basename "${MOVED_PATH}")" "${MOVED_PATH}"
+    MOVED_PATH=""
   fi
-  rm -rf "${STASH_DIR}"
-  exit "${exit_code}"
 }
-trap cleanup EXIT INT TERM
+
+# SIGKILL cannot be trapped, so a hard kill mid-run leaves a feature missing
+# from the tree. The next run repairs it before doing anything else, which turns
+# an unrecoverable silent deletion into a self-healing one.
+recover_stashed_features() {
+  [[ -d "${STASH_DIR}" ]] || return 0
+  local stashed
+  for stashed in "${STASH_DIR}"/*/; do
+    [[ -d "${stashed}" ]] || continue
+    local name
+    name="$(basename "${stashed}")"
+    if [[ -e "${FEATURES_DIR}/${name}" ]]; then
+      printf 'removal-test: %s is already present; discarding a stale stash entry.\n' "${name}"
+      continue
+    fi
+    printf 'removal-test: recovering %s from an interrupted earlier run.\n' "${name}"
+    mv "${stashed}" "${FEATURES_DIR}/${name}"
+  done
+  rmdir "${STASH_DIR}" 2>/dev/null || true
+}
+
+trap 'cleanup $?' EXIT
+trap 'cleanup ${EXIT_CODE_INTERRUPTED}' INT
+trap 'cleanup ${EXIT_CODE_TERMINATED}' TERM
+trap 'cleanup ${EXIT_CODE_SIGHUP}' HUP
 
 # The composition root is created by ba-contract-extension-api-w29. Until it
 # exists there is nothing to strip, and the run must SAY SO rather than quietly
@@ -101,6 +145,8 @@ run_tests() {
 main() {
   cd "${REPO_ROOT}"
 
+  recover_stashed_features
+
   if [[ ! -d "${FEATURES_DIR}" ]]; then
     printf 'removal-test: %s does not exist\n' "${FEATURES_DIR}" >&2
     return 1
@@ -122,6 +168,7 @@ main() {
     printf 'checking removal of %s\n' "${feature_name}"
     MOVED_PATH="${feature_dir%/}"
     strip_from_composition_root "${feature_name}"
+    mkdir -p "${STASH_DIR}"
     mv "${MOVED_PATH}" "${STASH_DIR}/${feature_name}"
 
     local ok=0
@@ -131,12 +178,7 @@ main() {
     fi
 
     # Restore before recording the failure, so one bad feature cannot cascade.
-    mv "${STASH_DIR}/${feature_name}" "${MOVED_PATH}"
-    MOVED_PATH=""
-    if [[ -n "${COMPOSITION_BACKUP}" ]]; then
-      mv "${COMPOSITION_BACKUP}" "${COMPOSITION_ROOT}"
-      COMPOSITION_BACKUP=""
-    fi
+    restore_in_flight
 
     checked=$((checked + 1))
     [[ ${ok} -eq 0 ]] || FAILED_FEATURES+=("${feature_name}")

@@ -41,6 +41,7 @@ readonly CANONICAL_STAGES=(
   seed
   unit
   integration
+  schema-drift
   typecheck
   removal-test
   license
@@ -175,6 +176,24 @@ marker_field() {
   grep -m1 "^$2=" "$path" | cut -d= -f2- || true
 }
 
+# What the marker is allowed to vouch for. A `pass` marker says "this stage
+# passed", and without a fingerprint it keeps saying that no matter what the
+# code has become since. Markers live under .tmp/ which is gitignored and never
+# cleaned, and CI uploads them as gate evidence, so a stale pass is worse than
+# no marker: it is indistinguishable from a real one.
+#
+# HEAD plus a hash of TRACKED modifications covers both ways code can change
+# under a resume: committing moves HEAD, editing without committing changes the
+# dirty set. Untracked files are excluded on purpose, because a run creates
+# dist/ and .tmp/ output and the fingerprint must stay stable for the whole run.
+code_fingerprint() {
+  local head dirty
+  head=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf 'no-head')
+  dirty=$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null \
+    | shasum -a 256 2>/dev/null | cut -d" " -f1)
+  printf "%s:%s" "$head" "${dirty:-clean}"
+}
+
 write_marker() {
   local stage=$1 status=$2 started=$3 elapsed=$4
   local dir
@@ -186,6 +205,7 @@ write_marker() {
     printf 'run_id=%s\n' "$RUN_ID"
     printf 'started=%s\n' "$started"
     printf 'elapsed_seconds=%s\n' "$elapsed"
+    printf 'fingerprint=%s\n' "$(code_fingerprint)"
   } >"$(marker_path "$stage")"
 }
 
@@ -397,6 +417,48 @@ run_stage_seed() {
 
 # tsc runs first so a type error is reported as a unit-stage failure rather than
 # surfacing later as a confusing removal-test or integration failure.
+run_stage_schema_drift() {
+  # A green integration suite can describe a schema the code no longer matches.
+  # The integration test reads the DATABASE, which drizzle builds from the
+  # COMMITTED migration artifact, not from the schema source. Editing
+  # drizzle/schema/*.ts without regenerating therefore leaves the artifact
+  # stale, the database stale, and the test confidently confirming the stale
+  # shape, which is the worst failure mode a test suite can have.
+  #
+  # Two conditions, and both are needed. drizzle-kit prompts interactively when
+  # it wants to create a new migration, and it cannot prompt without a TTY, so a
+  # drifted schema fails generation outright. But relying on that alone would be
+  # an accident of the tool, so the tree must also be clean afterwards: if
+  # generation ever succeeds while writing files, those files are an
+  # uncommitted migration and belong in a commit, not in a test run.
+  local generated_status=0
+  ( cd "$REPO_ROOT" && pnpm db:generate ) >/dev/null 2>&1 || generated_status=$?
+
+  local pending
+  pending=$(git -C "$REPO_ROOT" status --porcelain -- drizzle 2>/dev/null)
+
+  if [ "$generated_status" -ne 0 ]; then
+    STAGE_STATUS="$STATUS_FAIL"
+    printf '  db:generate exited %s.\n' "$generated_status"
+    printf '  Usually this means the schema source moved and the committed migration\n'
+    printf '  no longer matches it. Run pnpm db:generate locally with a TTY, review the\n'
+    printf '  generated migration, and commit it before the pipeline can pass.\n'
+    return 1
+  fi
+
+  if [ -n "$pending" ]; then
+    STAGE_STATUS="$STATUS_FAIL"
+    printf '  schema drift: drizzle/ has uncommitted changes after db:generate.\n'
+    printf '%s\n' "$pending"
+    printf '  Commit the regenerated migration rather than letting a test discover it.\n'
+    return 1
+  fi
+
+  STAGE_STATUS="$STATUS_PASS"
+  printf '  migration artifact is in sync with the schema source.\n'
+  return 0
+}
+
 run_stage_typecheck() {
   run_delegated typecheck "$OWNER_CONTRACT" script:typecheck
 }
@@ -434,6 +496,7 @@ run_stage() {
     compose) run_stage_compose ;;
     migrations) run_stage_migrations ;;
     seed) run_stage_seed ;;
+    schema-drift) run_stage_schema_drift ;;
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;
     integration) run_stage_integration ;;
@@ -447,10 +510,24 @@ run_stage() {
 # Resuming reuses a green marker from an earlier run so a late failure does not
 # cost the whole chain again. Only a `pass` marker is reusable.
 already_completed() {
+  local stage=$1
   if [ "${!RESUME_ENV:-}" != "1" ]; then
     return 1
   fi
-  [ "$(marker_field "$1" status || true)" = "$STATUS_PASS" ]
+  [ "$(marker_field "$stage" status || true)" = "$STATUS_PASS" ] || return 1
+
+  local recorded current
+  recorded=$(marker_field "$stage" fingerprint || true)
+  current=$(code_fingerprint)
+  if [ -z "$recorded" ]; then
+    printf '  stage %s: marker predates fingerprinting, rerunning.\n' "$stage"
+    return 1
+  fi
+  if [ "$recorded" != "$current" ]; then
+    printf '  stage %s: marker was written for different code, rerunning.\n' "$stage"
+    return 1
+  fi
+  return 0
 }
 
 execute_stage() {
