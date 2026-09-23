@@ -315,8 +315,31 @@ run_delegated() {
 stage_unimplemented() {
   STAGE_STATUS="$STATUS_UNIMPLEMENTED"
   printf '  %s has no implementation in this tree yet (owned by %s).\n' "$1" "$2"
+  if [ -n "${3:-}" ]; then
+    printf '  Reason: %s\n' "$3"
+  fi
   printf '  Reported red on purpose: an absent stage must not read as a passing one.\n'
   return 1
+}
+
+# A vitest command can exist while the suite it points at has no files yet, and
+# vitest exits 1 on "No test files found". That is neither a pass nor a real
+# failure: it means the stage has no implementation yet, which is the state
+# STATUS_UNIMPLEMENTED exists for. Counting the files first keeps an empty suite
+# from being reported green, and keeps it from being reported broken.
+count_stage_test_files() {
+  local stage_dir=$1
+  find "$REPO_ROOT/tests/$stage_dir" -name '*.test.ts' -type f 2>/dev/null | wc -l | tr -d ' '
+}
+
+run_delegated_test_stage() {
+  local stage=$1 owner=$2 stage_dir=$3
+  shift 3
+  if [ "$(count_stage_test_files "$stage_dir")" = "0" ]; then
+    stage_unimplemented "$stage" "$owner" "tests/$stage_dir has no *.test.ts yet"
+    return 1
+  fi
+  run_delegated "$stage" "$owner" "$@"
 }
 
 # --- stage implementations ---------------------------------------------------
@@ -380,7 +403,7 @@ run_stage_unit() {
 }
 
 run_stage_integration() {
-  run_delegated integration "$OWNER_DB" script:test:integration file:scripts/integration-test.sh
+  run_delegated_test_stage integration "$OWNER_DB" integration script:test:integration file:scripts/integration-test.sh
 }
 
 run_stage_removal_test() {
@@ -392,7 +415,7 @@ run_stage_license() {
 }
 
 run_stage_e2e_smoke() {
-  run_delegated e2e-smoke "$OWNER_WEB" file:scripts/e2e-smoke.sh script:test:e2e
+  run_delegated_test_stage e2e-smoke "$OWNER_WEB" e2e file:scripts/e2e-smoke.sh script:test:e2e
 }
 
 # --- execution ---------------------------------------------------------------
