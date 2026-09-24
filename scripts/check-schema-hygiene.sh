@@ -117,7 +117,7 @@ list_guard_declarations() {
         if ($rest =~ m{\{(.*?)\n[[:space:]]*\},\n}s) {
           my $body = $1;
           while ($body =~ m{([A-Za-z0-9_]+)[[:space:]]*:[[:space:]]*[A-Za-z]+\([[:space:]]*\x27([A-Za-z0-9_]+)\x27}g) {
-            print "$file:$want:$2\n";
+            print "$want:$2:$file\n";
           }
         }
         pos($_); pos($_)++;
@@ -143,13 +143,13 @@ list_migration_columns() {
         my $t = $ENV{TABLE};
         # Columns added later.
         while (m{ALTER\s+TABLE\s+"?\Q$t\E"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z0-9_]+)"?}gi) {
-          print "$ARGV:$t:$1\n";
+          print "$t:$1:$ARGV\n";
         }
         # Columns in the original CREATE, body captured across newlines.
         while (m{CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?\Q$t\E"?[[:space:]]*\((.*?)\n[[:space:]]*\);}gsi) {
           my $body = $1;
           while ($body =~ m{"([A-Za-z0-9_]+)"\s+(?:text|varchar|char|uuid|integer|bigint|smallint|boolean|timestamp|timestamptz|jsonb|json|serial|numeric|date)}gi) {
-            print "$ARGV:$t:$1\n";
+            print "$t:$1:$ARGV\n";
           }
         }
       ' "$sql" 2>/dev/null || true
@@ -187,10 +187,14 @@ declare -a offenders=()
 # plaintext 'token', which is the hole this gate exists to close.
 while IFS= read -r declaration; do
   [ -n "$declaration" ] || continue
-  file_path="${declaration%%:*}"
+  # table:column:file, NOT file:table:column. A Windows path begins "C:", so a
+  # leading file field makes every split wrong on Windows and the gate silently
+  # exempts whatever it misparses. The two leading fields are identifiers and
+  # can never contain a colon; only the trailing path can.
+  table="${declaration%%:*}"
   rest="${declaration#*:}"
-  table="${rest%%:*}"
-  column="${rest##*:}"
+  column="${rest%%:*}"
+  file_path="${rest#*:}"
   # The scanners report every column they find in a guarded table; only the ones
   # shaped like a credential are of interest. This filter was missing, so once
   # the CREATE TABLE branch started working it flagged every column in the
