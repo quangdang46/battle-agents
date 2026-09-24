@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const WORKSPACE_MARKER = 'pnpm-workspace.yaml';
-const CONTRACT_FILENAME = '.dependency-cruiser.cjs';
+const CONTRACT_FILENAME = 'architecture-rules.cjs';
 const nodeRequire = createRequire(import.meta.url);
 
 // Walking up to the workspace marker keeps the gate working wherever this file

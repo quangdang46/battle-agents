@@ -3,7 +3,22 @@
 // Single source of truth for the layering contract (`plan section 19`):
 // presentation -> features -> core <- infrastructure, features never import each
 // other, adapters and interfaces import core + protocol only. It exports the
-// dependency-cruiser-shaped `forbidden` rules plus the rule engine that
+// ARCHITECTURE RULE ENGINE. Read this before reaching for a tool.
+//
+// This is NOT a dependency-cruiser config and no dependency-cruiser CLI can
+// consume it. The real CLI expects a config object and structured-clones the
+// module; running "npx dependency-cruiser --config architecture-rules.cjs"
+// fails, and "npx depcruise" resolves to an unrelated security tool that exits 0
+// no matter what is in the tree. A file named .dependency-cruiser.cjs made both
+// of those look plausible, which is worse than not having the file.
+//
+// The single supported entry point is checkImports(). It is exercised by
+// tests/unit/dependency-rules.test.ts against a fixture, and by
+// scripts/check-architecture.ts against the real tree, which is a pipeline
+// stage. If you add a rule, add a fixture that triggers it: the test asserts
+// every declared rule is exercised, so a rule nobody watches work fails CI.
+//
+// Layer rules expressed as forbidden pairs plus the rule engine that
 // `tests/dependency-rules.test.ts` runs over both fixtures and this repository.
 
 const { existsSync, readFileSync, readdirSync } = require('node:fs');
@@ -17,7 +32,12 @@ const WORKSPACE_SCOPE = '@battle-agents/';
 // The "typecheck will catch it" argument only holds if typecheck always runs
 // alongside, and this config is also runnable on its own, so the file has to
 // speak up for itself.
-const UNRESOLVED_WORKSPACE_IMPORT = Symbol('unresolved-workspace-import');
+// A string, not a Symbol. The real dependency-cruiser CLI structured-clones
+// module state, and Symbol cannot be cloned, so the CLI died with "Symbol(...)
+// could not be cloned" on a CLEAN tree. vitest never surfaced it because it
+// calls checkImports in-process, so the two paths disagreed and only one was
+// ever exercised.
+const UNRESOLVED_WORKSPACE_IMPORT = '@@unresolved-workspace-import@@';
 
 // It does not fit FORBIDDEN, whose rules are shaped source-layer to
 // target-layers, because there is no target: the import resolves to nothing. It
@@ -119,7 +139,7 @@ const FORBIDDEN = [
   {
     name: 'no-adapter-game-code',
     from: { layer: 'adapter' },
-    to: { layers: ['feature', 'interface', 'infrastructure', 'presentation'] },
+    to: { layers: ['feature', 'adapter', 'interface', 'infrastructure', 'presentation'] },
     reason:
       'Adapters import core and protocol only; no adapter imports game code (plan sections 19 and 23).',
   },

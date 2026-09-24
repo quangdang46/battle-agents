@@ -43,6 +43,7 @@ readonly CANONICAL_STAGES=(
   integration
   schema-drift
   typecheck
+  architecture
   removal-test
   license
   e2e-smoke
@@ -78,6 +79,7 @@ readonly OWNER_REMOVAL_TEST="ba-removal-test-e33"
 readonly OWNER_LICENSE="ba-license-hygiene-qy7"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
 readonly OWNER_CONTRACT="ba-contract-extension-api-w29"
+readonly OWNER_ARCHITECTURE="ba-dependency-rules-os1"
 
 SELECTED_STAGES=()
 RESULT_STATUS=()
@@ -417,6 +419,13 @@ run_stage_seed() {
 
 # tsc runs first so a type error is reported as a unit-stage failure rather than
 # surfacing later as a confusing removal-test or integration failure.
+run_stage_architecture() {
+  # Runs the rule engine over the REAL tree. The fixture test proves each rule
+  # fires; this proves the repository obeys them, and it survives the deletion of
+  # any single test file.
+  run_delegated architecture "$OWNER_ARCHITECTURE" script:architecture
+}
+
 run_stage_schema_drift() {
   # A green integration suite can describe a schema the code no longer matches.
   # The integration test reads the DATABASE, which drizzle builds from the
@@ -499,6 +508,7 @@ run_stage() {
     compose) run_stage_compose ;;
     migrations) run_stage_migrations ;;
     seed) run_stage_seed ;;
+    architecture) run_stage_architecture ;;
     schema-drift) run_stage_schema_drift ;;
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;
