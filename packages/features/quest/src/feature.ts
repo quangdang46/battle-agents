@@ -124,7 +124,7 @@ async function createQuest(
     // A rejection is an event, not a throw: the caller asked for something
     // well-formed in shape and it was not, and that is a normal outcome of an
     // API rather than a fault in it.
-    context.bus.publish(
+    await context.runtime.emit(
       event(context, QUEST_REJECTED, {
         title: input.title,
         reason: rejection.reason,
@@ -146,7 +146,7 @@ async function createQuest(
     now: context.now(),
   });
 
-  context.bus.publish(
+  await context.runtime.emit(
     event(context, QUEST_CREATED, {
       questId: created.id,
       title: created.title,
@@ -207,7 +207,7 @@ async function transition(
   }
 
   const summary = toSummary(toQuest(moved));
-  context.bus.publish(
+  await context.runtime.emit(
     event(context, eventTypeFor(step), {
       questId: summary.id,
       agentId: input.agentId,
