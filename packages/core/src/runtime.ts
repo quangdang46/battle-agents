@@ -175,10 +175,25 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 }
 
 /**
- * What a caller of runAction expects back. The registry holds the untyped
- * ActionDef, and the cast is the price of keeping the caller's I and O: the
- * alternative is a `runAction` that hands every consumer an `unknown`, which is
- * exactly the boundary the typed action registry exists to avoid.
+ * What `runAction` casts a registry entry to.
+ *
+ * This cast is where the type safety the action registry is supposed to provide
+ * stops, and the boundary is easy to overstate, so it is worth being exact.
+ *
+ * What survives: `defineAction` is typed where an action is WRITTEN, so a
+ * feature's own action has a checked input and output.
+ *
+ * What does not: at this call site the caller supplies both I and O. With no
+ * contextual type the result is `unknown`; with one it is whatever the caller
+ * wrote, believed rather than checked. A misspelled action id, a wrong input
+ * shape and a wrong expected output all compile clean and all fail at runtime.
+ * Measured with a probe, and pinned as a compile-time fact in
+ * tests/types/core-actions.ts so it cannot be quietly forgotten.
+ *
+ * Closing that gap needs a codegen step that emits a union of every registered
+ * id with its input and output. It cannot be fixed with a cast or a generic,
+ * because the set of registered actions is decided at runtime by independently
+ * built packages, and no type the compiler can see is a function of it.
  */
 type ActionDefLike<I, O> = {
   run(input: I, context: RuntimeContext): Promise<O>;
