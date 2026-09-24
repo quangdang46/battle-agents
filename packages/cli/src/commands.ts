@@ -102,7 +102,7 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
   }
 
   if (first === 'doctor') {
-    return doctor(api, invocation.format);
+    return doctor(api, emit);
   }
 
   if (PLATFORM_COMMANDS.has(first)) {
@@ -155,6 +155,10 @@ async function resolve(api: ApplicationApi, domain: string): Promise<Resolved> {
   // and it gets there first. Re-raising as a UsageError is not cosmetic: the
   // `kind` an agent reads decides whether it corrects its command or reports a
   // platform failure, and a misfiled usage error reads as the latter.
+  //
+  // Both exits below say the same thing, so they say it in one place. The two
+  // reasons a discovery can come back empty are different — the API refused, or
+  // it answered without detail — and a caller should not be able to tell which.
   let discovery: Discovery;
   try {
     discovery = api.discover(domain);
@@ -162,21 +166,11 @@ async function resolve(api: ApplicationApi, domain: string): Promise<Resolved> {
     if (!(error instanceof UnknownDomainError)) {
       throw error;
     }
-    const known = api.discover().domains ?? [];
-    throw new UsageError(
-      known.length === 0
-        ? `unknown domain "${domain}" — no features are installed`
-        : `unknown domain "${domain}". Known: ${known.join(', ')}`,
-    );
+    throw unknownDomain(domain, api.discover().domains ?? []);
   }
 
   if (discovery.detail === undefined) {
-    const known = api.discover().domains ?? [];
-    throw new UsageError(
-      known.length === 0
-        ? `unknown domain "${domain}" — no features are installed`
-        : `unknown domain "${domain}". Known: ${known.join(', ')}`,
-    );
+    throw unknownDomain(domain, api.discover().domains ?? []);
   }
   const offered = new Set(discovery.detail.actions.map((action) => action.id));
   return {
@@ -185,22 +179,35 @@ async function resolve(api: ApplicationApi, domain: string): Promise<Resolved> {
   };
 }
 
-function describeActions(detail: DomainDetail): string[] {
-  return detail.actions.map((action) => action.id.split('.')[1] ?? action.id);
+function unknownDomain(domain: string, known: readonly string[]): UsageError {
+  return new UsageError(
+    known.length === 0
+      ? `unknown domain "${domain}" — no features are installed`
+      : `unknown domain "${domain}". Known: ${known.join(', ')}`,
+  );
 }
 
-function doctor(api: ApplicationApi, format: OutputFormat): CommandResult {
+/**
+ * The verb part of an action id: everything after the domain.
+ *
+ * `slice(1)` rather than `[1]`, because ids may have more than two segments —
+ * `quest.admin.revoke` is valid under the registry's pattern. Taking only the
+ * second segment would list that action as "admin", and `agent-battle quest
+ * admin` would build `quest.admin`, which is not a registered action, so the
+ * command would fall through to a search and report that nothing matched while
+ * the thing the caller asked for exists.
+ */
+function describeActions(detail: DomainDetail): string[] {
+  return detail.actions.map((action) => action.id.split('.').slice(1).join('.'));
+}
+
+function doctor(api: ApplicationApi, emit: (value: unknown) => CommandResult): CommandResult {
   const domains = api.discover().domains ?? [];
-  return ok(
-    render(
-      {
-        reachable: true,
-        domains: domains.length,
-        check: 'the application API answered; deeper checks belong to the platform, not the CLI',
-      },
-      format,
-    ),
-  );
+  return emit({
+    reachable: true,
+    domains: domains.length,
+    check: 'the application API answered; deeper checks belong to the platform, not the CLI',
+  });
 }
 
 function usage(): string {
@@ -224,7 +231,7 @@ function usage(): string {
   ].join('\n');
 }
 
-function render(value: unknown, format: OutputFormat = 'text'): string {
+function render(value: unknown, format: OutputFormat): string {
   return format === 'json' ? JSON.stringify(value, null, 2) : toText(value);
 }
 

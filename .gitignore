@@ -49,3 +49,10 @@ coverage/
 
 # TypeScript incremental build state
 *.tsbuildinfo
+
+# Throwaway helpers. A script that edits the tree by anchor and dies on the
+# second run is scaffolding, and scaffolding in a repository is a trap: the
+# next person runs it, it corrupts a file, and the commit message is the only
+# record of what it was for.
+tmp-*
+*.bak

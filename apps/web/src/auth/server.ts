@@ -52,7 +52,12 @@ const LOCALHOST_URL = /^https?:\/\/localhost([:/]|$)/i;
  * a field carried here and never read is a field that looks like it owns
  * something it does not.
  */
-export function readAuthEnvironment(env: NodeJS.ProcessEnv): AuthEnvironment {
+export function readAuthEnvironment(
+  // Not NodeJS.ProcessEnv: Next.js augments that type to REQUIRE NODE_ENV, so
+  // every caller and every test would have to supply a variable this function
+  // does not read. The few names it actually needs is the honest signature.
+  env: Readonly<Record<string, string | undefined>>,
+): AuthEnvironment {
   const required = {
     BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
     BETTER_AUTH_URL: env.BETTER_AUTH_URL,

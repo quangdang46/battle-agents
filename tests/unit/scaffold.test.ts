@@ -65,8 +65,29 @@ function toRepoRelative(absolutePath: string): string {
   return toPosix(relative(REPO_ROOT, absolutePath));
 }
 
+/**
+ * Reads a JSON file that is allowed to be JSONC.
+ *
+ * tsconfig.json is JSONC by TypeScript's own specification, and a config that
+ * explains WHY it is shaped a particular way is more useful than one that is
+ * silent. Parsing it with plain JSON.parse made the scaffold gate fail the
+ * moment anybody wrote a comment in a tsconfig, which is a strong incentive to
+ * delete every explanation in every config in the repository.
+ *
+ * Comments and trailing commas go; string contents do not, so a URL or a path
+ * containing "//" is not mangled into a comment.
+ */
 function readJson(filePath: string): unknown {
-  return JSON.parse(readFileSync(filePath, 'utf8')) as unknown;
+  const source = readFileSync(filePath, 'utf8');
+  // Group 1 captures a string, group 2 a comment. The callback keeps whatever
+  // group 1 matched and blanks the rest — the alternative is to capture the
+  // comment and get the indices backwards, which blanks every string too.
+  const withoutComments = source
+    .replace(/("(?:\\.|[^"\\])*")|(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g, (match, string) =>
+      string === undefined ? ' ' : match,
+    )
+    .replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(withoutComments) as unknown;
 }
 
 function readStringProperty(value: unknown, key: string): string {

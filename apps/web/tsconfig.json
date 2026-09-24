@@ -1,13 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
+    // No rootDir and no outDir on purpose. This app is BUILT by `next build`;
+    // tsc here is the type gate only. Keeping the library rootDir would make
+    // every file under app/ an error, and the app directory is where a Next.js
+    // app's source lives.
+    "noEmit": true,
+    "jsx": "preserve",
+    "allowJs": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["node", "react"]
   },
-  "references": [
-    {
-      "path": "../../packages/core"
-    }
-  ],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "app/**/*.ts", "app/**/*.tsx", "next.config.mjs"]
 }

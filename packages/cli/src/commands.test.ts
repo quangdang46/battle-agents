@@ -30,6 +30,15 @@ function api() {
               run: async (input: { args: string }) => ({ claimed: input.args }),
             }),
             defineAction({
+              // Three segments on purpose. The registry pattern allows them, and
+              // a CLI that read only the second segment would list this as
+              // "admin" and send 'quest admin' to a search that finds
+              // nothing, while the action the caller asked for sits there.
+              id: 'quest.admin.revoke',
+              permissions: ['quest.admin.revoke'],
+              run: async (input: { args: string }) => ({ revoked: input.args }),
+            }),
+            defineAction({
               id: 'quest.submit',
               permissions: ['quest.submit'],
               run: async (input: { args: string }) => ({ submitted: input.args }),
@@ -74,12 +83,21 @@ describe('the CLI reaches every domain it has never heard of', () => {
     expect(result.stdout).toContain('accepted: battle-9');
   });
 
+  it('reaches an action whose id has more than two segments', async () => {
+    const result = await invoke('quest', 'admin.revoke', 'q-9');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('revoked: q-9');
+  });
+
   it('lists what a domain can do when given no verb', async () => {
     const result = await invoke('quest');
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('claim');
     expect(result.stdout).toContain('submit');
+    // The whole verb, not just its first segment.
+    expect(result.stdout).toContain('admin.revoke');
   });
 
   it('lists every domain at once', async () => {
@@ -110,7 +128,13 @@ describe('a verb that is not an action', () => {
     const result = await invoke('quest', 'zzz');
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('This domain offers: claim, submit');
+    // Each verb, rather than the exact list: the list grows every time a
+    // feature adds an action, and a test that breaks on that teaches people to
+    // delete the test.
+    expect(result.stderr).toContain('This domain offers:');
+    for (const verb of ['admin.revoke', 'claim', 'submit']) {
+      expect(result.stderr).toContain(verb);
+    }
   });
 });
 
