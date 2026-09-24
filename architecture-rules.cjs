@@ -90,8 +90,18 @@ const LAYERS = [
   },
   {
     name: 'interface',
-    instance: /^(?:packages\/(?:cli|mcp-server)(?:\/|$)|packages\/interfaces\/[^/]+(?:\/|$))/,
-    files: ['packages/cli/**/*.ts', 'packages/mcp-server/**/*.ts', 'packages/interfaces/*/**/*.ts'],
+    // packages/api is the shared Application API the three surfaces consume.
+    // It is classified here rather than given a layer of its own because it
+    // imports core and nothing else: it decides nothing about the game, it
+    // reads the registry and calls through it. A layer of its own would let it
+    // grow imports the other consumers are forbidden.
+    instance: /^(?:packages\/(?:api|cli|mcp-server)(?:\/|$)|packages\/interfaces\/[^/]+(?:\/|$))/,
+    files: [
+      'packages/api/**/*.ts',
+      'packages/cli/**/*.ts',
+      'packages/mcp-server/**/*.ts',
+      'packages/interfaces/*/**/*.ts',
+    ],
   },
   {
     name: 'infrastructure',

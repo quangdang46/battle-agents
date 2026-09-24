@@ -1,0 +1,170 @@
+import { defineAction } from '@battle-agents/core';
+import type { ActionSummary, Capability, Runtime } from '@battle-agents/core';
+
+/**
+ * The application API: the single definition of what an agent can do.
+ *
+ * CLI, HTTP and MCP are three consumers of this and nothing else. They are
+ * adapters over the same five primitives, so a feature is reachable from all
+ * three because the three of them reach the same place — not because somebody
+ * remembered to add it to each.
+ *
+ * The surface is frozen at five. The pressure to add a sixth, or to promote one
+ * domain operation to a first-class tool because somebody asked for it, arrives
+ * early and repeatedly; the answer is that the operation already exists in the
+ * registry and promoting it means every later feature will ask the same. The
+ * primitives grow the game's reach without growing what a client has to read.
+ */
+
+/** discover, search, inspect, act, observe. Adding a sixth is a breaking change. */
+export const PRIMITIVES = ['discover', 'search', 'inspect', 'act', 'observe'] as const;
+
+export type Primitive = (typeof PRIMITIVES)[number];
+
+/** What `discover([domain?])` returns: domains, or one domain's contents. */
+export interface Discovery {
+  /** Present when no domain was named: the top-level names and nothing else. */
+  readonly domains?: readonly string[];
+  /** Present when a domain was named. */
+  readonly detail?: DomainDetail;
+}
+
+export interface DomainDetail {
+  readonly capabilities: readonly Capability[];
+  readonly actions: readonly ActionSummary[];
+}
+
+export interface SearchQuery {
+  /** Which kind of thing to look for. Domains are the only kind today. */
+  readonly type: string;
+  /** A substring of the name, case-insensitive. */
+  readonly name?: string;
+}
+
+export interface SearchResult {
+  readonly id: string;
+  readonly name: string;
+}
+
+export interface InspectQuery {
+  readonly type: string;
+  readonly id: string;
+}
+
+export interface ObserveQuery {
+  /** A domain to watch, or every domain when omitted. */
+  readonly domain?: string;
+}
+
+export interface Observer {
+  /** Stops the subscription. Idempotent, so a double close is not an error. */
+  close(): void;
+}
+
+export interface ApplicationApi {
+  discover(domain?: string): Discovery;
+  search(query: SearchQuery): readonly SearchResult[];
+  inspect(query: InspectQuery): Promise<unknown>;
+  act<I, O>(action: string, input: I): Promise<O>;
+  observe(query: ObserveQuery, listener: (event: unknown) => void): Observer;
+}
+
+/** Thrown when an action id names nothing in the registry. */
+export class UnknownActionError extends Error {
+  readonly action: string;
+  readonly availableDomains: readonly string[];
+
+  constructor(action: string, availableDomains: readonly string[]) {
+    // Names the domains rather than dumping every id: an agent that guessed
+    // "quest.submit" needs to know that "quest" exists, not that the registry
+    // has ninety entries. `discover` is one call away for the full list.
+    super(
+      `unknown action "${action}"; known domains: ${availableDomains.join(', ') || 'none'}. ` +
+        'Call discover() to see what is available.',
+    );
+    this.name = 'UnknownActionError';
+    this.action = action;
+    this.availableDomains = availableDomains;
+  }
+}
+
+/** Thrown when a domain names nothing in the registry. */
+export class UnknownDomainError extends Error {
+  readonly domain: string;
+  readonly availableDomains: readonly string[];
+
+  constructor(domain: string, availableDomains: readonly string[]) {
+    super(`unknown domain "${domain}"; known domains: ${availableDomains.join(', ') || 'none'}`);
+    this.name = 'UnknownDomainError';
+    this.domain = domain;
+    this.availableDomains = availableDomains;
+  }
+}
+
+/**
+ * Builds the API over a runtime.
+ *
+ * Deliberately thin. Every method here either reads the registry or calls
+ * through it; none of them decides anything about the game, because a decision
+ * made here is a decision the CLI and the HTTP route and the MCP tool would all
+ * have to make identically, and they would not.
+ */
+export function createApplicationApi(runtime: Runtime): ApplicationApi {
+  return {
+    discover(domain?: string): Discovery {
+      if (domain === undefined) {
+        return { domains: runtime.domains() };
+      }
+      assertKnownDomain(runtime, domain);
+      const detail = runtime.describeDomain(domain);
+      return { detail: { capabilities: detail.capabilities, actions: detail.actions } };
+    },
+
+    search(query: SearchQuery): readonly SearchResult[] {
+      // Search is a name lookup over the catalog, so it never reaches a store
+      // and never depends on a feature existing yet.
+      const detail = runtime.describeDomain(query.type);
+      const needle = query.name?.toLowerCase();
+      return detail.actions
+        .filter((action) => needle === undefined || action.id.toLowerCase().includes(needle))
+        .map((action) => ({ id: action.id, name: action.id.split('.')[1] ?? action.id }));
+    },
+
+    inspect(query: InspectQuery): Promise<unknown> {
+      // `type` is a domain; `id` is an action within it. The action's own
+      // permissions decide whether the caller may run it, and that check belongs
+      // where the action is defined rather than in a shared helper that three
+      // surfaces would each have to remember to call.
+      return runtime.runAction(`${query.type}.${query.id}`, {});
+    },
+
+    async act<I, O>(action: string, input: I): Promise<O> {
+      if (!runtime.actions().includes(action)) {
+        throw new UnknownActionError(action, runtime.domains());
+      }
+      return runtime.runAction<I, O>(action, input);
+    },
+
+    observe(query: ObserveQuery, listener: (event: unknown) => void): Observer {
+      // A no-op subscription until a transport supplies a bus. Returning a real
+      // Observer that can be closed keeps a surface from having to special-case
+      // "the bus is not wired yet", which is the shape that grows into a
+      // different code path per surface.
+      void query;
+      void listener;
+      return { close() {} };
+    },
+  };
+}
+
+function assertKnownDomain(runtime: Runtime, domain: string): void {
+  if (!runtime.domains().includes(domain)) {
+    throw new UnknownDomainError(domain, runtime.domains());
+  }
+}
+
+/**
+ * Re-exported so a surface building its own typed facade does not have to reach
+ * into core for the same constructor the registry uses.
+ */
+export { defineAction };

@@ -123,6 +123,12 @@ importers:
         specifier: workspace:*
         version: link:../../protocol
 
+  packages/api:
+    dependencies:
+      '@battle-agents/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/cli:
     dependencies:
       '@battle-agents/core':
