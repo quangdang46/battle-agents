@@ -6,7 +6,55 @@
     // every file it transitively reaches, and this project's whole job is to
     // reach into other packages' test files without owning them.
     "composite": false,
-    "types": ["node"]
+    "types": ["node"],
+    // These paths exist for the typechecker, and only for the typechecker.
+    //
+    // The test stages resolve @battle-agents/* to source through
+    // vitest.shared.ts, so they never consult node_modules and never see
+    // dist/. This map covers the other half: `tsc` reading a package would
+    // otherwise follow node_modules to dist/*.d.ts, so a source change that
+    // has not been rebuilt would be typechecked against the previous build's
+    // declarations. That is the same staleness the vitest alias fixed, arriving
+    // through the type system instead of the runtime.
+    //
+    // What this does NOT fix: tsx, which is how every script under scripts/
+    // runs, resolves these specifiers through node_modules and lands on dist/.
+    // The paths are ignored at runtime. In practice that costs one script,
+    // scripts/load-test-events.ts, and measuring dist there is the right target
+    // for a load harness anyway. db:seed and db:verify import no workspace
+    // package at all, so the migration path was never exposed to this.
+    //
+    // tests/unit/source-alias-coverage.test.ts asserts this map covers the same
+    // packages as the vitest alias, so a new package cannot be added to one
+    // and silently missed by the other.
+    "paths": {
+      "@battle-agents/_template": ["./packages/adapters/_template/src/index.ts"],
+      "@battle-agents/activity": ["./packages/features/activity/src/index.ts"],
+      "@battle-agents/agent": ["./packages/features/agent/src/index.ts"],
+      "@battle-agents/animation": ["./packages/features/animation/src/index.ts"],
+      "@battle-agents/api": ["./packages/api/src/index.ts"],
+      "@battle-agents/battle": ["./packages/features/battle/src/index.ts"],
+      "@battle-agents/bounty": ["./packages/features/bounty/src/index.ts"],
+      "@battle-agents/claude": ["./packages/adapters/claude/src/index.ts"],
+      "@battle-agents/cli": ["./packages/cli/src/index.ts"],
+      "@battle-agents/codex": ["./packages/adapters/codex/src/index.ts"],
+      "@battle-agents/core": ["./packages/core/src/index.ts"],
+      "@battle-agents/cursor": ["./packages/adapters/cursor/src/index.ts"],
+      "@battle-agents/db": ["./packages/db/src/index.ts"],
+      "@battle-agents/game-client": ["./packages/game-client/src/index.ts"],
+      "@battle-agents/gemini": ["./packages/adapters/gemini/src/index.ts"],
+      "@battle-agents/guild": ["./packages/features/guild/src/index.ts"],
+      "@battle-agents/inventory": ["./packages/features/inventory/src/index.ts"],
+      "@battle-agents/mcp-server": ["./packages/mcp-server/src/index.ts"],
+      "@battle-agents/opencode": ["./packages/adapters/opencode/src/index.ts"],
+      "@battle-agents/pi": ["./packages/adapters/pi/src/index.ts"],
+      "@battle-agents/progression": ["./packages/features/progression/src/index.ts"],
+      "@battle-agents/protocol": ["./packages/protocol/src/index.ts"],
+      "@battle-agents/quest": ["./packages/features/quest/src/index.ts"],
+      "@battle-agents/reputation": ["./packages/features/reputation/src/index.ts"],
+      "@battle-agents/social": ["./packages/features/social/src/index.ts"],
+      "@battle-agents/web": ["./apps/web/src/index.ts"]
+    }
   },
   // Package test files are typechecked here rather than in each package, for
   // two reasons. A test needs Node types (to read fixtures, resolve paths) and
