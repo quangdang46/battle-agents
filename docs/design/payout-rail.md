@@ -165,8 +165,12 @@ A dispute is settled by replaying what happened. The evidence is the activity lo
 
 Concretely, settling "the PR was valid and the money is owed" requires the log to show, in order:
 the bounty claim, the PR opened, the PR merged, the maintainer's identity, the review outcome, and
-that no earlier valid PR won the race. Today the activity log persists `bounty_funded`,
-`payout_pending` and `payout_recorded` by declaration, and the retention window is 365 days.
+that no earlier valid PR won the race. The 365-day retention window is real
+(`features/activity`), but the three payout event types are NOT persisted: `PAYOUT_EVENTS`
+is declared in `payout.ts` and registered in no event union, and nothing emits them. A
+`PayoutIntentStore` is declared too and has no implementation. The bounty feature has to
+arrive before any of this exists at runtime, and until it does the guarantee below is
+unbuilt rather than met.
 
 Two gaps, stated rather than glossed:
 
@@ -186,7 +190,9 @@ Two gaps, stated rather than glossed:
 | Dispute may be opened          | 30 days after `payout_recorded` | Matches the report window. Longer and the maintainer decision has hardened.                   |
 | Unclaimed refund               | 90 days after bounty cancelled  | Long enough for a solver to notice, short enough that a sponsor is not waiting a year.        |
 
-Windows are enforced by the bounty feature, not by this document, and each is a value in
+Windows are enforced by the bounty feature, not by this document. They are not implemented
+yet: there is no `rules.ts` in `packages/features/bounty/`, and the only file there is
+`index.ts`, `payout.ts` and its test. When the feature lands these become a value in
 `rules.ts` so changing one is a visible edit rather than a hunt.
 
 ---
@@ -239,8 +245,10 @@ The rail does not exist at M2 and the product must not imply otherwise.
   alongside it a marker that the reward is a target, not a payment.
 - `bounty.completed` moves a bounty to `payout_pending` and nothing further happens automatically.
 - A `payout_recorded` event is emitted only when a human reports a transfer.
-- The bounty feature's `README` and the API responses say `payout: manual/sandbox` for every
-  paid-adjacent status.
+- The bounty feature is required to say `payout: manual/sandbox` for every paid-adjacent
+  status, in its README and in its API responses. Neither exists yet: there is no bounty
+  README and no bounty API surface. `needsSandboxBanner` exists and is tested, and is
+  called by nothing, because there is no banner to call it.
 
 **A user must never believe they have been paid when they have not.** The banner is a hard
 requirement, not polish: the failure mode of getting this wrong is a solver who closed a PR, saw a

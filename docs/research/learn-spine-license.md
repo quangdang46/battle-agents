@@ -12,7 +12,7 @@ the evidence so nobody re-derives it.
 
 ## 1. Determination
 
-**learn-spine has no license.** Determined four independent ways, all on 2026-09-24:
+**learn-spine has no license.** Determined five independent ways, all on 2026-09-24:
 
 **1. No license file in the working tree.**
 
