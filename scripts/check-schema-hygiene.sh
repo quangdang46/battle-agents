@@ -41,7 +41,7 @@ readonly GUARDED_TABLES=(
 # A column is credential-shaped if its name smells like a secret. Matching on
 # shape rather than a fixed word list is deliberate: a list that missed
 # "access_token" is the same list that would miss "apiKey" or "bearer_value".
-readonly SECRET_COLUMN_PATTERN='(token|secret|password|passwd|api_?key|apikey|credential|authorization|bearer|private_?key)'
+readonly SECRET_COLUMN_PATTERN='(token|secret|password|passwd|api_?key|apikey|credential|authorization|auth|bearer|cookie|private_?key|session_?id)'
 
 # The only credential-shaped columns allowed to exist, and only as a hash.
 readonly ALLOWED_HASH_COLUMNS=(
@@ -53,7 +53,11 @@ readonly ALLOWED_HASH_COLUMNS=(
 # The first version of this function looked for "pgTable = agent_credentials" on
 # one line, which the schema never writes, so the guard never fired and the whole
 # schema-source branch was dead while the header claimed it was reading the
-# source. It is matched on the two lines drizzle actually emits.
+# source, and then it stayed dead a second time: the first repair used
+# "pq?_?Table" where drizzle emits "pgTable", so it matched nothing again. The
+# pattern is now pg_?Table and the branch is verified by a mutation, not by
+# reading it back. A comment about a scanner is a claim, and a claim is only
+# evidence once something has tried to break it.
 list_guard_declarations() {
   local file table
   for table in "${GUARDED_TABLES[@]}"; do
@@ -63,7 +67,7 @@ list_guard_declarations() {
       my $file = $ENV{GUARD_FILE};
       my $want = $ENV{TABLE};
       # Table name first, then walk back to the pgTable( that introduces it.
-      while (m{pq?_?Table\([[:space:]]*\n[[:space:]]*\x27$want\x27}g) {
+      while (m{pg_?Table\([[:space:]]*\n[[:space:]]*\x27$want\x27}g) {
         my $start = pos($_);
         my $rest  = substr($_, $start);
         # Column block runs until the closing "}," that ends the object literal.

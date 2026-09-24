@@ -54,7 +54,14 @@ const UNCLASSIFIED_LAYER = 'unclassified';
 const UNCLASSIFIED_RULE = 'unclassified-layer';
 const UNCLASSIFIED_REASON =
   'Classify this package in architecture-rules.cjs before depending on it, otherwise the layering guarantee silently stops covering it.';
-const SOURCE_ROOTS = ['apps', 'packages'];
+const SOURCE_ROOTS = ['apps', 'packages', 'drizzle'];
+// drizzle/ holds the schema source and the database client, which the plan
+// taxonomy puts in infrastructure. It is scanned because an import that resolves
+// to nothing in the schema is as invisible as one in a package, and leaving it
+// out made the engine skip the one directory the schema-hygiene gate cares
+// about. Unclassified code is reported rather than ignored, so adding the root
+// without classifying it fails loudly, which is the behaviour that makes this
+// safe to extend.
 const FEATURES_DIR = 'packages/features';
 const ADAPTERS_DIR = 'packages/adapters';
 const PACKAGE_CONTAINERS = [...SOURCE_ROOTS, ADAPTERS_DIR, FEATURES_DIR];
@@ -88,8 +95,8 @@ const LAYERS = [
   },
   {
     name: 'infrastructure',
-    instance: /^packages\/(?:infrastructure(?:\/[^/]+)?|db)(?:\/|$)/,
-    files: ['packages/infrastructure/*/**/*.ts', 'packages/db/**/*.ts'],
+    instance: /^(?:drizzle(?:\/|$)|packages\/(?:infrastructure(?:\/[^/]+)?|db)(?:\/|$))/,
+    files: ['packages/infrastructure/*/**/*.ts', 'packages/db/**/*.ts', 'drizzle/**/*.ts'],
   },
   {
     name: 'core',

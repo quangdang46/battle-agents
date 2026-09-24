@@ -2,7 +2,12 @@
 #
 # Canonical M0 test pipeline — plan section 40.
 #
-#   compose -> migrations -> seed -> unit -> integration -> removal-test -> license -> e2e-smoke
+#   The stage set is NOT listed here. scripts/stages.manifest is the single
+#   definition, and the preflight below fails if this file's CANONICAL_STAGES or
+#   the run_stage dispatch disagree with it. An earlier version of this header
+#   enumerated the stages in prose and went stale at eight of them, which the
+#   three-way check cannot catch: all three real views agreed while only the
+#   sentence was wrong.
 #
 # Contributors run this file directly through `pnpm test:m0`; CI runs this same
 # file as the command of the compose `m0-test-runner` service. Same file, same
