@@ -1,5 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
+import { workspaceSourceAliases } from './vitest.shared.js';
+
 /**
  * Stage: integration. Requires a live Postgres (the compose `postgres` service).
  * These tests are EXCLUDED from the unit stage on purpose: section 40 says any
@@ -9,6 +11,7 @@ import { defineConfig } from 'vitest/config';
  * "the pipeline is green" meaningless.
  */
 export default defineConfig({
+  resolve: { alias: workspaceSourceAliases() },
   test: {
     name: 'integration',
     include: ['tests/integration/**/*.test.ts'],

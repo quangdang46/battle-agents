@@ -1,5 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
+import { workspaceSourceAliases } from './vitest.shared.js';
+
 /**
  * Stage: unit. Pure, no network, no database. Must stay under ~100ms per test (T9).
  *
@@ -21,6 +23,7 @@ import { defineConfig } from 'vitest/config';
  * the sentence is then parsed as code.)
  */
 export default defineConfig({
+  resolve: { alias: workspaceSourceAliases() },
   test: {
     name: 'unit',
     include: [

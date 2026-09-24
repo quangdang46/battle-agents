@@ -1,11 +1,14 @@
 import { defineConfig } from 'vitest/config';
 
+import { workspaceSourceAliases } from './vitest.shared.js';
+
 /**
  * Stage: e2e. Requires the full stack: web + Postgres + auth.
  * M0 asserts only what M0 can produce (login -> agents -> session survives).
  * Bounty claim lands in the M2 stage; replay rendering in M4.
  */
 export default defineConfig({
+  resolve: { alias: workspaceSourceAliases() },
   test: {
     name: 'e2e',
     include: ['tests/e2e/**/*.test.ts'],
