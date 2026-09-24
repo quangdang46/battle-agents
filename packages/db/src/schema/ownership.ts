@@ -3,6 +3,12 @@
  * table added later must not require editing a feature migration, and vice
  * versa, so the split is data the verification step asserts rather than a note.
  */
+// Better Auth owns these and nothing else may migrate them (plan section 38): the
+// human login, its sessions, its linked OAuth accounts and its verifications.
+// They are platform tables because the auth library manages them, not because
+// the game has an opinion about them.
+export const AUTH_TABLES = ['user', 'session', 'account', 'verification'] as const;
+
 export const PLATFORM_TABLES = [
   'users',
   'agents',
@@ -28,6 +34,6 @@ export const FEATURE_TABLES = [
 
 export type FeatureTable = (typeof FEATURE_TABLES)[number];
 
-export const OWNED_TABLES = [...PLATFORM_TABLES, ...FEATURE_TABLES] as const;
+export const OWNED_TABLES = [...AUTH_TABLES, ...PLATFORM_TABLES, ...FEATURE_TABLES] as const;
 
 export const PLATFORM_TABLES_OWNING_USER_ID = ['installations', 'agents', 'projects'] as const;

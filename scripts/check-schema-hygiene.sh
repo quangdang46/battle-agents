@@ -36,6 +36,15 @@ readonly GUARDED_TABLES=(
   "agentCredential"
   "users"
   "installations"
+  # Better Auth's own tables. Its account table holds a human's OAuth tokens in
+  # plaintext, which is a real secret at rest, so excluding the table would be
+  # the one way to make this gate weaker. It is guarded, and the few columns
+  # that legitimately hold a provider secret are exempted by table AND column
+  # below, so the next credential-shaped column added beside them still fails.
+  "user"
+  "session"
+  "account"
+  "verification"
 )
 
 # A column is credential-shaped if its name smells like a secret. Matching on
@@ -46,6 +55,40 @@ readonly SECRET_COLUMN_PATTERN='(token|secret|password|passwd|api_?key|apikey|cr
 # The only credential-shaped columns allowed to exist, and only as a hash.
 readonly ALLOWED_HASH_COLUMNS=(
   "token_hash"
+)
+
+# table:column pairs that hold a real secret and are exempt, each for a stated
+# reason. Table-scoped on purpose: a bare column name in this list would let ANY
+# guarded table grow a plaintext 'token', which is the hole this gate closes.
+#
+#   account:access_token, account:refresh_token, account:id_token
+#     The GitHub OAuth tokens for a HUMAN, held by Better Auth because that is the
+#     provider contract it implements and nothing in this system reads them. They
+#     are not agent credentials: an agent token is ours to issue, hash and revoke,
+#     and lives in agent_credentials.token_hash.
+#
+#   account:password
+#     Always null for GitHub OAuth, the only provider this project registers. The
+#     column exists because Better Auth's schema requires it for credential
+#     providers; a value in it would be a Better Auth credential hash.
+#
+#   session:token
+#     A session cookie value, used as a lookup key rather than as a secret. It is
+#     handed to the browser on every request, so hashing it would break lookups
+#     without protecting anything the transport does not already.
+readonly EXEMPT_SECRET_COLUMNS=(
+  "account:access_token"
+  "account:refresh_token"
+  "account:id_token"
+  "account:password"
+  "session:token"
+  #   account:access_token_expires_at, account:refresh_token_expires_at
+  #     Timestamps. The pattern matches them because of the word "token", and
+  #     narrowing the pattern to avoid that is exactly the change that made this
+  #     gate miss things twice before. A column called "when the token stops
+  #     working" carries no more secret than a column called "when it started".
+  "account:access_token_expires_at"
+  "account:refresh_token_expires_at"
 )
 
 # Drizzle declares a table as "export const name = pgTable(" followed by the SQL
@@ -74,7 +117,7 @@ list_guard_declarations() {
         if ($rest =~ m{\{(.*?)\n[[:space:]]*\},\n}s) {
           my $body = $1;
           while ($body =~ m{([A-Za-z0-9_]+)[[:space:]]*:[[:space:]]*[A-Za-z]+\([[:space:]]*\x27([A-Za-z0-9_]+)\x27}g) {
-            print "$file:$2\n";
+            print "$file:$want:$2\n";
           }
         }
         pos($_); pos($_)++;
@@ -100,13 +143,13 @@ list_migration_columns() {
         my $t = $ENV{TABLE};
         # Columns added later.
         while (m{ALTER\s+TABLE\s+"?\Q$t\E"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z0-9_]+)"?}gi) {
-          print "$ARGV:$1\n";
+          print "$ARGV:$t:$1\n";
         }
         # Columns in the original CREATE, body captured across newlines.
         while (m{CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?\Q$t\E"?[[:space:]]*\((.*?)\n[[:space:]]*\);}gsi) {
           my $body = $1;
           while ($body =~ m{"([A-Za-z0-9_]+)"\s+(?:text|varchar|char|uuid|integer|bigint|smallint|boolean|timestamp|timestamptz|jsonb|json|serial|numeric|date)}gi) {
-            print "$ARGV:$1\n";
+            print "$ARGV:$t:$1\n";
           }
         }
       ' "$sql" 2>/dev/null || true
@@ -125,12 +168,29 @@ is_allowed_hash() {
   return 1
 }
 
+is_exempt_secret() {
+  local table="$1" column="$2" entry
+  local key
+  key="$(printf '%s' "$table:$column" | tr '[:upper:]' '[:lower:]')"
+  for entry in "${EXEMPT_SECRET_COLUMNS[@]}"; do
+    if [ "$key" = "$entry" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 declare -a offenders=()
 
+# The scanners report file:table:column, so the exemption can be scoped to the
+# table that earned it. A bare column name would let any guarded table grow a
+# plaintext 'token', which is the hole this gate exists to close.
 while IFS= read -r declaration; do
   [ -n "$declaration" ] || continue
   file_path="${declaration%%:*}"
-  column="${declaration##*:}"
+  rest="${declaration#*:}"
+  table="${rest%%:*}"
+  column="${rest##*:}"
   # The scanners report every column they find in a guarded table; only the ones
   # shaped like a credential are of interest. This filter was missing, so once
   # the CREATE TABLE branch started working it flagged every column in the
@@ -138,9 +198,10 @@ while IFS= read -r declaration; do
   if ! printf '%s' "$column" | grep -qiE "$SECRET_COLUMN_PATTERN"; then
     continue
   fi
-  if ! is_allowed_hash "$column"; then
-    offenders+=("${file_path}: credential-shaped column '${column}' in a guarded table")
+  if is_allowed_hash "$column" || is_exempt_secret "$table" "$column"; then
+    continue
   fi
+  offenders+=("${file_path}: credential-shaped column '${column}' in table '${table}'")
 done < <({ list_guard_declarations; list_migration_columns; } | sort -u)
 
 if [ ${#offenders[@]} -gt 0 ]; then
