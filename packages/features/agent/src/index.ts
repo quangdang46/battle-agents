@@ -11,6 +11,23 @@ export type {
   AgentSummary,
   RegisterAgentPayload,
 } from './feature.js';
+export { authenticate, AuthenticationError, readBearerToken } from './auth.js';
+export type {
+  AuthFailure,
+  AuthenticatedCaller,
+  AuthOptions,
+  CredentialRecord,
+  CredentialStore,
+} from './auth.js';
+export {
+  CREDENTIAL_TOKEN_BYTES,
+  DEFAULT_TOKEN_LIFETIME_MS,
+  hashToken,
+  isCredentialUsable,
+  issueCredential,
+  tokenMatches,
+} from './credential.js';
+export type { CredentialRejection, IssuedCredential } from './credential.js';
 export { hello, sweepStaleSessions, UnknownAgentError } from './hello.js';
 export type {
   HelloOptions,

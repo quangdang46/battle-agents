@@ -23,6 +23,8 @@ export {
   DrizzleAgentRepository,
 } from './repositories/agents.js';
 export type { AgentRow, StoredInstallationRow } from './repositories/agents.js';
+export { DrizzleCredentialStore } from './repositories/credentials.js';
+export type { NewStoredCredential, StoredCredential } from './repositories/credentials.js';
 export { DrizzleSessionRepository, DrizzleSessionSweeper } from './repositories/sessions.js';
 export { DrizzleStateStore } from './repositories/state-store.js';
 export { seedDatabase } from './seed/seed.js';
