@@ -71,6 +71,21 @@ export const toolCompletedEventSchema = baseEvent('tool.completed').extend({
 });
 export type ToolCompletedEvent = z.infer<typeof toolCompletedEventSchema>;
 
+// A failure is a separate event rather than tool.completed with ok:false. The
+// game reads a failed tool differently from a tool that returned successfully
+// with a false result, and an adapter that has to decide which one to emit from
+// a single exit path is exactly where that distinction gets lost.
+export const toolFailedEventSchema = baseEvent('tool.failed').extend({
+  tool: identifierSchema,
+  reason: identifierSchema.optional(),
+});
+export type ToolFailedEvent = z.infer<typeof toolFailedEventSchema>;
+
+export const promptSubmittedEventSchema = baseEvent('prompt.submitted').extend({
+  prompt: identifierSchema.optional(),
+});
+export type PromptSubmittedEvent = z.infer<typeof promptSubmittedEventSchema>;
+
 export const fileReadEventSchema = baseEvent('file.read').extend({
   path: identifierSchema,
 });
@@ -120,6 +135,30 @@ export const messageSentEventSchema = baseEvent('message.sent').extend({
 });
 export type MessageSentEvent = z.infer<typeof messageSentEventSchema>;
 
+// The receiver's side of the same message. Without it, a message is only ever
+// visible to the machine that sent it, so a game watching a second agent would
+// have no event to show for what it was told.
+export const messageReceivedEventSchema = baseEvent('message.received').extend({
+  fromAgentId: identifierSchema,
+  body: identifierSchema,
+});
+export type MessageReceivedEvent = z.infer<typeof messageReceivedEventSchema>;
+
+// A change the harness noticed but did not necessarily make itself: a branch
+// switch, a pull, a checkout. Distinct from file.write, which is a write the
+// agent performed.
+export const fileChangedEventSchema = baseEvent('file.changed').extend({
+  path: identifierSchema,
+  change: z.enum(['created', 'modified', 'deleted', 'renamed']),
+});
+export type FileChangedEvent = z.infer<typeof fileChangedEventSchema>;
+
+export const taskCreatedEventSchema = baseEvent('task.created').extend({
+  taskRef: identifierSchema,
+  title: identifierSchema.optional(),
+});
+export type TaskCreatedEvent = z.infer<typeof taskCreatedEventSchema>;
+
 export const subagentSpawnedEventSchema = baseEvent('subagent.spawned').extend({
   childSessionId: identifierSchema,
 });
@@ -135,10 +174,13 @@ export const agentEventSchemas = [
   sessionStartedEventSchema,
   sessionHeartbeatEventSchema,
   sessionEndedEventSchema,
+  promptSubmittedEventSchema,
   toolStartedEventSchema,
   toolCompletedEventSchema,
+  toolFailedEventSchema,
   fileReadEventSchema,
   fileWriteEventSchema,
+  fileChangedEventSchema,
   commandRunEventSchema,
   testPassedEventSchema,
   testFailedEventSchema,
@@ -146,8 +188,10 @@ export const agentEventSchemas = [
   waitingEventSchema,
   permissionRequestedEventSchema,
   messageSentEventSchema,
+  messageReceivedEventSchema,
   subagentSpawnedEventSchema,
   subagentCompletedEventSchema,
+  taskCreatedEventSchema,
 ] as const;
 
 export const AGENT_EVENT_TYPES = Object.freeze(

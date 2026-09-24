@@ -37,6 +37,7 @@ const VALID_EVENTS: readonly AgentEvent[] = [
   },
   { type: 'session.heartbeat', ...COMMON_FIELDS },
   { type: 'session.ended', ...COMMON_FIELDS, reason: 'completed' },
+  { type: 'prompt.submitted', ...COMMON_FIELDS, prompt: 'fix the failing test' },
   {
     type: 'tool.started',
     ...COMMON_FIELDS,
@@ -44,8 +45,10 @@ const VALID_EVENTS: readonly AgentEvent[] = [
     input: { command: 'ls' },
   },
   { type: 'tool.completed', ...COMMON_FIELDS, tool: 'bash', ok: true, durationMs: 12 },
+  { type: 'tool.failed', ...COMMON_FIELDS, tool: 'bash', reason: 'exit 1' },
   { type: 'file.read', ...COMMON_FIELDS, path: 'src/index.ts' },
   { type: 'file.write', ...COMMON_FIELDS, path: 'src/index.ts', linesAdded: 4, linesRemoved: 1 },
+  { type: 'file.changed', ...COMMON_FIELDS, path: 'src/index.ts', change: 'modified' },
   { type: 'command.run', ...COMMON_FIELDS, argv0: 'pnpm', exitCode: 0 },
   { type: 'test.passed', ...COMMON_FIELDS, suite: 'unit', count: 3 },
   { type: 'test.failed', ...COMMON_FIELDS, suite: 'unit', failure: 'expected true' },
@@ -53,8 +56,10 @@ const VALID_EVENTS: readonly AgentEvent[] = [
   { type: 'waiting', ...COMMON_FIELDS, reason: 'user input' },
   { type: 'permission.requested', ...COMMON_FIELDS, tool: 'bash' },
   { type: 'message.sent', ...COMMON_FIELDS, toAgentId: 'agent-2', body: 'hello' },
+  { type: 'message.received', ...COMMON_FIELDS, fromAgentId: 'agent-2', body: 'hello' },
   { type: 'subagent.spawned', ...COMMON_FIELDS, childSessionId: 'session-2' },
   { type: 'subagent.completed', ...COMMON_FIELDS, childSessionId: 'session-2', ok: true },
+  { type: 'task.created', ...COMMON_FIELDS, taskRef: 'task-1', title: 'fix the build' },
 ];
 
 interface RejectedSample {
@@ -155,10 +160,13 @@ function classify(event: AgentEvent): AgentEventType {
     case 'session.started':
     case 'session.heartbeat':
     case 'session.ended':
+    case 'prompt.submitted':
     case 'tool.started':
     case 'tool.completed':
+    case 'tool.failed':
     case 'file.read':
     case 'file.write':
+    case 'file.changed':
     case 'command.run':
     case 'test.passed':
     case 'test.failed':
@@ -166,10 +174,16 @@ function classify(event: AgentEvent): AgentEventType {
     case 'waiting':
     case 'permission.requested':
     case 'message.sent':
+    case 'message.received':
     case 'subagent.spawned':
     case 'subagent.completed':
+    case 'task.created':
       return event.type;
     default: {
+      // Assigning to `never` is the actual exhaustiveness check, and it is a
+      // compile error the moment a variant is added without a case here. This
+      // is the guard that would have caught the five section 5.2 types the
+      // union was missing.
       const unhandled: never = event;
       return unhandled;
     }
@@ -224,6 +238,13 @@ describe('AgentEvent union', () => {
           "sessionId",
           "type",
         ],
+        "file.changed": [
+          "at",
+          "change",
+          "path",
+          "sessionId",
+          "type",
+        ],
         "file.read": [
           "at",
           "path",
@@ -238,6 +259,13 @@ describe('AgentEvent union', () => {
           "sessionId",
           "type",
         ],
+        "message.received": [
+          "at",
+          "body",
+          "fromAgentId",
+          "sessionId",
+          "type",
+        ],
         "message.sent": [
           "at",
           "body",
@@ -249,6 +277,12 @@ describe('AgentEvent union', () => {
           "at",
           "sessionId",
           "tool",
+          "type",
+        ],
+        "prompt.submitted": [
+          "at",
+          "prompt",
+          "sessionId",
           "type",
         ],
         "session.ended": [
@@ -284,6 +318,13 @@ describe('AgentEvent union', () => {
           "sessionId",
           "type",
         ],
+        "task.created": [
+          "at",
+          "sessionId",
+          "taskRef",
+          "title",
+          "type",
+        ],
         "test.failed": [
           "at",
           "failure",
@@ -307,6 +348,13 @@ describe('AgentEvent union', () => {
           "at",
           "durationMs",
           "ok",
+          "sessionId",
+          "tool",
+          "type",
+        ],
+        "tool.failed": [
+          "at",
+          "reason",
           "sessionId",
           "tool",
           "type",
