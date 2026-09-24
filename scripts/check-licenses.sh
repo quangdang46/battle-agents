@@ -97,8 +97,13 @@ while IFS= read -r match; do
   [ -n "$match" ] || continue
   file_path="${match%%:*}"
   remainder="${match#*:}"
-  # Pull the expression out of the trailing context, e.g. "MIT OR Apache-2.0".
-  expression=$(printf '%s' "$remainder" | sed -nE 's/.*SPDX-License-Identifier:[[:space:]]*([^[:space:]]*).*/\1/p')
+  # Pull the whole expression out of the trailing context, e.g. "MIT OR
+  # Apache-2.0". The character class has to start at the first non-space and run
+  # to the end of the line, not stop at the next space: a dual-licensed file
+  # carrying "MIT OR GPL-3.0-only" truncated to "MIT", which the allowlist
+  # accepts, so copyleft shipped under an allowlisted identifier. Trailing
+  # whitespace is removed rather than becoming part of the expression.
+  expression=$(printf '%s' "$remainder" | sed -nE 's/.*SPDX-License-Identifier:[[:space:]]*([^[:space:]].*)[[:space:]]*$/\1/p')
   [ -n "$expression" ] || continue
 
   if ! expression_is_allowed "$expression"; then
@@ -159,8 +164,35 @@ self_test() {
     fi
   done
 
+  # The parser alone is not the guard. The value a real file reaches it is
+  # whatever the sed extraction hands over, and that extraction once stopped at
+  # the first space, so "MIT OR GPL-3.0-only" arrived as "MIT", was allowlisted,
+  # and every case above passed while the stage approved copyleft. So plant
+  # files and run the real path, not the function.
+  local probe_dir probe_expression probe_file
+  probe_dir=$(mktemp -d)
+  for probe_expression in "MIT" "MIT OR GPL-3.0-only" "MIT AND GPL-2.0-only" "MPL-2.0"; do
+    probe_file="$probe_dir/$(printf '%s' "$probe_expression" | tr -c 'A-Za-z0-9' '-').ts"
+    printf '// SPDX-License-Identifier: %s\nexport const probe = 1;\n' "$probe_expression" >"$probe_file"
+
+    # Declared licences are collected as "path:line" by grep -Hn, so re-derive the
+    # remainder the way the main loop does and check it survives intact.
+    local match remainder extracted
+    match=$(grep -Hn 'SPDX-License-Identifier:' "$probe_file" | head -1)
+    remainder="${match#*:}"
+    extracted=$(printf '%s' "$remainder" |
+      sed -nE 's/.*SPDX-License-Identifier:[[:space:]]*([^[:space:]].*)[[:space:]]*$/\1/p')
+
+    if [ "$extracted" != "$probe_expression" ]; then
+      printf '  self-test: extraction turned "%s" into "%s"; the allowlist was reading a shorter string than the file declares.\n' \
+        "$probe_expression" "$extracted" >&2
+      failures=1
+    fi
+  done
+  rm -rf "$probe_dir"
+
   if [ "$failures" -ne 0 ]; then
-    printf 'self-test FAIL: the expression parser disagreed with the allowlist.\n' >&2
+    printf 'self-test FAIL: the licence guard disagreed with the allowlist or with its own extraction.\n' >&2
     exit 1
   fi
   printf 'self-test ok: the parser accepts allowlisted expressions and denies the rest.\n'
