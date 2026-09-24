@@ -471,6 +471,36 @@ run_stage_architecture() {
   run_delegated architecture "$OWNER_ARCHITECTURE" script:architecture
 }
 
+migrated_object_names_absent_from_sql() {
+  # Every check(...) and index(...) the schema source names, minus the ones that
+  # appear in some committed migration. Drizzle emits checks as
+  # CONSTRAINT "name" CHECK and indexes as CREATE [UNIQUE] INDEX "name", so the
+  # migration side is a plain substring search over the concatenated SQL.
+  #
+  # The schema glob has to be recursive. A first version read
+  # packages/db/src/schema/*.ts and found nothing missing, which read like a
+  # pass: the features subdirectory holds the money constraint, so the one
+  # declaration the check most needed to see was the one it never loaded.
+  local schema_sql committed_sql
+  schema_sql=$(find "$REPO_ROOT/packages/db/src/schema" -name '*.ts' -exec cat {} + 2>/dev/null)
+  committed_sql=$(find "$REPO_ROOT/packages/db/migrations" -name '*.sql' -exec cat {} + 2>/dev/null)
+
+  [ -n "$schema_sql" ] || return 0
+  [ -n "$committed_sql" ] || return 0
+
+  printf '%s\n' "$schema_sql" |
+    grep -oE "(check|index)\(\s*'[a-z0-9_]+'" |
+    sed -E "s/.*'([a-z0-9_]+)'/\1/" |
+    sort -u |
+    while IFS= read -r object_name; do
+      [ -n "$object_name" ] || continue
+      case "$committed_sql" in
+        *"$object_name"*) ;;
+        *) printf '    %s\n' "$object_name" ;;
+      esac
+    done
+}
+
 run_stage_schema_drift() {
   # A green integration suite can describe a schema the code no longer matches.
   # The integration test reads the DATABASE, which drizzle builds from the
@@ -505,6 +535,31 @@ run_stage_schema_drift() {
     printf '  schema drift: packages/db has uncommitted changes after db:generate.\n'
     printf '%s\n' "$pending"
     printf '  Commit the regenerated migration rather than letting a test discover it.\n'
+    return 1
+  fi
+
+  # Both conditions above can pass while the committed SQL is wrong. drizzle-kit
+  # diffs the schema source against the meta/*_snapshot.json files, never against
+  # the emitted .sql, so a hand-edited migration is invisible to it: generate
+  # prints "No schema changes", the tree is clean, and this stage reports the
+  # artifact is in sync. The database is then built from the edited SQL, and an
+  # integration suite reading it confirms the wrong shape with total confidence.
+  #
+  # So the artifact is checked against the source directly: every constraint and
+  # index the schema names has to appear in some committed migration. This is
+  # the one direction that matters. A migration containing MORE than the schema
+  # declares is a dropped column, which no name comparison can detect, and the
+  # honest thing is to say so rather than imply the check is complete.
+  local missing_artifacts
+  missing_artifacts=$(migrated_object_names_absent_from_sql)
+
+  if [ -n "$missing_artifacts" ]; then
+    STAGE_STATUS="$STATUS_FAIL"
+    printf '  schema drift: the committed migration does not contain these objects.\n'
+    printf '  The schema source declares them, so the SQL artifact and the source\n'
+    printf '  disagree in a way db:generate cannot see.\n'
+    printf '%s\n' "$missing_artifacts"
+    printf '  Regenerate with pnpm db:generate, review the SQL, and commit it.\n'
     return 1
   fi
 
