@@ -16,6 +16,8 @@
     "typecheck": "tsc -b tsconfig.json"
   },
   "dependencies": {
-    "@battle-agents/core": "workspace:*"
+    "@battle-agents/api": "workspace:*",
+    "@battle-agents/core": "workspace:*",
+    "zod": "^4.6.5"
   }
 }
