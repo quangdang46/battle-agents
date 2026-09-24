@@ -22,6 +22,12 @@ const EVENT_LOG_PROBE_ACTOR = 'verify';
 // The tables section 21 creates. Checked by the migrations stage before any
 // seed exists, which is the one moment the presence of a table is the question.
 const EXPECTED_PLATFORM_TABLES: readonly string[] = [
+  // Better Auth's four, checked alongside ours because they migrate together
+  // and a missing one means the login tables were never created.
+  'user',
+  'session',
+  'account',
+  'verification',
   'users',
   'installations',
   'agents',

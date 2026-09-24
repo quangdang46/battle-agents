@@ -22,6 +22,7 @@
     "@battle-agents/api": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",
+    "@battle-agents/quest": "workspace:*",
     "better-auth": "^1.3.34",
     "next": "^15.5.4",
     "react": "^19.2.0",

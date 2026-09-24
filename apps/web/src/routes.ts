@@ -11,6 +11,7 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleQuestRepository,
   DrizzleStateStore,
 } from '@battle-agents/db';
 
@@ -147,6 +148,7 @@ export function sharedApi(): ApplicationApi {
     store: new DrizzleStateStore(database),
     bus: createInMemoryEventBus(),
     agentRepository: new DrizzleAgentRepository(database),
+    questRepository: new DrizzleQuestRepository(database),
   });
   const api = createApplicationApi(runtime);
   cached = { api, close: () => closeDatabasePool(pool) };

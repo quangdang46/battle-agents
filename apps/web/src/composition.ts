@@ -1,4 +1,5 @@
 import { agentFeature } from '@battle-agents/agent';
+import { questFeature } from '@battle-agents/quest';
 import { createRuntime } from '@battle-agents/core';
 import type { EventBus, Logger, Runtime, StateStore } from '@battle-agents/core';
 
@@ -7,6 +8,7 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleQuestRepository,
 } from '@battle-agents/db';
 
 /**
@@ -43,6 +45,13 @@ export interface GameRuntimeDependencies {
    * misconfigured one. Failing to build is the honest outcome.
    */
   readonly agentRepository: DrizzleAgentRepository;
+  /**
+   * Quest storage. Required for the same reason the agent store is: a quest
+   * board with no store answers "no quests", which is indistinguishable from a
+   * genuinely empty board, and an empty board that cannot be written to is a
+   * failure that only shows up when somebody tries to play.
+   */
+  readonly questRepository: DrizzleQuestRepository;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -59,6 +68,7 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       // fails on a perfectly removable feature, which is how a contributor
       // learns to stop believing the test.
       agentFeature({ repository: dependencies.agentRepository }),
+      questFeature({ repository: dependencies.questRepository }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

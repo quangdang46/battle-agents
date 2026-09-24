@@ -3,13 +3,19 @@
  * table added later must not require editing a feature migration, and vice
  * versa, so the split is data the verification step asserts rather than a note.
  */
+
 // Better Auth owns these and nothing else may migrate them (plan section 38): the
 // human login, its sessions, its linked OAuth accounts and its verifications.
-// They are platform tables because the auth library manages them, not because
-// the game has an opinion about them.
-export const AUTH_TABLES = ['user', 'session', 'account', 'verification'] as const;
-
+//
+// They sit inside PLATFORM_TABLES rather than in a set of their own because the
+// question the verifier asks is "is this table assigned to a boundary that may
+// migrate it", and inventing a third boundary for four tables the auth library
+// owns would answer a question nobody asked.
 export const PLATFORM_TABLES = [
+  'user',
+  'session',
+  'account',
+  'verification',
   'users',
   'agents',
   'agent_credentials',
@@ -34,6 +40,26 @@ export const FEATURE_TABLES = [
 
 export type FeatureTable = (typeof FEATURE_TABLES)[number];
 
-export const OWNED_TABLES = [...AUTH_TABLES, ...PLATFORM_TABLES, ...FEATURE_TABLES] as const;
+export const OWNED_TABLES = [...PLATFORM_TABLES, ...FEATURE_TABLES] as const;
 
-export const PLATFORM_TABLES_OWNING_USER_ID = ['installations', 'agents', 'projects'] as const;
+/**
+ * The tables allowed to carry a `user_id` column, and what that column means in
+ * each. A column here is a claim about ownership, which is why the verifier
+ * treats one appearing anywhere else as a failure rather than a curiosity.
+ *
+ *   users-less entries (installations, agents, projects) reference the GAME
+ *     account, and are what every ownership check in the codebase is written
+ *     against.
+ *
+ *   session, account reference the AUTH user — the Better Auth row, not ours.
+ *     They are the same name for a different thing, which is the entire reason
+ *     section 38 insists the two never merge. Listing them explicitly is how a
+ *     reader learns that, instead of inferring it from a column name.
+ */
+export const PLATFORM_TABLES_OWNING_USER_ID = [
+  'installations',
+  'agents',
+  'projects',
+  'session',
+  'account',
+] as const;

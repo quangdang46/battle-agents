@@ -1,1 +1,32 @@
-export {};
+export { AGENT_LEVEL_UP } from './domain.js';
+export type { AgentLevelUpPayload, AgentProgress, NewProgress } from './domain.js';
+export { PROGRESSION_AWARDS, PROGRESSION_READ, progressionFeature, apply } from './feature.js';
+export type { ProgressionDependencies, ProgressionSummary } from './feature.js';
+export { isNoSuchProgress, NO_SUCH_PROGRESS } from './repository.js';
+export type { ProgressionRepository } from './repository.js';
+export {
+  BUILDS,
+  classifyBuild,
+  DEFAULT_BUILD,
+  DEFAULT_BUILD_WEIGHTS,
+  explainBuild,
+  isOutcomeType,
+  LEVEL_GATES,
+  levelForXp,
+  meetsGate,
+  OUTCOMES,
+  OUTCOME_TYPES,
+  outcomeFor,
+  totalXpToReach,
+  xpToAdvanceFrom,
+} from './rules.js';
+export type {
+  BehaviourSignal,
+  Build,
+  BuildClassification,
+  BuildWeights,
+  LevelGate,
+  Outcome,
+  OutcomeType,
+  Specialist,
+} from './rules.js';
