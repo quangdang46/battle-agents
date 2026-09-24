@@ -175,6 +175,26 @@ describe('install and uninstall', () => {
     }).toThrow(/already installed/);
   });
 
+  it('refuses two features claiming the same command type', () => {
+    const claim = (type: string) => [{ type, handle: async () => [] }];
+    const { runtime } = harness([feature({ id: 'first', commands: claim('shared.run') })]);
+
+    expect(() => {
+      runtime.install(feature({ id: 'second', commands: claim('shared.run') }));
+    }).toThrow(/duplicate command shared\.run/);
+  });
+
+  it('refuses two features claiming the same action id', () => {
+    const claim = (id: string) => [
+      defineAction({ id, input: null, output: null, permissions: ['p'], run: async () => null }),
+    ];
+    const { runtime } = harness([feature({ id: 'first', actionDefs: claim('demo.shared') })]);
+
+    expect(() => {
+      runtime.install(feature({ id: 'second', actionDefs: claim('demo.shared') }));
+    }).toThrow(/duplicate action demo\.shared/);
+  });
+
   it('registers nothing when a declaration collides half way through', () => {
     const { runtime } = harness([
       feature({ id: 'first', capabilities: [{ name: 'shared.cap', description: 'a' }] }),
@@ -258,6 +278,25 @@ describe('capability requirements', () => {
     expect(() => (first.get('needy') as string[]).push('injected')).toThrow();
 
     expect(runtime.degraded().get('needy')).toEqual(['absent.cap']);
+  });
+
+  it('still lets a degraded feature handle its own events', async () => {
+    // Degraded means reduced, not switched off. A feature whose optional
+    // provider is missing must keep doing everything that does not depend on
+    // it, or removing one feature silently removes the others with it.
+    const heard: string[] = [];
+    const { runtime } = harness([
+      feature({
+        id: 'partial',
+        requires: ['absent.cap'],
+        eventHandlers: [{ on: 'own.event', handle: async () => void heard.push('heard') }],
+      }),
+    ]);
+
+    expect(runtime.degraded().get('partial')).toEqual(['absent.cap']);
+
+    await runtime.emit(event('own.event'));
+    expect(heard).toEqual(['heard']);
   });
 });
 
