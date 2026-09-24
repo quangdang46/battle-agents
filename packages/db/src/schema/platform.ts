@@ -49,7 +49,16 @@ export const installations = pgTable(
     createdAt: creationTimestamp(),
   },
   (table) => [
-    uniqueIndex('installations_installation_key_unique').on(table.installationKey),
+    // Scoped to the owner, not global. A key is unique per install file on one
+    // machine, and that file has no idea who will later authenticate as; making
+    // it globally unique meant a colliding key handed one user the other
+    // user's installation, and the session it then created pointed at another
+    // person's row. The upsert that does the handing is in
+    // packages/db/src/repositories/sessions.ts.
+    uniqueIndex('installations_user_id_installation_key_unique').on(
+      table.userId,
+      table.installationKey,
+    ),
     index('installations_user_id_idx').on(table.userId),
   ],
 );
@@ -152,6 +161,16 @@ export const sessions = pgTable(
     index('sessions_agent_id_idx').on(table.agentId),
     index('sessions_installation_id_idx').on(table.installationId),
     index('sessions_status_last_heartbeat_at_idx').on(table.status, table.lastHeartbeatAt),
+    // A disconnected session carries the instant it stopped, because that is
+    // what the resume window is measured from. Both readers filtered out rows
+    // with a null endedAt rather than failing, so a writer that set the status
+    // without the timestamp produced a session that was neither resumable nor
+    // ever abandoned — silently, with nothing in the log. The constraint makes
+    // that shape impossible to write rather than impossible to read.
+    check(
+      'sessions_disconnected_has_ended_at',
+      sql`${table.status} <> 'disconnected'::text OR ${table.endedAt} IS NOT NULL`,
+    ),
   ],
 );
 

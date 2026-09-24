@@ -1,6 +1,7 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
+import type { SessionStatus } from '../schema/index.js';
 import { agents, installations, projects, sessions } from '../schema/index.js';
 
 /**
@@ -38,7 +39,11 @@ export class DrizzleSessionRepository {
         lastSeenAt: new Date(input.now),
       })
       .onConflictDoUpdate({
-        target: installations.installationKey,
+        // Scoped to the owner, matching the unique index. Targeting the bare key
+        // matched any user's row, so a colliding key silently returned
+        // somebody else's installation and the session built on top of it
+        // pointed at their data.
+        target: [installations.userId, installations.installationKey],
         // Touched on every handshake so "last seen" answers the question the
         // dashboard actually asks, which is when this machine was last in use.
         set: { lastSeenAt: new Date(input.now) },
@@ -176,10 +181,14 @@ export class DrizzleSessionSweeper {
       .map((row) => ({ id: row.id, statusChangedAt: row.endedAt!.toISOString() }));
   }
 
-  async markSessionStatus(sessionId: string, status: string, now: string): Promise<void> {
+  async markSessionStatus(sessionId: string, status: SessionStatus, now: string): Promise<void> {
+    // Typed, not a string. The column is text rather than a Postgres enum, so
+    // nothing downstream would reject a typo: the status would be written, no
+    // query would ever match it again, and the session would be stranded. The
+    // cast is a no-op on a text column and is gone.
     await this.#database
       .update(sessions)
-      .set({ status: sql`${status}::text`, endedAt: new Date(now) })
+      .set({ status, endedAt: new Date(now) })
       .where(eq(sessions.id, sessionId));
   }
 }

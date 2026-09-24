@@ -144,13 +144,17 @@ describe('the HELLO handshake', () => {
   });
 
   it('reuses the installation rather than minting one per process', async () => {
+    // Asserted on the id the handshake got back, not on how many times it
+    // asked. A counter proves the handshake called the store; it cannot fail
+    // when the store mints a fresh installation every time, which is the
+    // behaviour the test claims to be about. The fake hands back the same id,
+    // so this catches a handshake that stopped reusing the result.
     const repository = new FakeSessionRepository();
-    await hello(repository, request());
-    await hello(repository, request({ agentName: 'CodeKnight' }));
 
-    // findOrCreate is idempotent by contract; what matters is that the
-    // handshake asks, so the store can recognise a machine it has seen before.
-    expect(repository.installations).toBe(2);
+    const first = await hello(repository, request());
+    const second = await hello(repository, request());
+
+    expect(second.installationId).toBe(first.installationId);
   });
 
   it('connects without a project when none was named', async () => {

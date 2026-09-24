@@ -15,6 +15,8 @@ export { and, eq, or, sql } from 'drizzle-orm';
 export { closeDatabasePool, createDatabase, createDatabasePool } from './client.js';
 export type { Database } from './client.js';
 export { applyMigrations } from './migrate.js';
+export { DrizzleActivityLog, DEFAULT_TRAIL_LIMIT } from './repositories/activity.js';
+export type { ActivityLogEntry, ActivityTrailQuery } from './repositories/activity.js';
 export {
   AGENT_NAME_TAKEN,
   AGENT_NOT_OWNED,
@@ -22,5 +24,6 @@ export {
 } from './repositories/agents.js';
 export type { AgentRow, StoredInstallationRow } from './repositories/agents.js';
 export { DrizzleSessionRepository, DrizzleSessionSweeper } from './repositories/sessions.js';
+export { DrizzleStateStore } from './repositories/state-store.js';
 export { seedDatabase } from './seed/seed.js';
 export * from './schema/index.js';
