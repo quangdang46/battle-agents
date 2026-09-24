@@ -2,7 +2,28 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    // Not inherited from the base on purpose. A composite project must list
+    // every file it transitively reaches, and this project's whole job is to
+    // reach into other packages' test files without owning them.
+    "composite": false,
     "types": ["node"]
   },
-  "include": ["tests/**/*.ts", "drizzle/**/*.ts", "scripts/**/*.ts", "vitest.*.config.ts"]
+  // Package test files are typechecked here rather than in each package, for
+  // two reasons. A test needs Node types (to read fixtures, resolve paths) and
+  // vitest's types, and a package that is a library must not acquire a Node
+  // assumption to accommodate its own tests. And a per-package test config
+  // would be 25 near-identical files to keep in step.
+  //
+  // Every package tsconfig therefore EXCLUDES its test files, so `build` does
+  // not emit them into dist. These three globs have to cover all three depths:
+  // the nested feature and adapter workspaces are invisible to the first.
+  "include": [
+    "tests/**/*.ts",
+    "drizzle/**/*.ts",
+    "scripts/**/*.ts",
+    "packages/*/src/**/*.test.ts",
+    "packages/features/*/src/**/*.test.ts",
+    "packages/adapters/*/src/**/*.test.ts",
+    "vitest.*.config.ts"
+  ]
 }

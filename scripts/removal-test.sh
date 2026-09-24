@@ -104,7 +104,12 @@ trap 'cleanup ${EXIT_CODE_SIGHUP}' HUP
 # The composition root is created by ba-contract-extension-api-w29. Until it
 # exists there is nothing to strip, and the run must SAY SO rather than quietly
 # reporting a weaker check as a full one.
-readonly COMPOSITION_ROOT="${REPO_ROOT}/packages/core/src/composition.ts"
+#
+# It lives in apps/web, not packages/core. Core is forbidden from importing a
+# feature (the no-core-import-of-outer-layers rule), so a composition root
+# inside core could only ever compose an empty list, and the extensions[]
+# half of this test would report green while checking nothing.
+readonly COMPOSITION_ROOT="${REPO_ROOT}/apps/web/src/composition.ts"
 has_composition_root() {
   [[ -f "${COMPOSITION_ROOT}" ]]
 }
@@ -126,11 +131,25 @@ strip_from_composition_root() {
   has_composition_root || return 0
   COMPOSITION_BACKUP="${COMPOSITION_ROOT}.bak"
   cp "${COMPOSITION_ROOT}" "${COMPOSITION_BACKUP}"
-  # The composition root imports each feature as a named import and references it
-  # in the extensions array. Remove both lines, matched on the feature name so
-  # the edit is scoped to this feature only.
-  perl -0pi -e "s/^import \{[^}]*${feature_name}[^}]*\}.*\n//mg" "${COMPOSITION_ROOT}"
-  perl -0pi -e "s/^.*\b${feature_name}\(\).*\n//mg" "${COMPOSITION_ROOT}"
+  # The composition root imports each feature as a named import and lists its
+  # factory call alone on one line in the extensions array. Both lines go.
+  #
+  # The import is matched on its module specifier, not on the imported name.
+  # Matching the name looks more direct and is wrong: the word boundary that
+  # makes it safe also means it cannot match "agentFeature", so the import
+  # survived, the extensions entry was stripped, and the removal test failed
+  # with "cannot find name agentFeature" instead of saying what it meant. The
+  # specifier names the package, so it has exactly one spelling.
+  #
+  # The extensions[] pattern requires the line to contain nothing but the call,
+  # so it cannot swallow a neighbour's entry, and it allows any suffix on the
+  # factory name because the directory is named after the feature rather than
+  # after the factory.
+  #
+  # The backslash before @ is for perl, which would otherwise read @battle as
+  # an array in the pattern and interpolate it to nothing.
+  perl -0pi -e "s/^import \{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${COMPOSITION_ROOT}"
+  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(\),?[ \t]*\r?\n//mg" "${COMPOSITION_ROOT}"
 }
 
 run_checks() {

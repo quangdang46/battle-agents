@@ -10,7 +10,7 @@
   },
   "scripts": {
     "architecture": "tsx scripts/check-architecture.ts",
-    "build": "pnpm -r build",
+    "build": "tsc -b tsconfig.build.json",
     "db:generate": "drizzle-kit generate --config=drizzle/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle/drizzle.config.ts",
     "db:seed": "tsx scripts/seed.ts",
@@ -25,7 +25,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:m0": "bash scripts/test-m0.sh",
     "test:unit": "vitest run --config vitest.unit.config.ts",
-    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck"
+    "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

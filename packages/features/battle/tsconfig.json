@@ -4,5 +4,13 @@
     "rootDir": "src",
     "outDir": "dist"
   },
+  "references": [
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../protocol"
+    }
+  ],
   "include": ["src/**/*.ts"]
 }

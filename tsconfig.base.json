@@ -23,6 +23,12 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "newLine": "lf"
+    "newLine": "lf",
+
+    // Makes every package a project that others can reference. A package that
+    // imports a workspace dependency then reads that dependency's SOURCE
+    // instead of whatever its dist happened to contain, which is how a stale
+    // build otherwise typechecks cleanly against an API that no longer exists.
+    "composite": true
   }
 }

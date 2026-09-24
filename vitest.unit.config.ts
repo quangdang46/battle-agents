@@ -1,9 +1,27 @@
 import { defineConfig } from 'vitest/config';
 
-/** Stage: unit. Pure, no network, no database. Must stay under ~100ms per test (T9). */
+/**
+ * Stage: unit. Pure, no network, no database. Must stay under ~100ms per test (T9).
+ *
+ * The nested workspaces need their own globs. A single-level `packages` pattern
+ * reaches packages/core but not packages/features/quest, which sits one level
+ * deeper, and a pattern that quietly misses them is the same failure the
+ * no-orphan test exists to catch. Spelling them out means a feature test
+ * written outside these globs is reported as orphaned rather than skipped.
+ *
+ * (These globs are written out rather than described in prose for the reason
+ * recorded in tests/unit/no-orphan-tests.test.ts: a comment containing a
+ * glob that ends in two stars closes the block comment early, and the rest of
+ * the sentence is then parsed as code.)
+ */
 export default defineConfig({
   test: {
     name: 'unit',
-    include: ['tests/unit/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+    include: [
+      'tests/unit/**/*.test.ts',
+      'packages/*/src/**/*.test.ts',
+      'packages/features/*/src/**/*.test.ts',
+      'packages/adapters/*/src/**/*.test.ts',
+    ],
   },
 });

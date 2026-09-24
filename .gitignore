@@ -46,3 +46,6 @@ coverage/
 
 # Claude Code local agent worktrees (session infrastructure, not project files)
 .claude/worktrees/
+
+# TypeScript incremental build state
+*.tsbuildinfo
