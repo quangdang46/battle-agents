@@ -128,9 +128,15 @@ should_skip() {
 
 strip_from_composition_root() {
   local feature_name="$1"
-  has_composition_root || return 0
-  COMPOSITION_BACKUP="${COMPOSITION_ROOT}.bak"
-  cp "${COMPOSITION_ROOT}" "${COMPOSITION_BACKUP}"
+  local target="${2:-${COMPOSITION_ROOT}}"
+  [[ -f "${target}" ]] || return 0
+  # Only the real composition root needs backing up: restore_in_flight puts it
+  # back between features, and the self-test works on a throwaway copy it
+  # deletes itself.
+  if [ "${target}" = "${COMPOSITION_ROOT}" ]; then
+    COMPOSITION_BACKUP="${COMPOSITION_ROOT}.bak"
+    cp "${COMPOSITION_ROOT}" "${COMPOSITION_BACKUP}"
+  fi
   # The composition root imports each feature as a named import and lists its
   # factory call alone on one line in the extensions array. Both lines go.
   #
@@ -148,8 +154,72 @@ strip_from_composition_root() {
   #
   # The backslash before @ is for perl, which would otherwise read @battle as
   # an array in the pattern and interpolate it to nothing.
-  perl -0pi -e "s/^import \{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${COMPOSITION_ROOT}"
-  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(\),?[ \t]*\r?\n//mg" "${COMPOSITION_ROOT}"
+  perl -0pi -e "s/^import \{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${target}"
+  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(\),?[ \t]*\r?\n//mg" "${target}"
+}
+
+# A guard nobody has seen fail is not a guard, and this one had never been seen
+# fail: the composition root's extensions[] array was empty, so the stripping
+# half of every run was a no-op against nothing. The import half shipped broken
+# in exactly that state — it matched `\bagent\b`, which cannot match
+# `agentFeature`, so the import survived while the entry was removed and the
+# failure surfaced as "cannot find name" rather than as a passing check.
+#
+# This runs the real strip function over a throwaway composition root, so the
+# patterns are exercised for what they are: text transformations, with no
+# package to create, no dependency to link and no typecheck to wait for.
+self_test() {
+  local work_dir failures=0 name
+  work_dir="$(mktemp -d)"
+  local fixture="${work_dir}/composition.ts"
+
+  cat >"${fixture}" <<'FIXTURE'
+import { createRuntime } from '@battle-agents/core';
+import { agentFeature } from '@battle-agents/agent';
+import { questFeature } from '@battle-agents/quest';
+
+export function createGameRuntime(dependencies: Dependencies): Runtime {
+  return createRuntime({
+    extensions: [
+      agentFeature(),
+      questFeature(),
+    ],
+    store: dependencies.store,
+  });
+}
+FIXTURE
+
+  strip_from_composition_root agent "${fixture}"
+
+  if grep -qE "@battle-agents/agent|\bagent\w*\(\)" "${fixture}"; then
+    printf '  self-test: stripping agent left a reference behind:\n' >&2
+    sed 's/^/    /' "${fixture}" >&2
+    failures=1
+  fi
+  if ! grep -q "@battle-agents/quest" "${fixture}"; then
+    printf '  self-test: stripping agent also removed quest\n' >&2
+    failures=1
+  fi
+  if ! grep -q "@battle-agents/core" "${fixture}"; then
+    printf '  self-test: stripping agent also removed the core import\n' >&2
+    failures=1
+  fi
+
+  # A feature the composition root does not use must leave it byte-identical.
+  cp "${fixture}" "${work_dir}/before-absent.ts"
+  strip_from_composition_root bounty "${fixture}"
+  if ! cmp -s "${fixture}" "${work_dir}/before-absent.ts"; then
+    printf '  self-test: stripping an absent feature changed the file\n' >&2
+    diff "${work_dir}/before-absent.ts" "${fixture}" >&2 || true
+    failures=1
+  fi
+
+  rm -rf "${work_dir}"
+  if [ "${failures}" -ne 0 ]; then
+    printf 'removal-test self-test FAILED: the composition-root strip is not sound.\n' >&2
+    return 1
+  fi
+  printf 'self-test ok: stripping removes exactly one feature and leaves the rest byte-identical.\n'
 }
 
 run_checks() {
@@ -182,6 +252,8 @@ main() {
   tree_before=$(tree_signature)
 
   recover_stashed_features
+
+  self_test
 
   if [[ ! -d "${FEATURES_DIR}" ]]; then
     printf 'removal-test: %s does not exist\n' "${FEATURES_DIR}" >&2
