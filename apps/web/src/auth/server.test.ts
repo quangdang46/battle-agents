@@ -58,13 +58,16 @@ describe('Better Auth owns the human and nothing else', () => {
   it('leaves the game account to our own bootstrap, not a callback', () => {
     const source = readFileSync(SERVER_SOURCE, 'utf8');
 
-    // The GitHub profile mapping is the one place auth touches the game, and it
-    // is allowed exactly one job.
-    expect(source).not.toContain('mapProfileToUser');
+    // Comments are stripped before this check, and that is not a technicality:
+    // the file's own comment explains at length why mapProfileToUser must not
+    // come back, which a raw substring search would read as its presence.
+    const code = stripComments(source);
+
+    expect(code).not.toContain('mapProfileToUser');
     expect(readFileSync(new URL('./bootstrap.ts', import.meta.url), 'utf8')).toContain(
       'bootstrapGameAccount',
     );
-    expect(stripComments(source)).not.toMatch(/createAgent|agents\.(insert|values)/);
+    expect(code).not.toMatch(/createAgent|agents\.(insert|values)/);
   });
 });
 

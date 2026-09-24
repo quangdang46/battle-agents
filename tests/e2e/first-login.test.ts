@@ -12,6 +12,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { bootstrapGameAccount } from '../../apps/web/src/auth/bootstrap.js';
+import type { GameAccount } from '../../apps/web/src/auth/bootstrap.js';
 import { hello } from '@battle-agents/agent';
 import { DrizzleSessionRepository } from '@battle-agents/db';
 
@@ -41,10 +42,37 @@ let pool: Pool;
 let database: Database;
 const createdUserIds: string[] = [];
 
+/** What a signed-in human looks like downstream of the OAuth stub. */
+export interface SignedInHuman {
+  readonly authUserId: string;
+  readonly githubId: string;
+  readonly login: string;
+  readonly avatarUrl: string | null;
+}
+
 /** A distinct GitHub identity per test, so runs never collide. */
-function aHuman(label: string) {
+function aHuman(label: string): SignedInHuman {
   const githubId = `e2e-${label}-${Math.random().toString(36).slice(2)}`;
   return { authUserId: `auth-${githubId}`, githubId, login: githubId, avatarUrl: null };
+}
+
+/**
+ * Signs a human in and remembers the account for cleanup.
+ *
+ * The registration is the point. An earlier version had each test push its own
+ * id onto a list, and one test forgot — so every run of a suite that runs on
+ * every commit left a permanent `users` row behind, silently, because the ids
+ * are random and nothing collided. Cleanup that depends on every call site
+ * remembering is cleanup that will be forgotten again.
+ */
+async function signIn(human: SignedInHuman): Promise<GameAccount> {
+  const account = await bootstrapGameAccount(database, human);
+  // Deduped: a test that signs the same human in twice gets the same account
+  // back, and registering it twice would delete it twice.
+  if (!createdUserIds.includes(account.id)) {
+    createdUserIds.push(account.id);
+  }
+  return account;
 }
 
 beforeAll(async () => {
@@ -90,10 +118,8 @@ async function sessionsOf(agentId: string): Promise<number> {
 
 describe('the M0 smoke: sign in, be yourself, come back', () => {
   it('creates a game account on first login, with no characters', async () => {
-    const human = aHuman('first');
-    const account = await bootstrapGameAccount(database, human);
+    const account = await signIn(aHuman('first'));
 
-    createdUserIds.push(account.id);
     expect(account.created).toBe(true);
     expect(await agentsOf(account.id)).toEqual([]);
   });
@@ -104,7 +130,7 @@ describe('the M0 smoke: sign in, be yourself, come back', () => {
     // account, every character, every session and every battle history would
     // have belonged to somebody who no longer exists.
     const human = aHuman('again');
-    const first = await bootstrapGameAccount(database, human);
+    const first = await signIn(human);
     const second = await bootstrapGameAccount(database, human);
 
     expect(second.created).toBe(false);
@@ -113,22 +139,23 @@ describe('the M0 smoke: sign in, be yourself, come back', () => {
   });
 
   it('leaves two different people as two different accounts', async () => {
-    const one = await bootstrapGameAccount(database, aHuman('person-one'));
-    const other = await bootstrapGameAccount(database, aHuman('person-two'));
-    createdUserIds.push(one.id, other.id);
+    const one = await signIn(aHuman('person-one'));
+    const other = await signIn(aHuman('person-two'));
 
     expect(one.id).not.toBe(other.id);
   });
 
   it('registers a character and gives it a session, which survives a re-login', async () => {
     const human = aHuman('session');
-    const account = await bootstrapGameAccount(database, human);
-    createdUserIds.push(account.id);
+    const account = await signIn(human);
 
     const [agent] = await database
       .insert(agents)
       .values({ userId: account.id, name: 'CodeKnight', harness: 'claude' })
       .returning();
+    // Asserted before it is used, so a failed insert reports that rather than
+    // "expected 0 to be 1" from a session count against an empty id.
+    expect(agent, 'inserting a character returned no row').toBeDefined();
     const installationKey = `e2e-install-${human.githubId}`;
 
     const repository = new DrizzleSessionRepository(database);
@@ -148,14 +175,14 @@ describe('the M0 smoke: sign in, be yourself, come back', () => {
     });
 
     expect(created.resumed).toBe(false);
-    expect(await sessionsOf(agent?.id ?? '')).toBe(1);
+    expect(await sessionsOf(agent!.id)).toBe(1);
 
     // Sign out and back in: the account, the character and the session are the
     // same ones, not new ones with new ids.
     const back = await bootstrapGameAccount(database, human);
     expect(back.id).toBe(account.id);
     expect((await agentsOf(back.id)).map((each) => each.name)).toEqual(['CodeKnight']);
-    expect(await sessionsOf(agent?.id ?? '')).toBe(1);
+    expect(await sessionsOf(agent!.id)).toBe(1);
   });
 
   it('leaves no trace behind, so the smoke can run twice in a row', async () => {
@@ -163,8 +190,7 @@ describe('the M0 smoke: sign in, be yourself, come back', () => {
     // would fail on data the first run wrote, and the gate would stop being a
     // gate and become a coin toss.
     const human = aHuman('idempotent');
-    const account = await bootstrapGameAccount(database, human);
-    createdUserIds.push(account.id);
+    const account = await signIn(human);
     const [alsoCreated] = await database
       .insert(users)
       .values({ githubId: `${human.githubId}-twin`, login: human.login })

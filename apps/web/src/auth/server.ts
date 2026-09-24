@@ -127,10 +127,19 @@ export function createAuth(database: Database, environment: AuthEnvironment) {
     secret: environment.secret,
     baseURL: environment.baseUrl,
     socialProviders: {
-      // Client id and secret and nothing else. Better Auth already knows how to
-      // read a GitHub profile, and the moment this config starts reshaping one
-      // it is doing the game's job — the users row is created by
-      // bootstrapGameAccount in bootstrap.ts, not by an auth callback.
+      // Client id and secret and nothing else — and specifically no
+      // mapProfileToUser, which looked harmless and is not.
+      //
+      // The mapper runs on OUR server, but Better Auth still treats its return
+      // value as provider input: only fields marked `input: false` are kept, and
+      // the provider's own value for everything else still wins. Returning a
+      // whole user object from it therefore does not assert our values, it
+      // invites provider-controlled data into the account fields while looking
+      // like it does.
+      //
+      // The users row is created by bootstrapGameAccount in bootstrap.ts, which
+      // is the right shape for it anyway: "who is logged in" and "does a game
+      // account exist yet" are different questions.
       github: {
         clientId: environment.githubClientId,
         clientSecret: environment.githubClientSecret,
