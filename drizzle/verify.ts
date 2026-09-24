@@ -19,6 +19,25 @@ const REQUIRED_MONEY_COLUMNS: readonly string[] = ['bounty_funds.amount_cents'];
 const EVENTS_SEQUENCE_TABLE = 'event_log';
 const EVENT_LOG_PROBE_TYPE = 'verify.probe';
 const EVENT_LOG_PROBE_ACTOR = 'verify';
+// The tables section 21 creates. Checked by the migrations stage before any
+// seed exists, which is the one moment the presence of a table is the question.
+const EXPECTED_PLATFORM_TABLES: readonly string[] = [
+  'users',
+  'installations',
+  'agents',
+  'projects',
+  'agent_credentials',
+  'sessions',
+  'quests',
+  'bounties',
+  'bounty_funds',
+  'battles',
+  'battle_participants',
+  'agent_stats',
+  'achievements',
+  'messages',
+  'event_log',
+];
 
 export class SchemaVerificationError extends Error {
   constructor(failures: readonly string[]) {
@@ -384,15 +403,36 @@ export async function runSchemaVerification(database: Database): Promise<readonl
   return failures;
 }
 
+// The migrations stage runs this before the seed exists, so it needs a mode
+// that checks shape only. Without it, "db:verify -- --tables-only" would run the
+// full data assertions and fail on an unseeded database, which is the opposite
+// of what the flag is for.
+const TABLES_ONLY_FLAG = '--tables-only';
+
+async function verifyTablesExist(database: Database): Promise<readonly string[]> {
+  const result = await database.execute<{ table_name: string }>(
+    sql`SELECT table_name FROM information_schema.tables WHERE table_schema = ${PUBLIC_SCHEMA}`,
+  );
+  const present = new Set(result.rows.map((row: { table_name: string }) => row.table_name));
+  return EXPECTED_PLATFORM_TABLES.filter((table) => !present.has(table)).map(
+    (table) => `table "${table}" does not exist, so the migration did not apply`,
+  );
+}
+
 async function main(): Promise<void> {
   const pool = createDatabasePool();
   try {
     const database = createDatabase(pool);
-    const failures = await runSchemaVerification(database);
+    const tablesOnly = process.argv.includes(TABLES_ONLY_FLAG);
+    const failures = tablesOnly
+      ? await verifyTablesExist(database)
+      : await runSchemaVerification(database);
     if (failures.length > 0) {
       throw new SchemaVerificationError(failures);
     }
-    process.stdout.write('Schema verification passed.\n');
+    process.stdout.write(
+      tablesOnly ? 'Migrated tables are present.\n' : 'Schema verification passed.\n',
+    );
   } finally {
     await closeDatabasePool(pool);
   }

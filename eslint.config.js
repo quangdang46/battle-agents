@@ -11,12 +11,12 @@ const {
   classifyPath,
   discoverWorkspacePackages,
   listFeatureInstances,
-} = require('./.dependency-cruiser.cjs');
+} = require('./architecture-rules.cjs');
 
 function findLayer(name) {
   const layer = LAYERS.find((candidate) => candidate.name === name);
   if (layer === undefined) {
-    throw new Error(`Unknown layer "${name}" in .dependency-cruiser.cjs`);
+    throw new Error(`Unknown layer "${name}" in architecture-rules.cjs`);
   }
   return layer;
 }

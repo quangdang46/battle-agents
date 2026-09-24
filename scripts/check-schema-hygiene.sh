@@ -48,54 +48,64 @@ readonly ALLOWED_HASH_COLUMNS=(
   "token_hash"
 )
 
+# Drizzle declares a table as "export const name = pgTable(" followed by the SQL
+# table name on the NEXT line, then the column block, then a config callback.
+# The first version of this function looked for "pgTable = agent_credentials" on
+# one line, which the schema never writes, so the guard never fired and the whole
+# schema-source branch was dead while the header claimed it was reading the
+# source. It is matched on the two lines drizzle actually emits.
 list_guard_declarations() {
-  # Drizzle source declares a column as name('db_column_name') inside a table
-  # constant. Only the guarded tables are scanned, so a column called "quest_key"
-  # on some future table does not trip this.
-  local table
+  local file table
   for table in "${GUARDED_TABLES[@]}"; do
-    awk -v table="pgTable = ${table}" -v pattern="${SECRET_COLUMN_PATTERN}" '
-      index($0, table) { inside = 1 }
-      inside && /pgTable\(/ { depth = 1 }
-      inside {
-        if (match($0, /[a-zA-Z_]+: [a-z]+\(.[a-z_]+./)) {
-          line = $0
-          while (match(line, /[a-zA-Z_]+: [a-z]+\(.[a-z_]+/)) {
-            fragment = substr(line, RSTART, RLENGTH)
-            if (tolower(fragment) ~ tolower(pattern)) {
-              col = fragment
-              sub(/.*\(.\x27?/, "", col)
-              sub(/\x27?.*/, "", col)
-              print FILENAME ":" col
-            }
-            line = substr(line, RSTART + RLENGTH)
+  for file in "${SCHEMA_SOURCE_DIR}"/*.ts; do
+    [ -e "${file}" ] || continue
+    TABLE="$table" GUARD_FILE="${file}" perl -0 -ne '
+      my $file = $ENV{GUARD_FILE};
+      my $want = $ENV{TABLE};
+      # Table name first, then walk back to the pgTable( that introduces it.
+      while (m{pq?_?Table\([[:space:]]*\n[[:space:]]*\x27$want\x27}g) {
+        my $start = pos($_);
+        my $rest  = substr($_, $start);
+        # Column block runs until the closing "}," that ends the object literal.
+        if ($rest =~ m{\{(.*?)\n[[:space:]]*\},\n}s) {
+          my $body = $1;
+          while ($body =~ m{([A-Za-z0-9_]+)[[:space:]]*:[[:space:]]*[A-Za-z]+\([[:space:]]*\x27([A-Za-z0-9_]+)\x27}g) {
+            print "$file:$2\n";
           }
         }
-        if (inside && /\)\);/) { inside = 0 }
+        pos($_); pos($_)++;
       }
-    ' "${SCHEMA_SOURCE_DIR}"/*.ts 2>/dev/null || true
+    ' "$file" 2>/dev/null || true
+  done
   done
 }
 
+# Committed SQL is the artefact that reaches a database, so it is scanned as a
+# whole rather than line by line. drizzle-kit formats a CREATE TABLE across many
+# lines, and the previous version captured only the remainder of the first line,
+# which is just the opening parenthesis, so a credential column in a newly
+# created table was invisible. Only the table body between the parentheses is
+# considered, and a declared type is required so an index name or a constraint
+# name is not mistaken for a column.
 list_migration_columns() {
-  # Committed SQL is the artefact that reaches a database, so it is scanned
-  # directly. The statements drizzle-kit emits are regular: an added column is
-  # ALTER TABLE "t" ADD COLUMN "c" type, and a created table lists its columns
-  # inline. Anything looser, such as "any quoted word on a line mentioning the
-  # table", matches index names and the table name itself and drowns the signal.
   local sql table
   for sql in "${MIGRATION_DIR}"/*.sql; do
     [ -e "${sql}" ] || continue
     for table in "${GUARDED_TABLES[@]}"; do
-      TABLE="$table" perl -ne 'while (/ALTER\s+TABLE\s+"?\Q$ENV{TABLE}\E"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z0-9_]+)"?/gi) {
-                 print "$ARGV:$1\n";
-               }' "$sql" 2>/dev/null || true
-      TABLE="$table" perl -ne 'if (/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?\Q$ENV{TABLE}\E"?\s*\((.*)/i) {
-                 $body = $1;
-                 while ($body =~ /"([A-Za-z0-9_]+)"\s+(?:text|varchar|uuid|integer|bigint|boolean|timestamp|jsonb|serial)/gi) {
-                   print "$ARGV:$1\n";
-                 }
-               }' "$sql" 2>/dev/null || true
+      TABLE="$table" perl -0 -ne '
+        my $t = $ENV{TABLE};
+        # Columns added later.
+        while (m{ALTER\s+TABLE\s+"?\Q$t\E"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z0-9_]+)"?}gi) {
+          print "$ARGV:$1\n";
+        }
+        # Columns in the original CREATE, body captured across newlines.
+        while (m{CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?\Q$t\E"?[[:space:]]*\((.*?)\n[[:space:]]*\);}gsi) {
+          my $body = $1;
+          while ($body =~ m{"([A-Za-z0-9_]+)"\s+(?:text|varchar|char|uuid|integer|bigint|smallint|boolean|timestamp|timestamptz|jsonb|json|serial|numeric|date)}gi) {
+            print "$ARGV:$1\n";
+          }
+        }
+      ' "$sql" 2>/dev/null || true
     done
   done
 }
@@ -117,6 +127,13 @@ while IFS= read -r declaration; do
   [ -n "$declaration" ] || continue
   file_path="${declaration%%:*}"
   column="${declaration##*:}"
+  # The scanners report every column they find in a guarded table; only the ones
+  # shaped like a credential are of interest. This filter was missing, so once
+  # the CREATE TABLE branch started working it flagged every column in the
+  # table rather than only the dangerous ones.
+  if ! printf '%s' "$column" | grep -qiE "$SECRET_COLUMN_PATTERN"; then
+    continue
+  fi
   if ! is_allowed_hash "$column"; then
     offenders+=("${file_path}: credential-shaped column '${column}' in a guarded table")
   fi

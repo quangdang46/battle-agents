@@ -9,7 +9,7 @@
 // consume it. The real CLI expects a config object and structured-clones the
 // module; running "npx dependency-cruiser --config architecture-rules.cjs"
 // fails, and "npx depcruise" resolves to an unrelated security tool that exits 0
-// no matter what is in the tree. A file named .dependency-cruiser.cjs made both
+// no matter what is in the tree. A file once named .dependency-cruiser.cjs made both
 // of those look plausible, which is worse than not having the file.
 //
 // The single supported entry point is checkImports(). It is exercised by
@@ -53,7 +53,7 @@ const UNRESOLVED_RULE = {
 const UNCLASSIFIED_LAYER = 'unclassified';
 const UNCLASSIFIED_RULE = 'unclassified-layer';
 const UNCLASSIFIED_REASON =
-  'Classify this package in .dependency-cruiser.cjs before depending on it, otherwise the layering guarantee silently stops covering it.';
+  'Classify this package in architecture-rules.cjs before depending on it, otherwise the layering guarantee silently stops covering it.';
 const SOURCE_ROOTS = ['apps', 'packages'];
 const FEATURES_DIR = 'packages/features';
 const ADAPTERS_DIR = 'packages/adapters';

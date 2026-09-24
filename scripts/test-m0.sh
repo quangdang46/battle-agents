@@ -12,7 +12,8 @@
 # Guarantees this script is responsible for:
 #   - stages execute in the order above, never out of order;
 #   - every executed stage writes a marker under `.tmp/m0-stages/`, and a run may
-#     only report the M0 gate green when a marker exists for all eight stages, so
+#     only report the M0 gate green when a marker exists for every stage in the
+#     manifest, so
 #     no stage can be skipped silently;
 #   - a red stage names itself in the summary, in the stderr verdict, and in the
 #     exit code.
@@ -44,6 +45,7 @@ readonly CANONICAL_STAGES=(
   schema-drift
   typecheck
   architecture
+  schema-hygiene
   removal-test
   license
   e2e-smoke
@@ -80,6 +82,7 @@ readonly OWNER_LICENSE="ba-license-hygiene-qy7"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
 readonly OWNER_CONTRACT="ba-contract-extension-api-w29"
 readonly OWNER_ARCHITECTURE="ba-dependency-rules-os1"
+readonly OWNER_SCHEMA_HYGIENE="ba-db-schema-drizzle-fki"
 
 SELECTED_STAGES=()
 RESULT_STATUS=()
@@ -395,7 +398,17 @@ start_compose_stack() {
   # service, and bringing that up from inside the pipeline would start a second
   # copy of the pipeline against itself. CI activates the profile explicitly.
   printf '  -> docker compose %s up -d --wait\n' "${COMPOSE_FILE_ARGS[*]}"
-  docker compose "${COMPOSE_FILE_ARGS[@]}" up -d --wait
+  # Capture the status first. "note" is a printf, so when it was the last
+  # statement the function returned 0 and a failed "docker compose up" was
+  # reported as a passing stage. The pipeline calls run_stage behind "|| exit",
+  # which also disables errexit inside the function, so the status has to be
+  # carried explicitly rather than inherited.
+  local compose_status=0
+  docker compose "${COMPOSE_FILE_ARGS[@]}" up -d --wait || compose_status=$?
+  if [ "$compose_status" -ne 0 ]; then
+    printf '  docker compose could not bring the stack up (exit %s).\n' "$compose_status" >&2
+    return "$compose_status"
+  fi
   note "  to run this same pipeline in the $COMPOSE_PROFILE profile instead:"
   note "     docker compose ${COMPOSE_FILE_ARGS[*]} --profile $COMPOSE_PROFILE run --rm $TEST_RUNNER_SERVICE"
 }
@@ -411,14 +424,32 @@ run_stage_compose() {
 
 run_stage_migrations() {
   run_delegated migrations "$OWNER_DB" file:scripts/migrate.sh script:db:migrate
+  # Migrate alone exits 0 when it decides there is nothing to do, and its
+  # bookkeeping lives in a separate "drizzle" schema, so dropping only the
+  # public schema left it believing 0000 had already been applied. A table
+  # existence check catches that here, with a clear message, instead of letting
+  # it surface later as a confusing seed failure.
+  printf '  -> checking the migrated tables exist\n'
+  pnpm run db:verify -- --tables-only
 }
 
 run_stage_seed() {
   run_delegated seed "$OWNER_DB" file:scripts/seed.sh script:db:seed
+  # db:verify asserts data invariants as well as shape, so it needs the seed in
+  # place. It is here rather than in the migrations stage for that reason.
+  printf '  -> pnpm run db:verify\n'
+  pnpm run db:verify
 }
 
 # tsc runs first so a type error is reported as a unit-stage failure rather than
 # surfacing later as a confusing removal-test or integration failure.
+run_stage_schema_hygiene() {
+  # Guards credential hygiene, which schema-drift cannot: that stage checks that
+  # the migration matches the schema, and a plaintext token column is a perfectly
+  # consistent migration.
+  run_delegated schema-hygiene "$OWNER_SCHEMA_HYGIENE" script:schema-hygiene
+}
+
 run_stage_architecture() {
   # Runs the rule engine over the REAL tree. The fixture test proves each rule
   # fires; this proves the repository obeys them, and it survives the deletion of
@@ -509,6 +540,7 @@ run_stage() {
     migrations) run_stage_migrations ;;
     seed) run_stage_seed ;;
     architecture) run_stage_architecture ;;
+    schema-hygiene) run_stage_schema_hygiene ;;
     schema-drift) run_stage_schema_drift ;;
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;
@@ -615,6 +647,14 @@ final_verdict() {
 }
 
 main() {
+  # Preflight. If the stage set disagrees across the manifest, CANONICAL_STAGES
+  # and the run_stage dispatch, running the stages would report green for a set
+  # nobody intended, so this runs before the first stage rather than as one.
+  if ! bash "${REPO_ROOT}/scripts/check-stage-manifest.sh"; then
+    printf 'pipeline aborted before running any stage: the stage set is inconsistent.\n' >&2
+    return 1
+  fi
+
   prepare_marker_dir
   resolve_selected_stages
   setup_database_url

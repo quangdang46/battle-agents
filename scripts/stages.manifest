@@ -1,0 +1,22 @@
+# The set of pipeline stages that must run for the M0 gate to mean anything.
+#
+# This file exists because CANONICAL_STAGES in test-m0.sh is the ONLY definition
+# of what has to run, so deleting a stage from it removes the check and leaves
+# no trace: the pipeline still runs, still reports green, and the summary simply
+# has one fewer line. Verified: removing schema-hygiene from the list was silent.
+#
+# scripts/check-stage-manifest.sh asserts this manifest, the stage list, and the
+# run_stage dispatch all agree. Three-way agreement means a stage cannot be
+# dropped, added in one place only, or left with no implementation.
+compose
+migrations
+seed
+unit
+integration
+schema-drift
+typecheck
+architecture
+schema-hygiene
+removal-test
+license
+e2e-smoke
