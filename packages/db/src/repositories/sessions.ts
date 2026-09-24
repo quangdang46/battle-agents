@@ -26,6 +26,38 @@ export class DrizzleSessionRepository {
     this.#database = database;
   }
 
+  /**
+   * A session, but only for the installation that owns it.
+   *
+   * The event ingest route is handed a session id by an agent and a caller from
+   * a presented credential, and those two are separate inputs: the id is chosen
+   * by the agent and is therefore attacker-controlled, the installation comes
+   * from a token that was not. Joining the two here rather than fetching the
+   * session and comparing in a route is the difference between a check that
+   * cannot be forgotten and one that can — a route that fetched by id alone and
+   * compared afterwards would work right up until the day somebody added a
+   * second call site.
+   *
+   * A session belonging to somebody else is `undefined`, the same answer as one
+   * that does not exist, so the route cannot be used to discover which session
+   * ids are real.
+   */
+  async findOwnedByInstallation(
+    sessionId: string,
+    installationId: string,
+  ): Promise<{ id: string; agentId: string; status: SessionStatus } | undefined> {
+    const [row] = await this.#database
+      .select({
+        id: sessions.id,
+        agentId: sessions.agentId,
+        status: sessions.status,
+      })
+      .from(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.installationId, installationId)))
+      .limit(1);
+    return row;
+  }
+
   async findOrCreateInstallation(input: {
     ownerId: string;
     installationKey: string;

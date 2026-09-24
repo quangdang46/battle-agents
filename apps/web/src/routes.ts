@@ -39,6 +39,16 @@ export interface HttpRequest {
 export interface HttpResponse {
   readonly status: number;
   readonly body: unknown;
+  /**
+   * Sent when a status is not enough on its own.
+   *
+   * Present because 413 without `Retry-After` is a refusal with no instruction
+   * in it: a client that does not know how long to wait either retries in a
+   * tight loop or gives up, and the loop is the one that hurts. `exactOptional`
+   * is on, so a response with no headers omits the field rather than carrying
+   * an explicit undefined, and the route adapter can spread it without a guard.
+   */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface RouteDependencies {

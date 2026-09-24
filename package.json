@@ -18,6 +18,7 @@
     "db:verify": "tsx packages/db/src/verify.ts",
     "format": "prettier --write .",
     "license-check": "bash scripts/check-licenses.sh",
+    "load:events": "tsx scripts/load-test-events.ts",
     "lint": "prettier --check .",
     "removal-test": "bash scripts/removal-test.sh",
     "schema-hygiene": "bash scripts/check-schema-hygiene.sh",
