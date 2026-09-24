@@ -28,6 +28,7 @@
     "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json"
   },
   "devDependencies": {
+    "@battle-agents/agent": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",
     "@types/node": "^24.0.0",

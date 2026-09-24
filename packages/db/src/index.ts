@@ -21,5 +21,6 @@ export {
   DrizzleAgentRepository,
 } from './repositories/agents.js';
 export type { AgentRow, StoredInstallationRow } from './repositories/agents.js';
+export { DrizzleSessionRepository, DrizzleSessionSweeper } from './repositories/sessions.js';
 export { seedDatabase } from './seed/seed.js';
 export * from './schema/index.js';

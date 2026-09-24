@@ -98,7 +98,16 @@ export const projects = pgTable(
     name: text('name').notNull(),
     createdAt: creationTimestamp(),
   },
-  (table) => [index('projects_user_id_idx').on(table.userId)],
+  (table) => [
+    index('projects_user_id_idx').on(table.userId),
+    // A user has one project per workspace name, and the uniqueness has to be
+    // in the database rather than in a read-then-write in the repository:
+    // without it every handshake inserted another project row, so a returning
+    // character never matched its own session and could never resume. The
+    // same class of bug as the agents name index, and the same reason the
+    // integration test is the thing that found it.
+    uniqueIndex('projects_user_id_name_unique').on(table.userId, table.name),
+  ],
 );
 
 export const agentCredentials = pgTable(

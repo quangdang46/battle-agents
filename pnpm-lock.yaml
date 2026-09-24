@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@battle-agents/agent':
+        specifier: workspace:*
+        version: link:packages/features/agent
       '@battle-agents/core':
         specifier: workspace:*
         version: link:packages/core

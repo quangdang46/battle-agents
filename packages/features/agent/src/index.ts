@@ -11,6 +11,16 @@ export type {
   AgentSummary,
   RegisterAgentPayload,
 } from './feature.js';
+export { hello, sweepStaleSessions, UnknownAgentError } from './hello.js';
+export type {
+  HelloOptions,
+  HelloRequest,
+  HelloResult,
+  ResumableSession,
+  SessionRepository,
+  SweepRepository,
+  SweepResult,
+} from './hello.js';
 export {
   describeRejection,
   MAX_AGENT_NAME_LENGTH,
