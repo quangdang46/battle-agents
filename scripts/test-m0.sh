@@ -424,7 +424,16 @@ run_stage_compose() {
     wait_for_test_postgres
     return $?
   fi
-  start_compose_stack
+  start_compose_stack || return $?
+  # `docker compose up --wait` returning 0 means the containers are healthy. It
+  # does not mean this project can reach the database it published: if the port
+  # was already taken, Compose starts the container, the container reports
+  # healthy, and the host port keeps answering for whoever owned it. Every
+  # later stage then fails on a password error against a server nobody here
+  # started, and the cause is three stages away from the message. So the
+  # endpoint is proved here, against the same URL migrations and seed will use.
+  printf '  -> checking the published database is actually reachable\n'
+  pnpm exec tsx scripts/check-postgres.ts
 }
 
 run_stage_migrations() {
