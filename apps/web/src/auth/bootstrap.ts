@@ -46,16 +46,14 @@ export async function bootstrapGameAccount(
   database: Database,
   human: SignedInHuman,
 ): Promise<GameAccount> {
-  const [existing] = await database.select().from(users).limit(1).where(eqGithubId(human.githubId));
+  const [existing] = await database
+    .select()
+    .from(users)
+    .where(eq(users.githubId, human.githubId))
+    .limit(1);
 
   if (existing !== undefined) {
-    return {
-      id: existing.id,
-      githubId: existing.githubId,
-      login: existing.login,
-      avatarUrl: existing.avatarUrl,
-      created: false,
-    };
+    return toGameAccount(existing, false);
   }
 
   const [created] = await database
@@ -69,31 +67,39 @@ export async function bootstrapGameAccount(
     .returning();
 
   if (created !== undefined) {
-    return {
-      id: created.id,
-      githubId: created.githubId,
-      login: created.login,
-      avatarUrl: created.avatarUrl,
-      created: true,
-    };
+    return toGameAccount(created, true);
   }
 
   // Lost the race to a concurrent first login. Whoever won wrote the same row,
   // so read it back rather than reporting a failure the caller cannot act on.
-  const [winner] = await database.select().from(users).limit(1).where(eqGithubId(human.githubId));
+  const [winner] = await database
+    .select()
+    .from(users)
+    .where(eq(users.githubId, human.githubId))
+    .limit(1);
 
   if (winner === undefined) {
     throw new Error(`could not create or find a game account for github id ${human.githubId}`);
   }
-  return {
-    id: winner.id,
-    githubId: winner.githubId,
-    login: winner.login,
-    avatarUrl: winner.avatarUrl,
-    created: false,
-  };
+  return toGameAccount(winner, false);
 }
 
-function eqGithubId(githubId: string) {
-  return eq(users.githubId, githubId);
+type UserRow = typeof users.$inferSelect;
+
+/**
+ * One mapping, used by all three exits.
+ *
+ * The `created` flag is the only thing that differs between them, and it is
+ * what lets a caller skip the welcome flow for somebody who has been here
+ * before. Getting that flag wrong is the difference between greeting a
+ * returning player as a new one and not.
+ */
+function toGameAccount(row: UserRow, created: boolean): GameAccount {
+  return {
+    id: row.id,
+    githubId: row.githubId,
+    login: row.login,
+    avatarUrl: row.avatarUrl,
+    created,
+  };
 }

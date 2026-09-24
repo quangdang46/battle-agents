@@ -3,9 +3,9 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 import {
   betterAuthSchema,
+  closeDatabasePool,
   createDatabase,
   createDatabasePool,
-  closeDatabasePool,
 } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
 
@@ -29,22 +29,28 @@ import type { Database } from '@battle-agents/db';
  */
 
 export interface AuthEnvironment {
-  readonly databaseUrl: string;
   readonly secret: string;
   readonly baseUrl: string;
   readonly githubClientId: string;
   readonly githubClientSecret: string;
 }
 
+const LOCALHOST_URL = /^https?:\/\/localhost([:/]|$)/i;
+
 /**
- * Reads the auth configuration from the environment, or explains what is
- * missing.
+ * Reads the auth configuration from the environment, or explains what is wrong.
  *
- * The callback URL is spelled out rather than derived, because GitHub matches it
- * strictly and treats 127.0.0.1 and localhost as different origins. That
- * mismatch is the single most likely reason a newcomer's first run fails, and
- * an error that says which two URLs to register is worth more than one that
- * says "invalid client".
+ * The callback URL is checked rather than passed through, because GitHub
+ * matches it strictly and treats 127.0.0.1 and localhost as different origins.
+ * That mismatch is the single most likely reason a newcomer's first run fails,
+ * and it fails late: the app is up, the OAuth app is registered, the login
+ * button works, and then GitHub rejects the callback. An error at startup names
+ * both URLs to register and saves the afternoon.
+ *
+ * DATABASE_URL is deliberately absent from the required set. The db package
+ * reads it and already reports a missing value better than this file could, and
+ * a field carried here and never read is a field that looks like it owns
+ * something it does not.
  */
 export function readAuthEnvironment(env: NodeJS.ProcessEnv): AuthEnvironment {
   const required = {
@@ -62,10 +68,21 @@ export function readAuthEnvironment(env: NodeJS.ProcessEnv): AuthEnvironment {
     throw new MissingAuthConfigurationError(missing);
   }
 
+  const baseUrl = required.BETTER_AUTH_URL!;
+  if (LOCALHOST_URL.test(baseUrl)) {
+    throw new Error(
+      [
+        `BETTER_AUTH_URL is "${baseUrl}". Use 127.0.0.1 instead.`,
+        'GitHub treats localhost and 127.0.0.1 as different origins, so a',
+        'localhost callback fails with redirect_uri_mismatch after the app is',
+        'already running and the OAuth app is already registered.',
+      ].join('\n'),
+    );
+  }
+
   return {
-    databaseUrl: env.DATABASE_URL ?? '',
     secret: required.BETTER_AUTH_SECRET!,
-    baseUrl: required.BETTER_AUTH_URL!,
+    baseUrl,
     githubClientId: required.GITHUB_CLIENT_ID!,
     githubClientSecret: required.GITHUB_CLIENT_SECRET!,
   };

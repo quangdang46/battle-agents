@@ -140,6 +140,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@battle-agents/api':
+        specifier: workspace:*
+        version: link:../api
       '@battle-agents/core':
         specifier: workspace:*
         version: link:../core

@@ -37,7 +37,7 @@ describe('Better Auth owns the human and nothing else', () => {
     // alone are not enough either. A guard that fires on the project's own
     // namespace is noise that gets switched off, which is how the credential
     // gate in this repo went dead twice.
-    const code = stripComments(source).replace(/@battle-agents[\w/-]*/g, '@battle');
+    const code = stripComments(source).replace(/@battle-agents[\w/-]*/g, '@pkg');
 
     for (const reserved of [
       'agents?',
@@ -119,11 +119,24 @@ describe('reading the auth configuration', () => {
     expect(failure?.message).toContain('redirect_uri_mismatch');
   });
 
-  it('keeps 127.0.0.1 rather than localhost, which GitHub treats as another origin', () => {
+  it('refuses a localhost base URL, because GitHub will not accept one', () => {
+    // The scenario this test used to fake. It passed 127.0.0.1 in and asserted
+    // 127.0.0.1 came out, which describes the fixture rather than the code: a
+    // real caller who sets localhost got it accepted silently and then failed at
+    // GitHub with redirect_uri_mismatch, after the app was up and the OAuth app
+    // was registered. The function checks now, so this asserts the check.
+    expect(() =>
+      readAuthEnvironment({ ...COMPLETE, BETTER_AUTH_URL: 'http://localhost:3000' }),
+    ).toThrow(/Use 127\.0\.0\.1/);
+    expect(() =>
+      readAuthEnvironment({ ...COMPLETE, BETTER_AUTH_URL: 'http://localhost:3000' }),
+    ).toThrow(/redirect_uri_mismatch/);
+  });
+
+  it('accepts the loopback address GitHub is told to use', () => {
     const environment = readAuthEnvironment({ ...COMPLETE });
 
-    expect(environment.baseUrl).toContain('127.0.0.1');
-    expect(environment.baseUrl).not.toContain('localhost');
+    expect(environment.baseUrl).toBe('http://127.0.0.1:3000');
   });
 });
 

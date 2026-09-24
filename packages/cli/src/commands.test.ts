@@ -1,0 +1,191 @@
+import {
+  createRuntime,
+  defineAction,
+  createInMemoryEventBus,
+  InMemoryStateStore,
+} from '@battle-agents/core';
+import { createApplicationApi } from '@battle-agents/api';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { describe, expect, it } from 'vitest';
+
+import { parseArgv, run } from './commands.js';
+
+const SOURCE_DIR = fileURLToPath(new URL('.', import.meta.url));
+
+/** Two domains, so "the CLI did not special-case one" is observable. */
+function api() {
+  return createApplicationApi(
+    createRuntime({
+      extensions: [
+        {
+          id: 'quest',
+          capabilities: [{ name: 'quest.read', description: 'read quests' }],
+          actionDefs: [
+            defineAction({
+              id: 'quest.claim',
+              permissions: ['quest.claim'],
+              run: async (input: { args: string }) => ({ claimed: input.args }),
+            }),
+            defineAction({
+              id: 'quest.submit',
+              permissions: ['quest.submit'],
+              run: async (input: { args: string }) => ({ submitted: input.args }),
+            }),
+          ],
+        },
+        {
+          id: 'battle',
+          capabilities: [{ name: 'battle.read', description: 'read battles' }],
+          actionDefs: [
+            defineAction({
+              id: 'battle.accept',
+              permissions: ['battle.accept'],
+              run: async (input: { args: string }) => ({ accepted: input.args }),
+            }),
+          ],
+        },
+      ],
+      store: new InMemoryStateStore(),
+      bus: createInMemoryEventBus(),
+      now: () => '2026-09-24T12:00:00.000Z',
+    }),
+  );
+}
+
+function invoke(...argv: string[]) {
+  return run(api(), parseArgv(argv));
+}
+
+describe('the CLI reaches every domain it has never heard of', () => {
+  it('runs an action from a domain it has no code for', async () => {
+    const result = await invoke('quest', 'claim', 'abc123');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('claimed: abc123');
+  });
+
+  it('reaches a second domain with the same three lines', async () => {
+    const result = await invoke('battle', 'accept', 'battle-9');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('accepted: battle-9');
+  });
+
+  it('lists what a domain can do when given no verb', async () => {
+    const result = await invoke('quest');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('claim');
+    expect(result.stdout).toContain('submit');
+  });
+
+  it('lists every domain at once', async () => {
+    const result = await invoke('discover');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('battle');
+    expect(result.stdout).toContain('quest');
+  });
+
+  it('reports what is installed without knowing what it is', async () => {
+    const result = await invoke('status');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('2 domain(s) available');
+  });
+});
+
+describe('a verb that is not an action', () => {
+  it('searches instead of failing', async () => {
+    const result = await invoke('quest', 'cla');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('quest.claim');
+  });
+
+  it('says what the domain does offer when nothing matches', async () => {
+    const result = await invoke('quest', 'zzz');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('This domain offers: claim, submit');
+  });
+});
+
+describe('failures a caller can act on', () => {
+  it('names the known domains when the one asked for does not exist', async () => {
+    const result = await invoke('guild', 'join');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('unknown domain "guild"');
+    expect(result.stderr).toContain('battle, quest');
+  });
+
+  it('prints usage when given nothing at all', async () => {
+    const result = await invoke();
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('USAGE');
+  });
+});
+
+describe('--json, because an agent drives this too', () => {
+  it('returns the same data in a machine form', async () => {
+    const result = await invoke('quest', 'claim', 'abc123', '--json');
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ claimed: 'abc123' });
+  });
+
+  it('strips the flag wherever it appears', async () => {
+    const result = await invoke('--json', 'quest', 'claim', 'abc123');
+
+    expect(JSON.parse(result.stdout)).toEqual({ claimed: 'abc123' });
+  });
+
+  it('reports failures in the machine form too, on stderr', async () => {
+    const result = await invoke('guild', 'join', '--json');
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stderr)).toMatchObject({ kind: 'usage' });
+  });
+});
+
+describe('the CLI contains no per-feature code', () => {
+  it('names no game domain anywhere in the package', () => {
+    // The review guard from plan section 36, as a test rather than a review
+    // note. A CLI that grows an `if (domain === 'quest')` branch is correct
+    // until the second feature arrives, and the difference it makes is invisible
+    // until an agent's command works on one surface and not another.
+    const reserved = /\b(quest|quests|battle|battles|bounty|bounties|guild|guilds)\b/i;
+
+    for (const file of readdirSync(SOURCE_DIR).filter((name) => name.endsWith('.ts'))) {
+      // Test fixtures name domains on purpose; the shipped code must not.
+      if (file.endsWith('.test.ts')) {
+        continue;
+      }
+      const code = neutraliseOwnName(stripComments(readFileSync(join(SOURCE_DIR, file), 'utf8')));
+      const offender = code.match(reserved)?.[0];
+      expect(offender, `${file} names the game domain "${offender}"`).toBeUndefined();
+    }
+  });
+});
+
+/**
+ * Blanks the two things that are always allowed to contain a game word.
+ *
+ * The binary is called `agent-battle` and the packages are `@battle-agents/*`,
+ * so a naive scan trips on the tool's own name and its own imports — which is
+ * the fastest way to get a guard deleted. A hyphen is a word boundary, so
+ * `\bbattle\b` matches inside `agent-battle` just as happily as inside
+ * `battle.accept`.
+ */
+function neutraliseOwnName(source: string): string {
+  return source.replace(/agent-battle/g, 'the-cli').replace(/@battle-agents[\w/-]*/g, '@pkg');
+}
+
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}

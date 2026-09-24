@@ -766,7 +766,7 @@ export function createRuntime(opts: {
 
 CONTRACT 1 ACCEPTANCE CHECKLIST (2026-09-24). `packages/core/` is not done until every line passes. This exists because the original section 20 shipped uncompilable, and a checklist is cheaper than re-auditing prose:
 1. `RuntimeContext`, `StateStore`, `EventBus`, `Logger` are DEFINED, not merely referenced in a type position.
-2. `addHandler` (the replacement for the undefined `pushToList`) is defined.
+2. AMENDED 2026-09-24. An event handler is appended to its per-type list by REAL code, not by an undefined helper. The original wording demanded a function literally named `addHandler`; the implementation has that logic inline in `registry.ts` because it has exactly ONE call site, and a one-line wrapper used once is the helper-for-a-one-liner antipattern (G9/G12) this repo's own rules forbid. The invariant the item was protecting — the list append is real, typed, and not a reference to something undefined — holds either way. Add the helper if a second call site ever appears.
 3. `ctx` is constructed before any handler can execute, not assumed.
 4. `install()` and `uninstall()` both exist and are symmetric across commands, actions, capabilities and event handlers.
 5. `requires` resolution is order-independent. TEST BY REVERSING the array: `battle` listed BEFORE `reputation` must NOT produce a degraded warning. A single-pass check fails this and reports a false degradation, which would poison the one signal section 24 relies on.
