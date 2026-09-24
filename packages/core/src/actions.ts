@@ -8,7 +8,7 @@ import type { ActionDef, RuntimeContext } from './contracts.js';
  * feature silently answering for another. Requiring the namespace here means
  * the mistake is a rejected declaration instead.
  */
-const ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
+export const ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
 
 /**
  * Declares one typed action and rejects the two ways the action registry goes
@@ -20,8 +20,6 @@ const ACTION_ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
  */
 export function defineAction<I, O>(definition: {
   readonly id: string;
-  readonly input: I;
-  readonly output: O;
   readonly permissions: readonly string[];
   run(input: I, context: RuntimeContext): Promise<O>;
 }): ActionDef<I, O> {

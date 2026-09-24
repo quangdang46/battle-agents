@@ -1,5 +1,6 @@
 import type { Command, CommandHandler } from './command.js';
 import type { GameEvent } from './event.js';
+import type { ActionSummary } from './registry.js';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -82,12 +83,18 @@ export interface Capability {
  * This is the surface the CLI and the MCP adapter call. Features declare typed
  * actions instead of shipping their own tools, so growing the game grows the
  * registry rather than the tool list a model has to read.
+ *
+ * The input and output shapes come from `run`, not from separate fields. The
+ * plan's sketch had `input: ClaimInput, output: ClaimResult` beside the
+ * function, which is a type written where a value is expected and does not
+ * compile; keeping those fields would have meant either an `as` cast on every
+ * declaration or a phantom property that exists only to be read back. If an
+ * interface ever needs to publish a JSON schema for an action, that is when a
+ * schema field earns its place here, with a real reader to justify it.
  */
 export interface ActionDef<I = unknown, O = unknown> {
   /** Dotted and lowercase, at least two segments: "quest.claim". */
   readonly id: string;
-  readonly input: I;
-  readonly output: O;
   /** What a caller must hold to run this. Never empty. */
   readonly permissions: readonly string[];
   run(input: I, context: RuntimeContext): Promise<O>;
@@ -120,11 +127,29 @@ export interface RuntimeContext {
   now(): string;
 }
 
+/** One domain's worth of catalog, fetched only when a caller asks for it. */
+export interface DomainDetail {
+  readonly capabilities: readonly Capability[];
+  readonly actions: readonly ActionSummary[];
+}
+
 /** The handle the composition root keeps and everything else is given. */
 export interface Runtime {
-  /** Capability names currently provided, sorted. */
+  /**
+   * Top-level domains only, sorted. This is what a client is handed when it
+   * connects.
+   *
+   * The full lists are deliberately not the default: a growing game adds
+   * capabilities continuously, and shipping all of them at connect time is what
+   * fills an agent's context with names it will never call. `describeDomain`
+   * fetches the rest on demand.
+   */
+  domains(): string[];
+  /** One domain's capabilities and actions. Empty for a domain that has none. */
+  describeDomain(domain: string): DomainDetail;
+  /** Every capability name, sorted. For diagnostics, not for handing to a client. */
   capabilities(): string[];
-  /** Action ids currently registered, sorted. */
+  /** Every action id, sorted. For diagnostics, not for handing to a client. */
   actions(): string[];
   /** Command types currently handled, sorted. */
   commands(): string[];

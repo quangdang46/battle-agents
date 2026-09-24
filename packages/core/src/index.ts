@@ -17,6 +17,7 @@ export type { Command, CommandHandler } from './command.js';
 export type {
   ActionDef,
   Capability,
+  DomainDetail,
   EventBus,
   EventHandler,
   GameFeature,
@@ -27,6 +28,7 @@ export type {
 } from './contracts.js';
 export type { GameEvent } from './event.js';
 export { InMemoryStateStore, isPersistedEventType, PERSISTED_EVENT_TYPES } from './persistence.js';
+export type { ActionSummary } from './registry.js';
 export { createRuntime, PartialDispatchError } from './runtime.js';
 export type { RuntimeOptions } from './runtime.js';
 export { createInMemoryEventBus } from './state.js';

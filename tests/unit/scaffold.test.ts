@@ -146,12 +146,24 @@ function collectWorkspaceImports(packageDir: string): string[] {
 // "a feature must not know about quests", which is exactly the kind of comment
 // this codebase wants, and a guard that cries wolf gets switched off.
 function stripCommentsAndLiterals(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
-    .replace(/`(?:\\.|[^`\\])*`/g, '``')
-    .replace(/'(?:\\.|[^'\\])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\])*"/g, '""');
+  return (
+    source
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+      // Strings in ONE pass, blanked to spaces rather than collapsed to a quote
+      // or two, so the line structure the caller reports stays intact.
+      //
+      // Three separate passes, one per quote character, is what this replaced and
+      // it was wrong in a way that only showed up on a real test name: the
+      // single-quote pass ran first and did not know it was inside a
+      // double-quoted string, so an apostrophe in a title like "the feature's
+      // own objects" opened a "string" that ran to the next apostrophe in the
+      // file. The match can span newlines, so it swallowed the rest of the file
+      // and the guard reported every game word in it. One pass with a back
+      // reference cannot be confused that way, because the closing quote it looks
+      // for is the quote that opened the match.
+      .replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (literal) => literal.replace(/[^\r\n]/g, ' '))
+  );
 }
 
 // English does not pluralise uniformly: "bounty" becomes "bounties" by dropping
@@ -184,6 +196,47 @@ function packageDirsUnder(parentDir: string): WorkspacePackage[] {
     workspacePackage.dir.startsWith(`${parentDir}/`),
   );
 }
+
+describe('game vocabulary scanner', () => {
+  // The scanner is a guard, and a guard that cannot be trusted is worse than
+  // none: it either reports words that are not there, which teaches people to
+  // ignore it, or misses words that are.
+  const scansClean = (source: string): boolean =>
+    !/\bquest\b/i.test(stripCommentsAndLiterals(source));
+
+  it('does not read a word out of a comment', () => {
+    expect(scansClean('// a feature must not know about quests\n')).toBe(true);
+    expect(scansClean('/* quests are somebody else\x27s problem */\n')).toBe(true);
+  });
+
+  it('does not read a word out of a string in any quote style', () => {
+    expect(scansClean("const id = 'quest.claim';\n")).toBe(true);
+    expect(scansClean('const id = "quest.claim";\n')).toBe(true);
+    expect(scansClean('const id = `quest.claim`;\n')).toBe(true);
+  });
+
+  it('does not lose the rest of the file over an apostrophe in a double-quoted string', () => {
+    // This is the regression: the single-quote pass ran first and treated the
+    // apostrophe in "the feature's own objects" as an opening quote, then
+    // matched across newlines to the next apostrophe in the file. The real
+    // declaration on the next line was swallowed into a "string" and the guard
+    // reported the opposite of the truth — clean code called a violation, and a
+    // genuine violation in the same file would have been read as part of it.
+    const source = ['const a = "the feature\'s own objects";', 'const quest = 1;', ''].join('\n');
+
+    const stripped = stripCommentsAndLiterals(source);
+
+    expect(stripped.split('\n')).toHaveLength(3);
+    expect(stripped.split('\n')[0]).not.toMatch(/\bobjects\b/);
+    // Line two is code, not a string, so it must still be readable.
+    expect(stripped.split('\n')[1]).toMatch(/\bquest\b/);
+  });
+
+  it('still reports a word that really is in the code', () => {
+    expect(scansClean('const quest = 1;\n')).toBe(false);
+    expect(scansClean('quest.claim();\n')).toBe(false);
+  });
+});
 
 describe('monorepo scaffold', () => {
   it('keeps the workspace skeleton intact and allows new packages', () => {

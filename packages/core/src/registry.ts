@@ -1,5 +1,24 @@
+import { ACTION_ID_PATTERN } from './actions.js';
 import type { CommandHandler } from './command.js';
-import type { ActionDef, EventHandler, GameFeature } from './contracts.js';
+import type { ActionDef, Capability, EventHandler, GameFeature } from './contracts.js';
+
+/**
+ * What a caller learns about one action without being handed the full catalog.
+ *
+ * Permissions come along because every surface needs them to decide whether the
+ * caller may run the action, and a surface that has to look each one up
+ * separately will eventually forget to.
+ */
+export interface ActionSummary {
+  readonly id: string;
+  readonly permissions: readonly string[];
+}
+
+/** The domain an id belongs to, which is everything before its first dot. */
+function idOf(id: string): { domain: string } {
+  const separator = id.indexOf('.');
+  return { domain: separator === -1 ? id : id.slice(0, separator) };
+}
 
 /**
  * A handler as the registry holds it, tagged with the feature that registered
@@ -33,6 +52,7 @@ export class FeatureRegistry {
   readonly #commands = new Map<string, CommandHandler>();
   readonly #actions = new Map<string, ActionDef>();
   readonly #capabilities = new Map<string, string>();
+  readonly #declaredCapabilities: Capability[] = [];
   readonly #handlers = new Map<string, RegisteredHandler[]>();
   readonly #persistedEventTypes = new Set<string>();
   readonly #features = new Map<string, GameFeature>();
@@ -47,6 +67,7 @@ export class FeatureRegistry {
     }
     for (const capability of feature.capabilities ?? []) {
       this.#capabilities.set(capability.name, feature.id);
+      this.#declaredCapabilities.push(capability);
     }
     for (const handler of feature.eventHandlers ?? []) {
       const existing = this.#handlers.get(handler.on);
@@ -76,6 +97,12 @@ export class FeatureRegistry {
     }
     for (const capability of feature.capabilities ?? []) {
       this.#capabilities.delete(capability.name);
+    }
+    for (const declared of feature.capabilities ?? []) {
+      const at = this.#declaredCapabilities.indexOf(declared);
+      if (at !== -1) {
+        this.#declaredCapabilities.splice(at, 1);
+      }
     }
     this.#detachHandlers(id);
     for (const eventType of feature.persistedEvents ?? []) {
@@ -116,6 +143,33 @@ export class FeatureRegistry {
 
   capabilityNames(): string[] {
     return [...this.#capabilities.keys()].sort();
+  }
+
+  /**
+   * The first segment of every capability and action id, sorted and deduped.
+   *
+   * Ids are dotted with at least two segments (defineAction rejects anything
+   * else), so the first segment is always a domain and never a bare verb.
+   */
+  domains(): string[] {
+    const names = new Set<string>();
+    for (const id of [...this.#capabilities.keys(), ...this.#actions.keys()]) {
+      names.add(idOf(id).domain);
+    }
+    return [...names].sort();
+  }
+
+  capabilitiesIn(domain: string): Capability[] {
+    return this.#declaredCapabilities.filter(
+      (capability) => idOf(capability.name).domain === domain,
+    );
+  }
+
+  actionsIn(domain: string): ActionSummary[] {
+    return [...this.#actions.values()]
+      .filter((action) => idOf(action.id).domain === domain)
+      .map((action) => ({ id: action.id, permissions: [...action.permissions] }))
+      .sort((left, right) => left.id.localeCompare(right.id));
   }
 
   /**
@@ -167,6 +221,17 @@ export class FeatureRegistry {
       this.#assertFree(this.#actions, action.id, 'action', feature.id);
     }
     for (const capability of feature.capabilities ?? []) {
+      // Capabilities are namespaced for the same reason actions are: two
+      // features both offering a bare "read" would merge into one domain in the
+      // catalog, and the collision would only be visible as a missing entry
+      // somewhere downstream. Validating here also makes `domains()` true to
+      // its comment, which it was not while capability names were free-form.
+      if (!ACTION_ID_PATTERN.test(capability.name)) {
+        throw new Error(
+          `capability name must be dotted, lowercase and have at least two segments, ` +
+            `got "${capability.name}" from ${feature.id}`,
+        );
+      }
       const owner = this.#capabilities.get(capability.name);
       if (owner !== undefined) {
         throw new Error(

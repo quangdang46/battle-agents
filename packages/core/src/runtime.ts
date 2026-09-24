@@ -97,6 +97,28 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   }
 
   runtime = {
+    domains: () => registry.domains(),
+    // Frozen AND copied, for the same reason degraded() is frozen. Freezing the
+    // array alone is not enough: a shallow freeze leaves the feature's own
+    // Capability objects reachable, so a caller writing through one — from
+    // plain JS, a cast, or a structuredClone boundary — would permanently
+    // rewrite the feature's declaration rather than a copy of it.
+    describeDomain: (domain) => ({
+      capabilities: Object.freeze(
+        registry
+          .capabilitiesIn(domain)
+          .map((capability) =>
+            Object.freeze({ name: capability.name, description: capability.description }),
+          ),
+      ),
+      actions: Object.freeze(
+        registry
+          .actionsIn(domain)
+          .map((action) =>
+            Object.freeze({ id: action.id, permissions: Object.freeze([...action.permissions]) }),
+          ),
+      ),
+    }),
     capabilities: () => registry.capabilityNames(),
     actions: () => registry.actionIds(),
     commands: () => registry.commandTypes(),

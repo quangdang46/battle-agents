@@ -68,8 +68,6 @@ describe('install and uninstall', () => {
       actionDefs: [
         defineAction({
           id: 'demo.run',
-          input: null,
-          output: 'done',
           permissions: ['demo'],
           run: async () => 'done',
         }),
@@ -185,9 +183,7 @@ describe('install and uninstall', () => {
   });
 
   it('refuses two features claiming the same action id', () => {
-    const claim = (id: string) => [
-      defineAction({ id, input: null, output: null, permissions: ['p'], run: async () => null }),
-    ];
+    const claim = (id: string) => [defineAction({ id, permissions: ['p'], run: async () => null })];
     const { runtime } = harness([feature({ id: 'first', actionDefs: claim('demo.shared') })]);
 
     expect(() => {
@@ -506,8 +502,6 @@ describe('defineAction', () => {
     expect(() =>
       defineAction({
         id: 'claim',
-        input: null,
-        output: null,
         permissions: ['a'],
         run: async () => null,
       }),
@@ -518,8 +512,6 @@ describe('defineAction', () => {
     expect(() =>
       defineAction({
         id: 'Quest.Claim',
-        input: null,
-        output: null,
         permissions: ['a'],
         run: async () => null,
       }),
@@ -530,8 +522,6 @@ describe('defineAction', () => {
     expect(() =>
       defineAction({
         id: 'quest.claim',
-        input: null,
-        output: null,
         permissions: [],
         run: async () => null,
       }),
@@ -546,10 +536,8 @@ describe('defineAction', () => {
         actionDefs: [
           defineAction({
             id: 'quest.claim',
-            input: { id: 'q1' },
-            output: { claimed: true },
             permissions: ['quest.claim'],
-            run: async (input, context) => {
+            run: async (input: { id: string }, context) => {
               seen = context;
               return { claimed: input.id === 'q1' };
             },
@@ -562,6 +550,112 @@ describe('defineAction', () => {
       claimed: true,
     });
     expect(seen?.runtime).toBe(runtime);
+  });
+});
+
+describe('lazy discovery', () => {
+  const catalog = () =>
+    harness([
+      feature({
+        id: 'quest',
+        capabilities: [
+          { name: 'quest.read', description: 'read a quest' },
+          { name: 'quest.write', description: 'change a quest' },
+        ],
+        actionDefs: [
+          defineAction({
+            id: 'quest.claim',
+            permissions: ['quest.claim'],
+            run: async () => ({ claimed: true }),
+          }),
+        ],
+      }),
+      feature({
+        id: 'battle',
+        capabilities: [{ name: 'battle.join', description: 'join a battle' }],
+        actionDefs: [
+          defineAction({
+            id: 'battle.accept',
+            permissions: ['battle.accept', 'battle.join'],
+            run: async () => ({ accepted: true }),
+          }),
+        ],
+      }),
+    ]);
+
+  it('hands a connecting client the domains, not the whole catalog', () => {
+    // The lazy shape: five names exist and none of them are in the first answer.
+    const { runtime } = catalog();
+    expect(runtime.domains()).toEqual(['battle', 'quest']);
+  });
+
+  it('returns one domain at a time, on request', () => {
+    const { runtime } = catalog();
+
+    const detail = runtime.describeDomain('quest');
+
+    expect(detail.capabilities.map((each) => each.name)).toEqual(['quest.read', 'quest.write']);
+    expect(detail.actions.map((each) => each.id)).toEqual(['quest.claim']);
+    expect(detail.capabilities[0]?.description).toBe('read a quest');
+  });
+
+  it('carries permissions with an action so a surface can authorize it', () => {
+    const { runtime } = catalog();
+    expect(runtime.describeDomain('battle').actions[0]?.permissions).toEqual([
+      'battle.accept',
+      'battle.join',
+    ]);
+  });
+
+  it('returns nothing for a domain that has none', () => {
+    const { runtime } = catalog();
+    expect(runtime.describeDomain('guild')).toEqual({ capabilities: [], actions: [] });
+  });
+
+  it('drops a domain again when its feature is uninstalled', () => {
+    const { runtime } = catalog();
+    expect(runtime.domains()).toEqual(['battle', 'quest']);
+
+    runtime.uninstall('battle');
+
+    expect(runtime.domains()).toEqual(['quest']);
+    expect(runtime.describeDomain('battle')).toEqual({ capabilities: [], actions: [] });
+  });
+
+  it('does not let a caller edit the catalog it was handed', () => {
+    const { runtime } = catalog();
+    const detail = runtime.describeDomain('quest');
+    expect(() => (detail.capabilities as unknown[]).push({ name: 'injected' })).toThrow();
+    expect(() => (detail.actions as unknown[]).push({ id: 'quest.injected' })).toThrow();
+    expect(() => (detail.actions[0]?.permissions as string[]).push('injected')).toThrow();
+  });
+
+  it("does not hand out the feature's own capability objects", () => {
+    // Freezing the array is not the same as copying what is in it. With only a
+    // shallow freeze, `declared` stayed reachable through the catalog, so this
+    // write succeeded and permanently rewrote the feature's declaration. The
+    // throw is the point: what the catalog hands out is a frozen copy.
+    const declared = { name: 'quest.read', description: 'read a quest' };
+    const { runtime } = harness([feature({ id: 'quest', capabilities: [declared] })]);
+
+    const detail = runtime.describeDomain('quest');
+    expect(() => {
+      (detail.capabilities[0] as { description: string }).description = 'hijacked';
+    }).toThrow();
+
+    expect(declared.description).toBe('read a quest');
+    expect(detail.capabilities[0]).not.toBe(declared);
+  });
+
+  it('rejects a capability name that is not namespaced', () => {
+    // A bare "read" from two features merges into one catalog domain, and the
+    // collision only shows up later as a capability that is mysteriously gone.
+    const { runtime } = harness([]);
+
+    expect(() => {
+      runtime.install(feature({ id: 'loose', capabilities: [{ name: 'read', description: 'a' }] }));
+    }).toThrow(/dotted/);
+    expect(runtime.domains()).toEqual([]);
   });
 });
 
