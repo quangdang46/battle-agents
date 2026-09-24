@@ -475,7 +475,7 @@ run_stage_schema_drift() {
   # A green integration suite can describe a schema the code no longer matches.
   # The integration test reads the DATABASE, which drizzle builds from the
   # COMMITTED migration artifact, not from the schema source. Editing
-  # drizzle/schema/*.ts without regenerating therefore leaves the artifact
+  # packages/db/src/schema/*.ts without regenerating leaves the artifact
   # stale, the database stale, and the test confidently confirming the stale
   # shape, which is the worst failure mode a test suite can have.
   #
@@ -489,7 +489,7 @@ run_stage_schema_drift() {
   ( cd "$REPO_ROOT" && pnpm db:generate ) >/dev/null 2>&1 || generated_status=$?
 
   local pending
-  pending=$(git -C "$REPO_ROOT" status --porcelain -- drizzle 2>/dev/null)
+  pending=$(git -C "$REPO_ROOT" status --porcelain -- packages/db 2>/dev/null)
 
   if [ "$generated_status" -ne 0 ]; then
     STAGE_STATUS="$STATUS_FAIL"
@@ -502,7 +502,7 @@ run_stage_schema_drift() {
 
   if [ -n "$pending" ]; then
     STAGE_STATUS="$STATUS_FAIL"
-    printf '  schema drift: drizzle/ has uncommitted changes after db:generate.\n'
+    printf '  schema drift: packages/db has uncommitted changes after db:generate.\n'
     printf '%s\n' "$pending"
     printf '  Commit the regenerated migration rather than letting a test discover it.\n'
     return 1

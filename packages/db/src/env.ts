@@ -4,7 +4,17 @@ import { resolve } from 'node:path';
 const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const ENV_FILE_NAME = '.env';
 
-export const REPO_ROOT = resolve(import.meta.dirname, '..');
+/**
+ * The repository root, so `.env` and the migrations folder can be found from
+ * whichever directory a command happens to run in.
+ *
+ * Three levels up from this file: packages/db/src -> packages/db -> packages
+ * -> the root. This was `..` while the package lived at the repository root,
+ * and moving the directory without moving this line left every path resolving
+ * one level short — which surfaced as "can't find meta/_journal.json" three
+ * stages later rather than as a wrong REPO_ROOT.
+ */
+export const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
 export class MissingDatabaseUrlError extends Error {
   constructor() {

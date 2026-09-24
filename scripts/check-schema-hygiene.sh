@@ -27,8 +27,8 @@ set -Eeuo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
-readonly SCHEMA_SOURCE_DIR="${REPO_ROOT}/drizzle/schema"
-readonly MIGRATION_DIR="${REPO_ROOT}/drizzle/migrations"
+readonly SCHEMA_SOURCE_DIR="${REPO_ROOT}/packages/db/src/schema"
+readonly MIGRATION_DIR="${REPO_ROOT}/packages/db/migrations"
 
 # Tables whose columns are held to the credential standard.
 readonly GUARDED_TABLES=(

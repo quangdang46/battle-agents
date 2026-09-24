@@ -14,16 +14,16 @@
 # an allowed one. A file that declares nothing is checked for copyleft notice
 # text as a backstop, because a vendored file may carry only a notice.
 #
-# Scope note: section 28.3 originally named packages/ and apps/. drizzle/ is
+# Scope note: section 28.3 originally named packages/ and apps/. The database
 # included now, and deliberately: the schema source is code we wrote, so pasting
 # Kaetram into it is exactly the mistake this gate exists to catch. The original
-# scope predated drizzle/ existing as a code directory.
+# package was included once it existed as a code directory.
 
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
-readonly SCAN_ROOTS=(packages apps drizzle)
+readonly SCAN_ROOTS=(packages apps)
 readonly EXCLUDE_DIRS=(node_modules dist .next out build coverage .tmp .beads)
 
 # Identifiers that may appear in a first-party file. Case is folded before

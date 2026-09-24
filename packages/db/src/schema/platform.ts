@@ -73,7 +73,13 @@ export const agents = pgTable(
   },
   (table) => [
     index('agents_user_id_idx').on(table.userId),
-    index('agents_user_id_name_unique').on(table.userId, table.name),
+    // A unique index, declared with `index`. The name says unique, the
+    // statement did not, and nothing caught it: the migration and the snapshot
+    // agreed with each other and disagreed with the intent, so the schema-drift
+    // gate saw no drift while the database happily accepted two agents with the
+    // same name for one user. An integration test that registers a name twice
+    // is what finally made it visible.
+    uniqueIndex('agents_user_id_name_unique').on(table.userId, table.name),
     // A bound parameter would emit `$1`, which raw migration DDL cannot execute.
     check('agents_level_min', sql`${table.level} >= ${sql.raw(String(MIN_AGENT_LEVEL))}`),
     check('agents_xp_non_negative', sql`${table.xp} >= 0`),

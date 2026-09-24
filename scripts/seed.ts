@@ -1,6 +1,10 @@
-import { closeDatabasePool, createDatabase, createDatabasePool } from '../drizzle/client.js';
-import { applyMigrations } from '../drizzle/migrate.js';
-import { seedDatabase } from '../drizzle/seed/seed.js';
+import {
+  closeDatabasePool,
+  createDatabase,
+  createDatabasePool,
+} from '../packages/db/src/client.js';
+import { applyMigrations } from '../packages/db/src/migrate.js';
+import { seedDatabase } from '../packages/db/src/seed/seed.js';
 
 const SEED_COMPLETE_MESSAGE = 'Migrations applied and seed data is ready.';
 

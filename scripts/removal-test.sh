@@ -140,22 +140,29 @@ strip_from_composition_root() {
   # The composition root imports each feature as a named import and lists its
   # factory call alone on one line in the extensions array. Both lines go.
   #
-  # The import is matched on its module specifier, not on the imported name.
+  # The import is matched on its module specifier, not on the imported name, and
+  # covers `import type {` as well: a feature whose types the root needs gets a
+  # second import line, and leaving that behind failed the removal test for a
+  # reason that had nothing to do with coupling.
   # Matching the name looks more direct and is wrong: the word boundary that
   # makes it safe also means it cannot match "agentFeature", so the import
   # survived, the extensions entry was stripped, and the removal test failed
   # with "cannot find name agentFeature" instead of saying what it meant. The
   # specifier names the package, so it has exactly one spelling.
   #
-  # The extensions[] pattern requires the line to contain nothing but the call,
-  # so it cannot swallow a neighbour's entry, and it allows any suffix on the
-  # factory name because the directory is named after the feature rather than
-  # after the factory.
+  # The extensions[] pattern requires the line to start with nothing but the
+  # factory call and end with its closing paren, so it cannot swallow a
+  # neighbour's entry. It allows any suffix on the factory name, because the
+  # directory is named after the feature rather than after the factory, and any
+  # argument list, because a feature that needs storage is wired on the same
+  # line it is constructed on. Pinning either would make the first feature with
+  # a dependency fail the removal test for a reason that has nothing to do with
+  # coupling — which is the failure mode this whole script exists to prevent.
   #
   # The backslash before @ is for perl, which would otherwise read @battle as
   # an array in the pattern and interpolate it to nothing.
-  perl -0pi -e "s/^import \{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${target}"
-  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(\),?[ \t]*\r?\n//mg" "${target}"
+  perl -0pi -e "s/^import (?:type )?\{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${target}"
+  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(.*\)[ \t]*,?[ \t]*\r?\n//mg" "${target}"
 }
 
 # A guard nobody has seen fail is not a guard, and this one had never been seen

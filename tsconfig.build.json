@@ -1,18 +1,4 @@
 {
-  // The workspace build graph. `tsc -b` walks it in dependency order, so a
-  // package is compiled against its dependencies' current output rather than
-  // whatever a stale dist happened to contain.
-  //
-  // The per-package `typecheck` script is `tsc -b` for the same reason: running
-  // it standalone must not depend on someone having remembered to build first,
-  // or a missing dist reads as a clean typecheck against an API that is not
-  // there. A package that cannot resolve its dependency should fail, not pass.
-  //
-  // One caveat, since it bites: deleting a package's dist/ without deleting its
-  // tsconfig.tsbuildinfo leaves the build state claiming it is up to date, and
-  // tsc -b then skips the rebuild that would have recreated the output. Both
-  // are gitignored build products, so a clean checkout never starts in that
-  // state, but clean them together when clearing by hand.
   "files": [],
   "references": [
     {
@@ -20,6 +6,9 @@
     },
     {
       "path": "packages/core"
+    },
+    {
+      "path": "packages/db"
     },
     {
       "path": "packages/game-client"

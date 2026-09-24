@@ -11,10 +11,10 @@
   "scripts": {
     "architecture": "tsx scripts/check-architecture.ts",
     "build": "tsc -b tsconfig.build.json",
-    "db:generate": "drizzle-kit generate --config=drizzle/drizzle.config.ts",
-    "db:migrate": "drizzle-kit migrate --config=drizzle/drizzle.config.ts",
+    "db:generate": "drizzle-kit generate --config=packages/db/drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=packages/db/drizzle.config.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "db:verify": "tsx drizzle/verify.ts",
+    "db:verify": "tsx packages/db/src/verify.ts",
     "format": "prettier --write .",
     "license-check": "bash scripts/check-licenses.sh",
     "lint": "prettier --check .",
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@battle-agents/core": "workspace:*",
+    "@battle-agents/db": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",

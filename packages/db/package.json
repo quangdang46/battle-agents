@@ -1,5 +1,5 @@
 {
-  "name": "@battle-agents/web",
+  "name": "@battle-agents/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,8 +16,11 @@
     "typecheck": "tsc -b tsconfig.json"
   },
   "dependencies": {
-    "@battle-agents/agent": "workspace:*",
-    "@battle-agents/core": "workspace:*",
-    "@battle-agents/db": "workspace:*"
+    "drizzle-orm": "^0.45.3",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11"
   }
 }

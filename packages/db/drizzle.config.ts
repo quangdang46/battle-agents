@@ -5,7 +5,7 @@ import { defineConfig } from 'drizzle-kit';
 
 // drizzle-kit bundles this file as CommonJS and resolves its paths from the
 // working directory, so it deliberately imports nothing from the rest of
-// `drizzle/`.
+// `packages/db/`.
 const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const ENV_FILE_NAME = '.env';
 
@@ -27,8 +27,8 @@ function readDatabaseUrl(): string {
 
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './drizzle/schema/index.ts',
-  out: './drizzle/migrations',
+  schema: './packages/db/src/schema/index.ts',
+  out: './packages/db/migrations',
   dbCredentials: { url: readDatabaseUrl() },
   strict: true,
   verbose: true,

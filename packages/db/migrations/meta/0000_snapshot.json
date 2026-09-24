@@ -112,12 +112,8 @@
           "name": "agent_credentials_installation_id_installations_id_fk",
           "tableFrom": "agent_credentials",
           "tableTo": "installations",
-          "columnsFrom": [
-            "installation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["installation_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -125,12 +121,8 @@
           "name": "agent_credentials_agent_id_agents_id_fk",
           "tableFrom": "agent_credentials",
           "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -261,12 +253,8 @@
           "name": "agents_user_id_users_id_fk",
           "tableFrom": "agents",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -423,12 +411,8 @@
           "name": "event_log_session_id_sessions_id_fk",
           "tableFrom": "event_log",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -519,12 +503,8 @@
           "name": "installations_user_id_users_id_fk",
           "tableFrom": "installations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -594,12 +574,8 @@
           "name": "projects_user_id_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -730,12 +706,8 @@
           "name": "sessions_agent_id_agents_id_fk",
           "tableFrom": "sessions",
           "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -743,12 +715,8 @@
           "name": "sessions_installation_id_installations_id_fk",
           "tableFrom": "sessions",
           "tableTo": "installations",
-          "columnsFrom": [
-            "installation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["installation_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -756,12 +724,8 @@
           "name": "sessions_project_id_projects_id_fk",
           "tableFrom": "sessions",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -892,12 +856,8 @@
           "name": "achievements_agent_id_agents_id_fk",
           "tableFrom": "achievements",
           "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -953,12 +913,8 @@
           "name": "battle_participants_battle_id_battles_id_fk",
           "tableFrom": "battle_participants",
           "tableTo": "battles",
-          "columnsFrom": [
-            "battle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["battle_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -966,12 +922,8 @@
           "name": "battle_participants_session_id_sessions_id_fk",
           "tableFrom": "battle_participants",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -979,10 +931,7 @@
       "compositePrimaryKeys": {
         "battle_participants_pk": {
           "name": "battle_participants_pk",
-          "columns": [
-            "battle_id",
-            "session_id"
-          ]
+          "columns": ["battle_id", "session_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1089,12 +1038,8 @@
           "name": "battles_bounty_id_bounties_id_fk",
           "tableFrom": "battles",
           "tableTo": "bounties",
-          "columnsFrom": [
-            "bounty_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bounty_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1102,12 +1047,8 @@
           "name": "battles_winner_session_id_sessions_id_fk",
           "tableFrom": "battles",
           "tableTo": "sessions",
-          "columnsFrom": [
-            "winner_session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["winner_session_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1270,12 +1211,8 @@
           "name": "bounties_quest_id_quests_id_fk",
           "tableFrom": "bounties",
           "tableTo": "quests",
-          "columnsFrom": [
-            "quest_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["quest_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1283,12 +1220,8 @@
           "name": "bounties_sponsor_user_id_users_id_fk",
           "tableFrom": "bounties",
           "tableTo": "users",
-          "columnsFrom": [
-            "sponsor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sponsor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1296,12 +1229,8 @@
           "name": "bounties_claimed_agent_id_agents_id_fk",
           "tableFrom": "bounties",
           "tableTo": "agents",
-          "columnsFrom": [
-            "claimed_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["claimed_agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1386,12 +1315,8 @@
           "name": "bounty_funds_bounty_id_bounties_id_fk",
           "tableFrom": "bounty_funds",
           "tableTo": "bounties",
-          "columnsFrom": [
-            "bounty_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bounty_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1399,12 +1324,8 @@
           "name": "bounty_funds_sponsor_user_id_users_id_fk",
           "tableFrom": "bounty_funds",
           "tableTo": "users",
-          "columnsFrom": [
-            "sponsor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["sponsor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1500,12 +1421,8 @@
           "name": "agent_stats_agent_id_agents_id_fk",
           "tableFrom": "agent_stats",
           "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1644,12 +1561,8 @@
           "name": "quests_project_id_projects_id_fk",
           "tableFrom": "quests",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1746,12 +1659,8 @@
           "name": "messages_from_agent_id_agents_id_fk",
           "tableFrom": "messages",
           "tableTo": "agents",
-          "columnsFrom": [
-            "from_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["from_agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1759,12 +1668,8 @@
           "name": "messages_to_agent_id_agents_id_fk",
           "tableFrom": "messages",
           "tableTo": "agents",
-          "columnsFrom": [
-            "to_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["to_agent_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }

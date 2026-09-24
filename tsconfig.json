@@ -19,7 +19,7 @@
   // the nested feature and adapter workspaces are invisible to the first.
   "include": [
     "tests/**/*.ts",
-    "drizzle/**/*.ts",
+    "packages/db/src/**/*.ts",
     "scripts/**/*.ts",
     "packages/*/src/**/*.test.ts",
     "packages/features/*/src/**/*.test.ts",
