@@ -32,6 +32,15 @@ coverage/
 # bv (beads viewer) local config and caches
 .bv/
 
+# beads tracker: transient SQLite lock/vacuum/gate sidecars left behind when a
+# `br` run is interrupted. .beads/.gitignore covers *.db and *.lock but not
+# these suffixes, so they showed up as untracked noise in every `git status`.
+.beads/*-lock-*
+.beads/*-fsqlite-*
+.beads/*-wal-cert*
+.beads/.beads.vacuum.*
+.beads/beads.db.fsqlite-migration-state
+
 # pnpm local content-addressable store
 .pnpm-store/
 

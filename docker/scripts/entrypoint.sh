@@ -134,6 +134,13 @@ verify() {
   pnpm lint
   log 'unit tests'
   pnpm test
+  # Explicit, not a side effect. This container has migrations applied, a seed
+  # loaded and a live Postgres, which is the only place the integration suite
+  # can run. It used to execute here by accident, because `pnpm test` pointed at
+  # a repository-wide glob; now that `pnpm test` is the unit stage, leaving it
+  # out would quietly weaken this profile.
+  log 'integration tests'
+  pnpm run test:integration
   log 'verification pipeline passed'
 }
 

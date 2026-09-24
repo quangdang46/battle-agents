@@ -20,7 +20,7 @@
     "lint": "prettier --check .",
     "removal-test": "bash scripts/removal-test.sh",
     "schema-hygiene": "bash scripts/check-schema-hygiene.sh",
-    "test": "vitest run",
+    "test": "pnpm run test:unit",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:m0": "bash scripts/test-m0.sh",

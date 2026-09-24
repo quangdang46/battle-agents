@@ -1,0 +1,11 @@
+# Normalise to LF in the repository and on checkout.
+#
+# Prettier's default is `endOfLine: "lf"`, so a Windows clone with
+# core.autocrlf=true hands contributors CRLF files that git then reports as
+# unmodified, and `pnpm lint` fails on files nobody changed. Pinning the
+# checkout to LF makes the lint result depend on the content rather than on
+# which machine produced it.
+#
+# `text=auto` keeps git's binary detection, so sprites and archives in
+# public/assets are left alone.
+* text=auto eol=lf

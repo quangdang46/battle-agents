@@ -34,5 +34,5 @@ export function checkImports(input: {
 export function classifyPath(path: string): { layer: string; instance: string | null };
 export function discoverWorkspacePackages(repoRoot: string): readonly ArchitecturePackage[];
 export function formatReport(violations: readonly ArchitectureViolation[]): string;
-export function listFeatureInstances(violations: readonly ArchitectureViolation[]): ReadonlyMap<string, readonly string[]>;
+export function listFeatureInstances(repoRoot: string): readonly string[];
 export function listSourceFiles(repoRoot: string): readonly ArchitectureSourceFile[];

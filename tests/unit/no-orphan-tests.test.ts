@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -28,7 +28,14 @@ const STAGE_CONFIGS: readonly string[] = [
 ];
 
 const TEST_ROOTS: readonly string[] = ['tests', 'packages', 'apps', 'drizzle', 'scripts'];
-const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', '.next', '.tmp', '.beads', 'coverage']);
+const IGNORED_DIRECTORIES = new Set([
+  'node_modules',
+  'dist',
+  '.next',
+  '.tmp',
+  '.beads',
+  'coverage',
+]);
 
 function listFiles(dir: string, out: string[] = []): string[] {
   let entries: string[];
@@ -90,7 +97,9 @@ describe('test stage coverage', () => {
   const allPatterns = configs.flatMap((config) => config.patterns.map(globToRegExp));
 
   it('every stage config exposes at least one include', () => {
-    const empty = configs.filter((config) => config.patterns.length === 0).map((config) => config.name);
+    const empty = configs
+      .filter((config) => config.patterns.length === 0)
+      .map((config) => config.name);
     expect(empty).toEqual([]);
   });
 
@@ -98,7 +107,11 @@ describe('test stage coverage', () => {
     const orphans: string[] = [];
     for (const root of TEST_ROOTS) {
       for (const file of listFiles(join(REPO_ROOT, root))) {
-        const repoRelative = relative(REPO_ROOT, file);
+        // The include globs in the stage configs are written with forward
+        // slashes, and path.relative() emits backslashes on Windows. Without
+        // this normalization every file is an orphan on Windows, so the guard
+        // reported the whole suite as unclaimed instead of passing.
+        const repoRelative = relative(REPO_ROOT, file).split(sep).join('/');
         if (!allPatterns.some((pattern) => pattern.test(repoRelative))) {
           orphans.push(repoRelative);
         }

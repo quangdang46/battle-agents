@@ -27,13 +27,20 @@ interface LayerContract {
     packages: readonly { dir: string; name: string }[];
   }) => readonly { rule: string; from: string; to: string; specifier: string | null }[];
   discoverWorkspacePackages: (repoRoot: string) => readonly { dir: string; name: string }[];
-  formatReport: (violations: readonly { rule: string; from: string; to: string; specifier: string | null }[]) => string;
+  formatReport: (
+    violations: readonly { rule: string; from: string; to: string; specifier: string | null }[],
+  ) => string;
   listSourceFiles: (repoRoot: string) => readonly { path: string; source: string }[];
 }
 
 function loadContract(): LayerContract {
   const loaded = require(join(REPO_ROOT, 'architecture-rules.cjs')) as LayerContract;
-  for (const name of ['checkImports', 'discoverWorkspacePackages', 'formatReport', 'listSourceFiles'] as const) {
+  for (const name of [
+    'checkImports',
+    'discoverWorkspacePackages',
+    'formatReport',
+    'listSourceFiles',
+  ] as const) {
     if (typeof loaded[name] !== 'function') {
       throw new Error(`architecture-rules.cjs must export ${name}`);
     }
