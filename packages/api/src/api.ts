@@ -69,6 +69,23 @@ export interface ApplicationApi {
   observe(query: ObserveQuery, listener: (event: unknown) => void): Observer;
 }
 
+/**
+ * A caller could not be authenticated.
+ *
+ * Declared here rather than imported from whichever feature issues credentials,
+ * because the HTTP surface has to recognise this failure and must not depend on
+ * the agent feature to do it: an interface that imports a feature stops being
+ * able to outlive one, and the removal test is right to fail. The agent
+ * feature satisfies this shape structurally.
+ */
+export interface AuthenticationFailure extends Error {
+  readonly reason: string;
+}
+
+export function isAuthenticationFailure(error: unknown): error is AuthenticationFailure {
+  return error instanceof Error && typeof (error as { reason?: unknown }).reason === 'string';
+}
+
 /** Thrown when an action id names nothing in the registry. */
 export class UnknownActionError extends Error {
   readonly action: string;

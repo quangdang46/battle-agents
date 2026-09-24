@@ -53,6 +53,9 @@ importers:
       '@battle-agents/agent':
         specifier: workspace:*
         version: link:../../packages/features/agent
+      '@battle-agents/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@battle-agents/core':
         specifier: workspace:*
         version: link:../../packages/core

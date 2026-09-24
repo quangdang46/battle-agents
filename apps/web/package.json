@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@battle-agents/agent": "workspace:*",
+    "@battle-agents/api": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*"
   }

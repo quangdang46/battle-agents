@@ -1,6 +1,13 @@
-export { createApplicationApi, PRIMITIVES, UnknownActionError, UnknownDomainError } from './api.js';
+export {
+  createApplicationApi,
+  isAuthenticationFailure,
+  PRIMITIVES,
+  UnknownActionError,
+  UnknownDomainError,
+} from './api.js';
 export type {
   ApplicationApi,
+  AuthenticationFailure,
   Discovery,
   DomainDetail,
   InspectQuery,

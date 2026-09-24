@@ -9,6 +9,12 @@ import { defineConfig } from 'vitest/config';
  * no-orphan test exists to catch. Spelling them out means a feature test
  * written outside these globs is reported as orphaned rather than skipped.
  *
+ * `apps/` is here for the same reason. The web app's route handlers are pure
+ * functions over the application API, so they test without a server — and
+ * before apps/ was listed, such a test was not run at all: vitest reported
+ * "No test files found" and exited non-zero, which a contributor would reasonably
+ * read as a broken filter rather than a missing glob.
+ *
  * (These globs are written out rather than described in prose for the reason
  * recorded in tests/unit/no-orphan-tests.test.ts: a comment containing a
  * glob that ends in two stars closes the block comment early, and the rest of
@@ -22,6 +28,7 @@ export default defineConfig({
       'packages/*/src/**/*.test.ts',
       'packages/features/*/src/**/*.test.ts',
       'packages/adapters/*/src/**/*.test.ts',
+      'apps/*/src/**/*.test.ts',
     ],
   },
 });
