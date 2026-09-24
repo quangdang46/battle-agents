@@ -44,3 +44,5 @@ export type {
   QuestStorageFailure,
   StoredQuest,
 } from './repository.js';
+export { QUEST_ACTION_IDS } from './manifest.js';
+export type { QuestActionId, QuestActionTypes } from './manifest.js';

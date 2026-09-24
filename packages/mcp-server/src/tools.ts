@@ -1,4 +1,6 @@
 import { PRIMITIVES } from '@battle-agents/api';
+import { isRegisteredActionId } from '@battle-agents/protocol';
+import { UnknownActionError } from '@battle-agents/api';
 import type { ApplicationApi, Primitive } from '@battle-agents/api';
 import { z } from 'zod';
 
@@ -149,7 +151,12 @@ export function createTools(): ReadonlyMap<Primitive, ToolDefinition> {
       inputSchema: actInput,
       // No outputSchema, and the reason is at the top of this function.
       inputJsonSchema: inputJsonOf(actInput),
-      handle: (context, input) => context.api.act(input.action, input.input ?? {}),
+      handle: (context, input) => {
+        if (!isRegisteredActionId(input.action)) {
+          throw new UnknownActionError(input.action, context.api.discover().domains ?? []);
+        }
+        return context.api.act(input.action, input.input ?? {});
+      },
     }),
     defineTool({
       name: 'observe',

@@ -4,6 +4,7 @@ import {
   InMemoryStateStore,
   createInMemoryEventBus,
 } from '@battle-agents/core';
+import { isRegisteredActionId } from '@battle-agents/protocol';
 import type { Runtime } from '@battle-agents/core';
 import { describe, expect, it } from 'vitest';
 
@@ -17,20 +18,37 @@ import {
 
 const AT = '2026-09-24T12:00:00.000Z';
 
-/** A feature with two domains, so "the surface did not grow" is measurable. */
+/**
+ * N real features, so "the surface did not grow" is measurable.
+ *
+ * The ids are REAL — drawn from the domains this build actually registers —
+ * because act() now validates against the generated union. A fixture with
+ * invented ids can no longer reach act() at all, which is the union working
+ * rather than the test being awkward: it is the same reason a real caller
+ * cannot invent one either.
+ */
+const FIXTURE_DOMAINS = [
+  { domain: 'quest', verb: 'claim' },
+  { domain: 'reputation', verb: 'read' },
+  { domain: 'progression', verb: 'read' },
+] as const;
+
 function runtimeWith(extensionCount: number): Runtime {
   return createRuntime({
-    extensions: Array.from({ length: extensionCount }, (_, index) => ({
-      id: `feature-${index}`,
-      capabilities: [{ name: `feature${index}.read`, description: `reads feature ${index}` }],
-      actionDefs: [
-        defineAction({
-          id: `feature${index}.claim`,
-          permissions: [`feature${index}.claim`],
-          run: async (input: { id: string }) => ({ claimed: input.id, by: index }),
-        }),
-      ],
-    })),
+    extensions: FIXTURE_DOMAINS.slice(0, extensionCount).map((entry, index) => {
+      const id = `${entry.domain}.${entry.verb}`;
+      return {
+        id: entry.domain,
+        capabilities: [{ name: `${entry.domain}.read`, description: `reads ${entry.domain}` }],
+        actionDefs: [
+          defineAction({
+            id,
+            permissions: [id],
+            run: async (input: { id: string }) => ({ claimed: input.id, by: index }),
+          }),
+        ],
+      };
+    }),
     store: new InMemoryStateStore(),
     bus: createInMemoryEventBus(),
     now: () => AT,
@@ -57,59 +75,61 @@ describe('the application API', () => {
 
   it('grows the registry when a feature is added, without growing the surface', () => {
     const before = Object.keys(createApplicationApi(runtimeWith(2)));
-    const after = Object.keys(createApplicationApi(runtimeWith(9)));
+    const after = Object.keys(createApplicationApi(runtimeWith(3)));
 
     expect(after.sort()).toEqual(before.sort());
-    expect(createApplicationApi(runtimeWith(9)).discover().domains).toHaveLength(9);
+    expect(createApplicationApi(runtimeWith(3)).discover().domains).toHaveLength(3);
     expect(createApplicationApi(runtimeWith(2)).discover().domains).toHaveLength(2);
   });
 
   it('hands a connecting client the domains, not the whole catalog', () => {
     const { api } = harness(3);
 
-    expect(api.discover()).toEqual({ domains: ['feature0', 'feature1', 'feature2'] });
+    expect(api.discover()).toEqual({ domains: ['progression', 'quest', 'reputation'] });
   });
 
   it('fetches one domain on request', () => {
     const { api } = harness(2);
 
-    const detail = api.discover('feature1').detail;
+    const detail = api.discover('reputation').detail;
 
-    expect(detail?.capabilities.map((each) => each.name)).toEqual(['feature1.read']);
-    expect(detail?.actions.map((each) => each.id)).toEqual(['feature1.claim']);
+    expect(detail?.capabilities.map((each) => each.name)).toEqual(['reputation.read']);
+    expect(detail?.actions.map((each) => each.id)).toEqual(['reputation.read']);
   });
 
   it('refuses a domain it does not have, and names the ones it does', () => {
     const { api } = harness(2);
 
     expect(() => api.discover('guild')).toThrow(UnknownDomainError);
-    expect(() => api.discover('guild')).toThrow(/feature0, feature1/);
+    expect(() => api.discover('guild')).toThrow(/quest, reputation/);
   });
 
   it('searches within a domain by name fragment', () => {
     const { api } = harness(2);
 
-    expect(api.search({ type: 'feature1' })).toEqual([{ id: 'feature1.claim', name: 'claim' }]);
-    expect(api.search({ type: 'feature1', name: 'clai' })).toEqual([
-      { id: 'feature1.claim', name: 'claim' },
+    expect(api.search({ type: 'reputation' })).toEqual([{ id: 'reputation.read', name: 'read' }]);
+    expect(api.search({ type: 'reputation', name: 'rea' })).toEqual([
+      { id: 'reputation.read', name: 'read' },
     ]);
-    expect(api.search({ type: 'feature1', name: 'nothing' })).toEqual([]);
+    expect(api.search({ type: 'reputation', name: 'nothing' })).toEqual([]);
   });
 
   it('runs an action through act()', async () => {
     const { api } = harness(2);
 
-    await expect(api.act('feature1.claim', { id: 'q1' })).resolves.toEqual({
+    await expect(api.act('quest.claim', { id: 'q1' })).resolves.toEqual({
       claimed: 'q1',
-      by: 1,
+      by: 0,
     });
   });
 
   it('names the domains when an action does not exist, rather than dumping every id', async () => {
     const { api } = harness(2);
 
-    await expect(api.act('quest.claim', {})).rejects.toBeInstanceOf(UnknownActionError);
-    await expect(api.act('quest.claim', {})).rejects.toThrow(/known domains: feature0, feature1/);
+    await expect(api.act('quest.cliam' as never, {})).rejects.toBeInstanceOf(UnknownActionError);
+    await expect(api.act('quest.cliam' as never, {})).rejects.toThrow(
+      /known domains: quest, reputation/,
+    );
   });
 
   it('returns a closable observer even with no transport attached', () => {
@@ -136,41 +156,57 @@ describe('parity across surfaces', () => {
   const expected = { claimed: 'shared-1', by: 0 };
 
   it('reaches the same action from a CLI-shaped caller', async () => {
-    // `agent-battle feature0 claim shared-1` — a verb and an argument.
+    // `agent-battle quest claim shared-1` — a verb and an argument.
     const { api } = harness(1);
-    const [domain, operation, ...rest] = ['feature0', 'claim', 'shared-1'];
+    const [domain, operation, ...rest] = ['quest', 'claim', 'shared-1'];
 
-    await expect(api.act(`${domain}.${operation}`, { id: rest.join(' ') })).resolves.toEqual(
-      expected,
-    );
+    const actionId = `${domain}.${operation}`;
+    if (!isRegisteredActionId(actionId)) {
+      throw new Error(`fixture id ${actionId} is not registered`);
+    }
+    await expect(api.act(actionId, { id: rest.join(' ') })).resolves.toEqual(expected);
   });
 
   it('reaches the same action from an HTTP-shaped caller', async () => {
     // POST /act { action, input } with the body parsed and nothing else done.
     const { api } = harness(1);
     const body: { action: string; input: typeof input } = {
-      action: 'feature0.claim',
+      action: 'quest.claim',
       input,
     };
 
-    await expect(api.act(body.action, body.input)).resolves.toEqual(expected);
+    // Narrowed in a CONDITION, not inside expect(): a type predicate only
+    // narrows where the compiler can see the branch, and an assertion reads
+    // true without telling it anything.
+    const action = body.action;
+    if (!isRegisteredActionId(action)) {
+      throw new Error(`fixture id ${action} is not registered`);
+    }
+    await expect(api.act(action, body.input)).resolves.toEqual(expected);
   });
 
   it('reaches the same action from an MCP-shaped caller', async () => {
     // act({ action, input }) — the same pair, as the MCP tool receives it.
     const { api } = harness(1);
     const toolCall: { action: string; input: typeof input } = {
-      action: 'feature0.claim',
+      action: 'quest.claim',
       input,
     };
 
-    await expect(api.act(toolCall.action, toolCall.input)).resolves.toEqual(expected);
+    const action = toolCall.action;
+    if (!isRegisteredActionId(action)) {
+      throw new Error(`fixture id ${action} is not registered`);
+    }
+    await expect(api.act(action, toolCall.input)).resolves.toEqual(expected);
   });
 
   it('fails the same way whichever surface asked', async () => {
     const { api } = harness(1);
-    const wrong = 'nonsense.operation';
+    const wrong = 'quest.cliam';
 
-    await expect(api.act(wrong, input)).rejects.toBeInstanceOf(UnknownActionError);
+    if (isRegisteredActionId(wrong)) {
+      throw new Error(`the fixture misspelling ${wrong} is a real id`);
+    }
+    await expect(api.act(wrong as never, input)).rejects.toBeInstanceOf(UnknownActionError);
   });
 });

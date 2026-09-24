@@ -11,6 +11,7 @@
   "scripts": {
     "architecture": "tsx scripts/check-architecture.ts",
     "build": "tsc -b tsconfig.build.json",
+    "codegen": "tsx scripts/generate-action-ids.ts",
     "db:generate": "drizzle-kit generate --config=packages/db/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=packages/db/drizzle.config.ts",
     "db:seed": "tsx scripts/seed.ts",
@@ -30,8 +31,10 @@
   "devDependencies": {
     "@battle-agents/activity": "workspace:*",
     "@battle-agents/agent": "workspace:*",
+    "@battle-agents/api": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",
+    "@battle-agents/protocol": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.11",

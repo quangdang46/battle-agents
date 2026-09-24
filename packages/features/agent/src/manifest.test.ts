@@ -22,12 +22,13 @@ import { describe, expect, it } from 'vitest';
  * names — which it did, correctly, the first time this file sat in tests/unit.
  */
 
-const MANIFEST_IDS: readonly string[] = [
-  'agent.describe',
-  'agent.read',
-  'session.end',
-  'session.heartbeat',
-];
+import { AGENT_ACTION_IDS } from './manifest.js';
+
+// The mirror is derived from the manifest rather than typed out again, and the
+// value is what makes the difference visible: a manifest that gains an id makes
+// this test fail until the runtime agrees, which is the only direction a mirror
+// is useful in.
+const MANIFEST_IDS: readonly string[] = [...AGENT_ACTION_IDS].sort();
 
 /** Storage that answers nothing, because this test only reads the registry. */
 const unusedRepository: AgentRepository = {

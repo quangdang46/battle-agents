@@ -15,13 +15,16 @@ import { createMcpServer, type NotificationSink } from './server.js';
 function apiWith(extensionCount: number): ApplicationApi {
   return createApplicationApi(
     createRuntime({
-      extensions: Array.from({ length: extensionCount }, (_, index) => ({
-        id: `feature-${index}`,
-        capabilities: [{ name: `feature${index}.read`, description: `reads ${index}` }],
+      // Real domains and real ids, because act() now validates against the
+      // ids this build registers. An invented fixture cannot reach act() at all,
+      // which is the union working rather than the test being awkward.
+      extensions: FIXTURE_DOMAINS.slice(0, extensionCount).map((entry) => ({
+        id: entry.domain,
+        capabilities: [{ name: `${entry.domain}.read`, description: `reads ${entry.domain}` }],
         actionDefs: [
           defineAction({
-            id: `feature${index}.claim`,
-            permissions: [`feature${index}.claim`],
+            id: `${entry.domain}.${entry.verb}`,
+            permissions: [`${entry.domain}.${entry.verb}`],
             run: async (input: { args: string }) => ({ claimed: input.args }),
           }),
         ],
@@ -32,6 +35,12 @@ function apiWith(extensionCount: number): ApplicationApi {
     }),
   );
 }
+
+const FIXTURE_DOMAINS = [
+  { domain: 'quest', verb: 'claim' },
+  { domain: 'reputation', verb: 'read' },
+  { domain: 'progression', verb: 'read' },
+] as const;
 
 function serverWith(extensionCount: number, notify?: NotificationSink) {
   return createMcpServer({
@@ -74,15 +83,15 @@ describe('discovering lazily', () => {
     const result = await serverWith(3).callTool('discover', {});
 
     expect(result.ok).toBe(true);
-    expect(result.value).toEqual({ domains: ['feature0', 'feature1', 'feature2'] });
+    expect(result.value).toEqual({ domains: ['progression', 'quest', 'reputation'] });
   });
 
   it('returns one domain in full when asked', async () => {
-    const result = await serverWith(2).callTool('discover', { domain: 'feature1' });
+    const result = await serverWith(2).callTool('discover', { domain: 'reputation' });
 
     expect(result.ok).toBe(true);
     expect(result.value).toMatchObject({
-      detail: { actions: [{ id: 'feature1.claim', permissions: ['feature1.claim'] }] },
+      detail: { actions: [{ id: 'reputation.read', permissions: ['reputation.read'] }] },
     });
   });
 
@@ -115,7 +124,7 @@ describe('discovering lazily', () => {
 describe('calling a tool', () => {
   it('runs an action from a domain it has no tool for', async () => {
     const result = await serverWith(2).callTool('act', {
-      action: 'feature1.claim',
+      action: 'reputation.read',
       input: { args: 'abc' },
     });
 
@@ -123,9 +132,9 @@ describe('calling a tool', () => {
   });
 
   it('searches within a domain', async () => {
-    const result = await serverWith(1).callTool('search', { type: 'feature0', name: 'clai' });
+    const result = await serverWith(1).callTool('search', { type: 'quest', name: 'clai' });
 
-    expect(result.value).toEqual([{ id: 'feature0.claim', name: 'claim' }]);
+    expect(result.value).toEqual([{ id: 'quest.claim', name: 'claim' }]);
   });
 
   it('tells a caller the tools it has, when it asks for one that does not exist', async () => {
@@ -137,7 +146,7 @@ describe('calling a tool', () => {
   });
 
   it('reports a bad argument against the field that was wrong', async () => {
-    const result = await serverWith(1).callTool('inspect', { type: 'feature0' });
+    const result = await serverWith(1).callTool('inspect', { type: 'quest' });
 
     expect(result.ok).toBe(false);
     expect(result.error?.kind).toBe('invalid-input');
@@ -156,7 +165,7 @@ describe('observing', () => {
   it('returns a closable subscription id', async () => {
     const server = serverWith(1);
 
-    const result = await server.callTool('observe', { domain: 'feature0' });
+    const result = await server.callTool('observe', { domain: 'quest' });
 
     expect(result.ok).toBe(true);
     const { subscriptionId } = result.value as { subscriptionId: string };

@@ -1,4 +1,6 @@
 import { defineAction } from '@battle-agents/core';
+import { isRegisteredActionId } from '@battle-agents/protocol';
+import type { RegisteredActionId } from '@battle-agents/protocol';
 import type { ActionSummary, Capability, Runtime } from '@battle-agents/core';
 
 /**
@@ -65,7 +67,27 @@ export interface ApplicationApi {
   discover(domain?: string): Discovery;
   search(query: SearchQuery): readonly SearchResult[];
   inspect(query: InspectQuery): Promise<unknown>;
-  act<I, O>(action: string, input: I): Promise<O>;
+  /**
+   * Run a registered action.
+   *
+   * The id is the generated union rather than `string`, so a misspelled one is
+   * a compile error instead of a runtime surprise. The payloads are still
+   * `unknown`: each feature has to declare its own input and output shapes
+   * before those can be checked too, and pretending otherwise would be a
+   * guarantee the code does not give.
+   */
+  act<I>(action: RegisteredActionId, input: I): Promise<unknown>;
+  /**
+   * Run a registered action.
+   *
+   * The id is the generated union, so a misspelled one is a compile error. A
+   * caller holding a string that is only known at runtime narrows it FIRST with
+   * `isRegisteredActionId` from the protocol package and calls this like any
+   * other — which is why there is no second, string-taking method. An overload
+   * accepting any string would resolve every bogus-id call through it, and the
+   * guarantee would stop existing with nothing failing to build.
+   */
+  act<I>(action: RegisteredActionId, input: I): Promise<unknown>;
   observe(query: ObserveQuery, listener: (event: unknown) => void): Observer;
 }
 
@@ -155,11 +177,15 @@ export function createApplicationApi(runtime: Runtime): ApplicationApi {
       return runtime.runAction(`${query.type}.${query.id}`, {});
     },
 
-    async act<I, O>(action: string, input: I): Promise<O> {
-      if (!runtime.actions().includes(action)) {
+    async act<I>(action: string, input: I): Promise<unknown> {
+      // The registry, not the generated list, is the authority: the generated
+      // union describes the BUILD, and a host can compose a different set of
+      // features at runtime. Checking both would reject an action that is
+      // genuinely installed.
+      if (!isRegisteredActionId(action) || !runtime.actions().includes(action)) {
         throw new UnknownActionError(action, runtime.domains());
       }
-      return runtime.runAction<I, O>(action, input);
+      return runtime.runAction<I, unknown>(action, input);
     },
 
     observe(query: ObserveQuery, listener: (event: unknown) => void): Observer {

@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./generated/action-ids": {
+      "types": "./dist/generated/action-ids.d.ts",
+      "default": "./dist/generated/action-ids.js"
     }
   },
   "scripts": {

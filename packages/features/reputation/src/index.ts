@@ -27,3 +27,5 @@ export {
   tierForTrust,
   trustScore,
 } from './rules.js';
+export { REPUTATION_ACTION_IDS } from './manifest.js';
+export type { ReputationActionId, ReputationActionTypes } from './manifest.js';

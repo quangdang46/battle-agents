@@ -30,3 +30,5 @@ export type {
   OutcomeType,
   Specialist,
 } from './rules.js';
+export { PROGRESSION_ACTION_IDS } from './manifest.js';
+export type { ProgressionActionId, ProgressionActionTypes } from './manifest.js';

@@ -4,6 +4,7 @@ import {
   UnknownActionError,
   UnknownDomainError,
 } from '@battle-agents/api';
+import { isRegisteredActionId } from '@battle-agents/protocol';
 import type { ApplicationApi } from '@battle-agents/api';
 import { createInMemoryEventBus } from '@battle-agents/core';
 import {
@@ -107,6 +108,11 @@ async function act(api: ApplicationApi, request: HttpRequest): Promise<HttpRespo
   const { action, input } = body as { action: unknown; input?: unknown };
   if (typeof action !== 'string') {
     return json(400, { error: '"action" must be a string' });
+  }
+  if (!isRegisteredActionId(action)) {
+    // The API owns this error wording; throwing its class keeps one message
+    // rather than a terser second copy that says less to whoever reads it.
+    throw new UnknownActionError(action, api.discover().domains ?? []);
   }
   return json(200, await api.act(action, input ?? {}));
 }

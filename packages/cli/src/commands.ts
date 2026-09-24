@@ -1,4 +1,5 @@
 import { UnknownDomainError } from '@battle-agents/api';
+import { isRegisteredActionId } from '@battle-agents/protocol';
 import type { ApplicationApi, Discovery, DomainDetail } from '@battle-agents/api';
 
 /**
@@ -134,6 +135,11 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
 
   const args = rest.slice(1);
   try {
+    if (!isRegisteredActionId(actionId)) {
+      throw new UsageError(
+        `no action "${actionId}" in this build. This domain offers: ${describeActions(resolved.detail).join(', ')}`,
+      );
+    }
     const output = await api.act(actionId, { args: args.join(' ') });
     return emit(output);
   } catch (error) {

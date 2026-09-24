@@ -16,6 +16,10 @@
     "typecheck": "tsc -b tsconfig.json"
   },
   "dependencies": {
-    "@battle-agents/core": "workspace:*"
+    "@battle-agents/core": "workspace:*",
+    "@battle-agents/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@battle-agents/protocol": "workspace:*"
   }
 }

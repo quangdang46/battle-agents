@@ -18,6 +18,7 @@
   "dependencies": {
     "@battle-agents/api": "workspace:*",
     "@battle-agents/core": "workspace:*",
+    "@battle-agents/protocol": "workspace:*",
     "zod": "^4.6.5"
   }
 }

@@ -46,13 +46,17 @@ function api() {
           ],
         },
         {
-          id: 'battle',
-          capabilities: [{ name: 'battle.read', description: 'read battles' }],
+          // A second REAL domain, deliberately. The test proves the CLI has no
+          // per-feature code, and an invented domain would now prove nothing:
+          // the generated union describes this build, so an id that is not in it
+          // is refused at the boundary, whatever the CLI thinks it can reach.
+          id: 'reputation',
+          capabilities: [{ name: 'reputation.read', description: 'read reputation' }],
           actionDefs: [
             defineAction({
-              id: 'battle.accept',
-              permissions: ['battle.accept'],
-              run: async (input: { args: string }) => ({ accepted: input.args }),
+              id: 'reputation.read',
+              permissions: ['reputation.read'],
+              run: async (input: { args: string }) => ({ trust: input.args }),
             }),
           ],
         },
@@ -77,10 +81,10 @@ describe('the CLI reaches every domain it has never heard of', () => {
   });
 
   it('reaches a second domain with the same three lines', async () => {
-    const result = await invoke('battle', 'accept', 'battle-9');
+    const result = await invoke('reputation', 'read', 'r-9');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('accepted: battle-9');
+    expect(result.stdout).toContain('trust: r-9');
   });
 
   it('reaches an action whose id has more than two segments', async () => {
@@ -104,7 +108,7 @@ describe('the CLI reaches every domain it has never heard of', () => {
     const result = await invoke('discover');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('battle');
+    expect(result.stdout).toContain('reputation');
     expect(result.stdout).toContain('quest');
   });
 
@@ -144,7 +148,7 @@ describe('failures a caller can act on', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('unknown domain "guild"');
-    expect(result.stderr).toContain('battle, quest');
+    expect(result.stderr).toContain('quest, reputation');
   });
 
   it('prints usage when given nothing at all', async () => {

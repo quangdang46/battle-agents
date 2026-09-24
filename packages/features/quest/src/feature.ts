@@ -29,6 +29,11 @@ export const QUEST_CREATE = 'quest.create';
 export const QUEST_LIST = 'quest.list';
 export const QUEST_CLAIM = 'quest.claim';
 export const QUEST_SUBMIT = 'quest.submit';
+// Three segments on purpose, and not decoration: the CLI resolves a verb by
+// everything after the first dot, and until a real action had three segments
+// there was no way to test that without inventing an id the build does not
+// register. An admin revoking a quest is a real operation, so the id is real too.
+export const QUEST_ADMIN_REVOKE = 'quest.admin.revoke';
 
 export interface CreateQuestInput {
   readonly projectId?: string | null;
@@ -94,6 +99,11 @@ export function questFeature(dependencies: { readonly repository: QuestRepositor
         id: QUEST_CLAIM,
         permissions: [QUEST_CLAIM],
         run: (input: ClaimQuestInput, context) => transition(repository, input, 'claim', context),
+      }),
+      defineAction({
+        id: QUEST_ADMIN_REVOKE,
+        permissions: [QUEST_ADMIN_REVOKE],
+        run: (input: SubmitQuestInput, context) => transition(repository, input, 'cancel', context),
       }),
       defineAction({
         id: QUEST_SUBMIT,

@@ -30,12 +30,12 @@ function runtimeWithOneAction() {
   return createRuntime({
     extensions: [
       {
-        id: 'demo',
-        capabilities: [{ name: 'demo.read', description: 'reads demos' }],
+        id: 'quest',
+        capabilities: [{ name: 'quest.read', description: 'reads quests' }],
         actionDefs: [
           defineAction({
-            id: 'demo.claim',
-            permissions: ['demo.claim'],
+            id: 'quest.claim',
+            permissions: ['quest.claim'],
             run: async (input: { id: string }) => ({ claimed: input.id }),
           }),
         ],
@@ -62,28 +62,28 @@ describe('the five primitives over HTTP', () => {
     const response = await call({ path: '/api/discover' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ domains: ['demo'] });
+    expect(response.body).toEqual({ domains: ['quest'] });
   });
 
   it('serves one domain on request', async () => {
-    const response = await call({ path: '/api/discover?domain=demo' });
+    const response = await call({ path: '/api/discover?domain=quest' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ detail: { actions: [{ id: 'demo.claim' }] } });
+    expect(response.body).toMatchObject({ detail: { actions: [{ id: 'quest.claim' }] } });
   });
 
   it('serves search', async () => {
-    const response = await call({ path: '/api/search?type=demo&name=clai' });
+    const response = await call({ path: '/api/search?type=quest&name=clai' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'demo.claim', name: 'claim' }]);
+    expect(response.body).toEqual([{ id: 'quest.claim', name: 'claim' }]);
   });
 
   it('runs an action through act', async () => {
     const response = await call({
       method: 'POST',
       path: '/api/act',
-      body: { action: 'demo.claim', input: { id: 'shared-1' } },
+      body: { action: 'quest.claim', input: { id: 'shared-1' } },
     });
 
     expect(response.status).toBe(200);
@@ -109,7 +109,7 @@ describe('what a client is told when something fails', () => {
     const response = await call({ method: 'POST', path: '/api/act', body: { action: 'nope.run' } });
 
     expect(response.status).toBe(404);
-    expect(response.body).toMatchObject({ error: expect.stringContaining('known domains: demo') });
+    expect(response.body).toMatchObject({ error: expect.stringContaining('known domains: quest') });
   });
 
   it('reports a failed authentication as 401, with the reason', async () => {
@@ -145,7 +145,7 @@ describe('what a client is told when something fails', () => {
       method: 'POST',
       url: `${ORIGIN}/api/act`,
       headers: new Map(),
-      body: { action: 'demo.claim', input: { id: 'x' } },
+      body: { action: 'quest.claim', input: { id: 'x' } },
     });
 
     expect(checked).toEqual(['auth']);
@@ -163,7 +163,7 @@ describe('what a client is told when something fails', () => {
       method: 'POST',
       url: `${ORIGIN}/api/act`,
       headers: new Map(),
-      body: { action: 'demo.claim', input: { id: 'x' } },
+      body: { action: 'quest.claim', input: { id: 'x' } },
     });
 
     expect(response.status).toBe(401);
