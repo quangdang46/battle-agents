@@ -657,6 +657,60 @@ describe('lazy discovery', () => {
     }).toThrow(/dotted/);
     expect(runtime.domains()).toEqual([]);
   });
+
+  it('rejects an action id that is not namespaced', () => {
+    // Deliberately NOT built with defineAction. defineAction validates, so a
+    // test written against it passes whatever the registry does, and the gap
+    // this covers is the plain object literal a feature can write instead —
+    // actionDefs is typed as ActionDef[], not as "whatever defineAction
+    // returned", so the literal type-checks and reaches the registry unchecked.
+    const { runtime } = harness([]);
+
+    expect(() => {
+      runtime.install(
+        feature({
+          id: 'loose-action',
+          actionDefs: [{ id: 'read', permissions: ['a:b'], run: async () => 1 }],
+        }),
+      );
+    }).toThrow(/dotted/);
+    expect(runtime.domains()).toEqual([]);
+  });
+
+  it('rejects an action that no surface could authorise', () => {
+    // Same reasoning: a literal, not defineAction, so this asserts the registry
+    // rather than the helper. ActionDef documents permissions as "never empty",
+    // and an action nobody may run looks like a working feature that is simply
+    // never called.
+    const { runtime } = harness([]);
+
+    expect(() => {
+      runtime.install(
+        feature({
+          id: 'unauthorised',
+          actionDefs: [{ id: 'quest.claim', permissions: [], run: async () => 1 }],
+        }),
+      );
+    }).toThrow(/no permissions/);
+  });
+
+  it('registers a well-formed action', () => {
+    // The two negative cases would also pass if the registry rejected every
+    // action, so the accepting case belongs to the same assertion set.
+    const { runtime } = harness([]);
+
+    expect(() => {
+      runtime.install(
+        feature({
+          id: 'well-formed',
+          actionDefs: [
+            { id: 'quest.claim', permissions: ['agent:quest:claim'], run: async () => 1 },
+          ],
+        }),
+      );
+    }).not.toThrow();
+    expect(runtime.domains()).toContain('quest');
+  });
 });
 
 describe('feature state', () => {

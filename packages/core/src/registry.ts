@@ -219,6 +219,24 @@ export class FeatureRegistry {
     }
     for (const action of feature.actionDefs ?? []) {
       this.#assertFree(this.#actions, action.id, 'action', feature.id);
+      // ActionDef documents two rules the type system cannot enforce, because
+      // `id` is a string and `permissions` a string array. Capabilities were
+      // checked here and actions were not, so a feature could register a bare
+      // verb like "read" or declare an action nobody is ever authorised to run.
+      // `domains()` derives from the first segment, so an undotted id also
+      // makes that method lie the same way an unnamespaced capability did.
+      if (!ACTION_ID_PATTERN.test(action.id)) {
+        throw new Error(
+          `action id must be dotted, lowercase and have at least two segments, ` +
+            `got "${action.id}" from ${feature.id}`,
+        );
+      }
+      if (action.permissions.length === 0) {
+        throw new Error(
+          `action "${action.id}" from ${feature.id} declares no permissions, so no surface ` +
+            `could authorise a caller to run it`,
+        );
+      }
     }
     for (const capability of feature.capabilities ?? []) {
       // Capabilities are namespaced for the same reason actions are: two
