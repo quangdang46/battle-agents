@@ -66,3 +66,27 @@ export type {
   StoredAgent,
   StoredInstallation,
 } from './repository.js';
+
+/**
+ * The action ids this feature registers. NOT its commands: `agent.register` is a
+ * command, reached through dispatch rather than act, and a manifest that listed
+ * it would hand generated types an id `act()` rejects. The guard below caught
+ * exactly that on its first run.
+ *
+ * A type, not a runtime value: the registry erases the shapes when it stores an
+ * action, so nothing at runtime can recover them. Declaring the ids here is what
+ * lets a build step union every feature's, which is the only way `act()` can
+ * reject a misspelled id at compile time.
+ *
+ * The payloads are `unknown` and that is a known gap, stated rather than
+ * hidden: they need each action to declare its return type, which the features
+ * do not do yet. Until then this makes the id half real and the shape half
+ * honest about being absent. MCP's `act` tool still cannot declare a truthful
+ * outputSchema for the same reason.
+ */
+export interface AgentActionTypes {
+  'agent.describe': { input: unknown; output: unknown };
+  'agent.read': { input: unknown; output: unknown };
+  'session.end': { input: unknown; output: unknown };
+  'session.heartbeat': { input: unknown; output: unknown };
+}
