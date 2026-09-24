@@ -34,3 +34,6 @@ coverage/
 
 # pnpm local content-addressable store
 .pnpm-store/
+
+# Claude Code local agent worktrees (session infrastructure, not project files)
+.claude/worktrees/
