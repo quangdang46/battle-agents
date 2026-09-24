@@ -36,7 +36,7 @@ readonly COPYLEFT_NOTICE_PATTERN='Mozilla Public License|this Source Code Form i
 
 # The Kaetram import path is called out by name in the plan, so it gets its own
 # rule rather than relying on the notice text, which a partial copy may omit.
-readonly KAETRAM_PATTERN='Kaetram|kaetram-client'
+readonly KAETRAM_PATTERN='Kaetram|@kaetram/|@kaetram\\b|kaetram-client'
 
 EXCLUDE_ARGS=()
 for dir in "${EXCLUDE_DIRS[@]}"; do
@@ -119,7 +119,7 @@ if [ -n "$notices" ]; then
   done <<<"$notices"
 fi
 
-kaetram=$(grep -rIlE "$KAETRAM_PATTERN" "${SCAN_ROOTS[@]}" "${EXCLUDE_ARGS[@]}" 2>/dev/null || true)
+kaetram=$(grep -rIiE "$KAETRAM_PATTERN" "${SCAN_ROOTS[@]}" "${EXCLUDE_ARGS[@]}" 2>/dev/null || true)
 if [ -n "$kaetram" ]; then
   while IFS= read -r file_path; do
     [ -n "$file_path" ] || continue

@@ -53,6 +53,7 @@ interface CheckImportsInput {
 
 interface LayerContract {
   readonly FORBIDDEN: readonly { readonly name: string }[];
+  readonly UNRESOLVED_RULE: { readonly name: string; readonly reason: string };
   readonly checkImports: (input: CheckImportsInput) => readonly Violation[];
   readonly discoverWorkspacePackages: (repoRoot: string) => readonly WorkspacePackage[];
   readonly formatReport: (violations: readonly Violation[]) => string;
@@ -106,6 +107,9 @@ const packages = contract.discoverWorkspacePackages(REPO_ROOT);
 // Held in memory rather than on disk so the deliberate violations below stay out
 // of the repository tsconfig, which typechecks every `tests/**/*.ts` file.
 const FIXTURE_FILES: readonly SourceFile[] = [
+  // Names no real package, so the resolver has nothing to classify and the
+  // unresolved rule has to be the one that speaks up.
+  sourceFile('packages/core/src/index.ts', ['@battle-agents/typo-not-a-package']),
   sourceFile('packages/features/quest/src/index.ts', ['@battle-agents/guild']),
   sourceFile('packages/features/guild/src/index.ts', ['../../battle/src/index.js']),
   sourceFile('packages/features/quest/src/infra.ts', [
@@ -131,6 +135,10 @@ const FIXTURE_FILES: readonly SourceFile[] = [
   sourceFile('packages/infrastructure/postgres/src/repository.ts', ['@battle-agents/progression']),
   sourceFile('packages/infrastructure/postgres/src/schema.ts', ['@battle-agents/core']),
   sourceFile('apps/web/src/index.ts', ['@battle-agents/battle']),
+  // Presentation importing a feature is an ALLOWED direction, and animation is
+  // a package that exists, so this produces no violation. It is kept in the
+  // fixture to prove the engine distinguishes "legal" from "unresolvable":
+  // removing the animation package turns this exact line into a violation.
   sourceFile('packages/game-client/src/view.ts', ['@battle-agents/animation']),
 ];
 
@@ -175,17 +183,48 @@ const EXPECTED_FIXTURE_VIOLATIONS = [
     from: 'packages/mcp-server/src/tools/discover.ts',
     specifier: '../../../features/social/src/index.js',
   },
+  {
+    // A specifier inside our own scope that names no package. There is no
+    // target to classify, so this exercises the unresolved rule rather than
+    // any of the layering rules.
+    rule: contract.UNRESOLVED_RULE.name,
+    from: 'packages/core/src/index.ts',
+    specifier: '@battle-agents/typo-not-a-package',
+  },
 ];
 
 describe('layering rule engine', () => {
-  const violations = contract.checkImports({ files: FIXTURE_FILES, packages });
+  // The fixture must be hermetic. Deriving its package list from the live tree
+  // meant that removing a real package changed what the fixture meant: the
+  // game-client import of @battle-agents/animation resolved on a full tree and
+  // became an unresolved violation the moment the removal test moved that
+  // directory aside, so a test about synthetic imports failed because of
+  // something happening to the real repository.
+  const fixturePackages: readonly WorkspacePackage[] = [
+    { dir: 'packages/features/animation', name: '@battle-agents/animation' },
+    { dir: 'packages/features/battle', name: '@battle-agents/battle' },
+    { dir: 'packages/features/bounty', name: '@battle-agents/bounty' },
+    { dir: 'packages/cli', name: '@battle-agents/cli' },
+    { dir: 'packages/core', name: '@battle-agents/core' },
+    { dir: 'packages/game-client', name: '@battle-agents/game-client' },
+    { dir: 'packages/features/guild', name: '@battle-agents/guild' },
+    { dir: 'packages/mcp-server', name: '@battle-agents/mcp-server' },
+    { dir: 'packages/infrastructure/postgres', name: '@battle-agents/postgres' },
+    { dir: 'packages/features/progression', name: '@battle-agents/progression' },
+    { dir: 'packages/protocol', name: '@battle-agents/protocol' },
+    { dir: 'packages/features/quest', name: '@battle-agents/quest' },
+  ];
+  const violations = contract.checkImports({ files: FIXTURE_FILES, packages: fixturePackages });
 
   it('catches every violation type in the fixture tree and nothing else', () => {
     expect(summarize(violations)).toEqual(summarize(EXPECTED_FIXTURE_VIOLATIONS));
   });
 
   it('exercises every rule declared in the contract', () => {
-    const expectedRules = new Set(contract.FORBIDDEN.map((rule) => rule.name));
+    const expectedRules = new Set([
+      ...contract.FORBIDDEN.map((rule) => rule.name),
+      contract.UNRESOLVED_RULE.name,
+    ]);
     expect(new Set(violations.map((violation) => violation.rule))).toEqual(expectedRules);
   });
 
@@ -209,7 +248,14 @@ describe('repository layering', () => {
   const violations = contract.checkImports({ files: sourceFiles, packages });
 
   it('discovers the workspace packages and their sources', () => {
-    expect(packages.map((entry) => entry.dir)).toContain('packages/features/guild');
+    // Asserts that discovery works, not that any particular feature exists.
+    // Pinning a feature here meant the removal test could never remove it,
+    // because the tree went missing mid-run and this assertion failed for a
+    // reason that had nothing to do with coupling.
+    const discovered = packages.map((entry) => entry.dir);
+    expect(discovered).toContain('packages/core');
+    expect(discovered).toContain('packages/protocol');
+    expect(discovered.some((dir) => dir.startsWith('packages/features/'))).toBe(true);
     expect(sourceFiles.map((file) => file.path)).toContain('packages/core/src/index.ts');
   });
 

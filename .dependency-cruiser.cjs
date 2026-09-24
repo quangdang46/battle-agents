@@ -10,6 +10,26 @@ const { existsSync, readFileSync, readdirSync } = require('node:fs');
 const { join, posix, relative, sep } = require('node:path');
 
 const WORKSPACE_SCOPE = '@battle-agents/';
+
+// Returned when a specifier is inside our own scope but names no package we can
+// find. It used to be null, which is the same value used for a genuinely
+// external import, so a typo or a stale specifier was skipped without a word.
+// The "typecheck will catch it" argument only holds if typecheck always runs
+// alongside, and this config is also runnable on its own, so the file has to
+// speak up for itself.
+const UNRESOLVED_WORKSPACE_IMPORT = Symbol('unresolved-workspace-import');
+
+// It does not fit FORBIDDEN, whose rules are shaped source-layer to
+// target-layers, because there is no target: the import resolves to nothing. It
+// is still a rule, and it is declared in one place so the test that asserts the
+// contract is complete does not have to know the name by heart.
+const UNRESOLVED_RULE = {
+  name: 'unresolved-workspace-import',
+  reason:
+    'Specifier is inside the @battle-agents scope but no package with that name exists. ' +
+    'An import nobody can resolve is also an import no rule can check, so it is reported ' +
+    'rather than skipped.',
+};
 const UNCLASSIFIED_LAYER = 'unclassified';
 const UNCLASSIFIED_RULE = 'unclassified-layer';
 const UNCLASSIFIED_REASON =
@@ -238,7 +258,7 @@ function resolveWorkspaceTarget({ fromPath, specifier, knownPaths, packageDirsBy
   if (!specifier.startsWith(WORKSPACE_SCOPE)) {
     return null;
   }
-  return packageDirsByName.get(specifier) ?? null;
+  return packageDirsByName.get(specifier) ?? UNRESOLVED_WORKSPACE_IMPORT;
 }
 
 function violatesRule(rule, source, target) {
@@ -297,6 +317,19 @@ function checkImports({ files, packages }) {
         packageDirsByName,
       });
       if (target === null) {
+        // A genuinely external import, which this file has no opinion about.
+        continue;
+      }
+      if (target === UNRESOLVED_WORKSPACE_IMPORT) {
+        violations.push(
+          buildViolation({
+            rule: 'unresolved-workspace-import',
+            from: file.path,
+            to: specifier,
+            specifier,
+            reason: UNRESOLVED_RULE.reason,
+          }),
+        );
         continue;
       }
       const rule = FORBIDDEN.find((candidate) =>
@@ -328,6 +361,8 @@ function formatReport(violations) {
 
 module.exports = {
   FORBIDDEN,
+  UNRESOLVED_RULE,
+  UNRESOLVED_WORKSPACE_IMPORT,
   LAYERS,
   checkImports,
   classifyPath,

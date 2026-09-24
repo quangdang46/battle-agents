@@ -464,10 +464,13 @@ run_stage_typecheck() {
 }
 
 run_stage_unit() {
-  printf '  -> pnpm run typecheck\n'
-  pnpm run typecheck
-  printf '  -> pnpm run test\n'
-  pnpm run test
+  # Scoped to the unit config on purpose. "pnpm test" runs the root vitest
+  # config, whose glob spans the whole repository, so the Postgres-dependent
+  # integration suite executed inside the unit stage as well. Section 40 says
+  # any red step blocks merge, and that only holds if the stages cannot overlap.
+  # Typecheck has its own stage, so it is not repeated here.
+  printf '  -> pnpm run test:unit\n'
+  pnpm run test:unit
 }
 
 run_stage_integration() {

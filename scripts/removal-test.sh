@@ -62,6 +62,15 @@ restore_in_flight() {
     COMPOSITION_BACKUP=""
   fi
   if [[ -n "${MOVED_PATH}" && -d "${STASH_DIR}/$(basename "${MOVED_PATH}")" ]]; then
+    # The destination must not exist before the restore. "pnpm -r typecheck"
+    # recreates the package directory it just lost, including a node_modules
+    # symlink farm, and "mv src dst" onto an existing directory nests the source
+    # inside it as dst/src. That leaves the tracked files relocated and git
+    # reporting the originals as deleted. The stash holds the real content, so
+    # anything sitting at the destination at this point is rebuild output.
+    if [[ -e "${MOVED_PATH}" ]]; then
+      rm -rf -- "${MOVED_PATH}"
+    fi
     mv "${STASH_DIR}/$(basename "${MOVED_PATH}")" "${MOVED_PATH}"
     MOVED_PATH=""
   fi
@@ -142,8 +151,16 @@ run_tests() {
   return 1
 }
 
+# Snapshot the tracked tree so a run that damages it cannot report green.
+tree_signature() {
+  git -C "${REPO_ROOT}" status --porcelain --untracked-files=no 2>/dev/null \
+    | shasum -a 256 2>/dev/null | cut -d" " -f1
+}
+
 main() {
   cd "${REPO_ROOT}"
+  local tree_before
+  tree_before=$(tree_signature)
 
   recover_stashed_features
 
@@ -194,6 +211,15 @@ main() {
     printf '\nremoval-test FAILED for %d feature(s):\n' "${#FAILED_FEATURES[@]}"
     printf '  %s\n' "${FAILED_FEATURES[@]}"
     printf '\nA feature that cannot be removed is coupled to something outside itself.\n'
+    return 1
+  fi
+
+  local tree_after
+  tree_after=$(tree_signature)
+  if [[ "$tree_before" != "$tree_after" ]]; then
+    printf '\nremoval-test FAILED: the tracked tree was not restored to its starting state.\n'
+    printf '  expected %s, found %s\n' "$tree_before" "$tree_after"
+    git -C "${REPO_ROOT}" status --short --untracked-files=no | head -20
     return 1
   fi
 
