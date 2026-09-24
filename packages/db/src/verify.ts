@@ -73,6 +73,7 @@ interface PrimaryKeyRow extends ColumnRow {
 
 interface CheckConstraintRow {
   readonly table_name: string;
+  readonly constraint_name: string;
   readonly check_clause: string;
 }
 
@@ -157,7 +158,7 @@ async function readSchemaSnapshot(database: Database): Promise<SchemaSnapshot> {
 
   const checkConstraints = await readRows<CheckConstraintRow>(
     await database.execute(sql`
-      SELECT tc.table_name, cc.check_clause
+      SELECT tc.table_name, tc.constraint_name, cc.check_clause
       FROM information_schema.table_constraints tc
       JOIN information_schema.check_constraints cc
         ON cc.constraint_name = tc.constraint_name AND cc.constraint_schema = tc.table_schema
@@ -197,6 +198,88 @@ export function checkTablesExist(snapshot: SchemaSnapshot): readonly string[] {
   return OWNED_TABLES.filter((table) => !actual.has(table)).map(
     (table) => `missing table "${table}" from the platform/feature ownership manifest`,
   );
+}
+
+/**
+ * Every check the schema declares, by table and name.
+ *
+ * `readSchemaSnapshot` has always collected `checkConstraints` and nothing has
+ * ever read it, so deleting a constraint left the database able to accept a
+ * negative amount while every gate stayed green: the money is enforced by
+ * these constraints and by nothing else at the storage layer. A collected
+ * field that no assertion reads is the same defect as no guard at all, so the
+ * manifest is here and the check below is what reads it.
+ *
+ * Matching is by constraint NAME, not by clause text. Postgres reports every
+ * NOT NULL as a CHECK, so `amount_cents IS NOT NULL` is a row in the same
+ * table as the real money guard. A substring match on the column name is
+ * satisfied by the NOT NULL row, which is a passing check that guards nothing.
+ * The name is what distinguishes the constraint, and the clause is only read
+ * to confirm it still mentions the column it is supposed to protect.
+ */
+const REQUIRED_CHECK_CONSTRAINTS: readonly {
+  readonly table: string;
+  readonly name: string;
+  readonly mustMention: string;
+}[] = [
+  {
+    table: 'bounty_funds',
+    name: 'bounty_funds_amount_cents_non_negative',
+    mustMention: 'amount_cents',
+  },
+  { table: 'agents', name: 'agents_level_min', mustMention: 'level' },
+  { table: 'agents', name: 'agents_xp_non_negative', mustMention: 'xp' },
+  { table: 'agents', name: 'agents_reputation_non_negative', mustMention: 'reputation' },
+  { table: 'sessions', name: 'sessions_disconnected_has_ended_at', mustMention: 'ended_at' },
+  { table: 'agent_stats', name: 'agent_stats_prs_opened_non_negative', mustMention: 'prs_opened' },
+  { table: 'agent_stats', name: 'agent_stats_prs_merged_non_negative', mustMention: 'prs_merged' },
+  {
+    table: 'agent_stats',
+    name: 'agent_stats_prs_rejected_non_negative',
+    mustMention: 'prs_rejected',
+  },
+  {
+    table: 'agent_stats',
+    name: 'agent_stats_tests_passed_non_negative',
+    mustMention: 'tests_passed',
+  },
+  {
+    table: 'agent_stats',
+    name: 'agent_stats_tests_failed_non_negative',
+    mustMention: 'tests_failed',
+  },
+  { table: 'agent_stats', name: 'agent_stats_recoveries_non_negative', mustMention: 'recoveries' },
+  {
+    table: 'agent_stats',
+    name: 'agent_stats_battles_won_non_negative',
+    mustMention: 'battles_won',
+  },
+  {
+    table: 'agent_stats',
+    name: 'agent_stats_battles_lost_non_negative',
+    mustMention: 'battles_lost',
+  },
+];
+
+export function checkRequiredCheckConstraints(snapshot: SchemaSnapshot): readonly string[] {
+  const problems: string[] = [];
+  for (const required of REQUIRED_CHECK_CONSTRAINTS) {
+    const found = snapshot.checkConstraints.find(
+      (constraint) =>
+        constraint.table_name === required.table && constraint.constraint_name === required.name,
+    );
+    if (found === undefined) {
+      problems.push(`check constraint "${required.name}" is missing from "${required.table}"`);
+      continue;
+    }
+    if (!found.check_clause.includes(required.mustMention)) {
+      problems.push(
+        `check constraint "${required.name}" no longer mentions ${required.mustMention}, ` +
+          `so it no longer guards the column it was written for`,
+      );
+    }
+  }
+  return problems;
 }
 
 export function checkAgentIdentityInvariant(snapshot: SchemaSnapshot): readonly string[] {
@@ -382,6 +465,7 @@ export async function runSchemaVerification(database: Database): Promise<readonl
 
   const failures: string[] = [
     ...checkTablesExist(snapshot),
+    ...checkRequiredCheckConstraints(snapshot),
     ...checkPlatformAndFeatureSplit(snapshot),
     ...checkAgentIdentityInvariant(snapshot),
     ...checkUserIdOwnership(snapshot),
