@@ -10,6 +10,7 @@ import {
   type AgentSummary,
 } from './feature.js';
 import { AGENT_NAME_TAKEN, AGENT_NOT_OWNED, type AgentRepository } from './repository.js';
+import type { SessionEndReason, SessionStatus } from './session.js';
 
 const AT = '2026-09-24T00:00:00.000Z';
 
@@ -78,6 +79,98 @@ class InMemoryAgentRepository implements AgentRepository {
   async findInstallationForOwner(): Promise<Installation | undefined> {
     return undefined;
   }
+}
+
+/**
+ * Session storage in memory.
+ *
+ * Status lives here rather than in a database because two of the rules are
+ * about refusing: a heartbeat for a run that is not running must change
+ * nothing, and neither must an end. A double that quietly allowed both would
+ * make those tests pass for the wrong reason.
+ */
+class InMemorySessionRepository {
+  readonly rows: { id: string; status: SessionStatus; reason: SessionEndReason | null }[] = [];
+  #next = 1;
+
+  async findOrCreateInstallation(_input?: {
+    ownerId: string;
+    installationKey: string;
+    now: string;
+  }): Promise<{ id: string }> {
+    return { id: 'i-1' };
+  }
+  async findAgentByName(_ownerId?: string, _name?: string): Promise<{ id: string } | undefined> {
+    return { id: 'agent-1' };
+  }
+  async findOrCreateProject(_input?: {
+    ownerId: string;
+    name: string;
+    now: string;
+  }): Promise<{ id: string }> {
+    return { id: 'project-1' };
+  }
+  async findResumableSessions(_input?: {
+    agentId: string;
+    installationId: string;
+    projectId: string | null;
+  }): Promise<readonly never[]> {
+    return [];
+  }
+  async createSession(_input: {
+    agentId: string;
+    installationId: string;
+    projectId: string | null;
+    now: string;
+  }): Promise<{ id: string }> {
+    const id = `session-${this.#next++}`;
+    this.rows.push({ id, status: 'active', reason: null });
+    return { id };
+  }
+  async markSessionActive(id: string, _now?: string): Promise<void> {
+    this.set(id, (row) => ({ ...row, status: 'active' }));
+  }
+  async heartbeat(id: string, _now?: string): Promise<SessionStatus | undefined> {
+    const row = this.rows.find((each) => each.id === id);
+    return row?.status === 'active' ? row.status : undefined;
+  }
+  async end(
+    id: string,
+    reason: SessionEndReason,
+    _now?: string,
+  ): Promise<SessionStatus | undefined> {
+    const row = this.rows.find((each) => each.id === id);
+    if (row?.status !== 'active') {
+      return undefined;
+    }
+    this.set(id, () => ({ ...row, status: 'ended', reason }));
+    return 'ended';
+  }
+  private set(
+    id: string,
+    next: (row: { id: string; status: SessionStatus; reason: SessionEndReason | null }) => {
+      id: string;
+      status: SessionStatus;
+      reason: SessionEndReason | null;
+    },
+  ): void {
+    const at = this.rows.findIndex((each) => each.id === id);
+    if (at !== -1) {
+      this.rows[at] = next(this.rows[at]!);
+    }
+  }
+}
+
+function harnessWith(dependencies: Parameters<typeof agentFeature>[0]): { runtime: Runtime } {
+  const bus = createInMemoryEventBus();
+  return {
+    runtime: createRuntime({
+      extensions: [agentFeature(dependencies)],
+      store: new InMemoryStateStore(),
+      bus,
+      now: () => AT,
+    }),
+  };
 }
 
 function harness(repository: AgentRepository): { runtime: Runtime; seen: GameEvent[] } {
@@ -264,5 +357,80 @@ describe('what the feature offers', () => {
       expect(runtime.degraded().size).toBe(0);
       expect(repository.records).toHaveLength(1);
     });
+  });
+});
+
+describe('driving a running session', () => {
+  it('heartbeats a live session and refuses one that is not running', async () => {
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+    const created = await store.createSession({
+      agentId: 'agent-1',
+      installationId: 'i-1',
+      projectId: null,
+      now: AT,
+    });
+
+    const beat = await runtime.runAction('session.heartbeat', { sessionId: created.id });
+    expect(beat).toEqual({ sessionId: created.id, status: 'active' });
+
+    await expect(
+      runtime.runAction('session.heartbeat', { sessionId: 'no-such-session' }),
+    ).rejects.toThrow(/is not running/);
+  });
+
+  it('ends a session and records why', async () => {
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+    const created = await store.createSession({
+      agentId: 'agent-1',
+      installationId: 'i-1',
+      projectId: null,
+      now: AT,
+    });
+
+    const ended = await runtime.runAction('session.end', {
+      sessionId: created.id,
+      reason: 'completed',
+    });
+    expect(ended).toEqual({ sessionId: created.id, status: 'ended', reason: 'completed' });
+  });
+
+  it('does not accept an ending the table cannot hold', async () => {
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+    const created = await store.createSession({
+      agentId: 'agent-1',
+      installationId: 'i-1',
+      projectId: null,
+      now: AT,
+    });
+
+    const ended = await runtime.runAction('session.end', {
+      sessionId: created.id,
+      reason: 'gave-up',
+    });
+    // A caller inventing a reason would otherwise write a value no reader knows
+    // how to interpret, and the column is an enum precisely so it cannot.
+    expect(ended).toMatchObject({ status: 'ended', reason: 'crashed' });
+  });
+
+  it('offers no session actions at all when no session storage is wired', async () => {
+    const { runtime } = harnessWith({ repository: new InMemoryAgentRepository() });
+
+    // Absent rather than registered-and-throwing: `discover` is how a caller
+    // finds out, and a host with no session store genuinely has no sessions.
+    expect(runtime.actions()).not.toContain('session.heartbeat');
+    expect(runtime.actions()).not.toContain('session.end');
+    expect(runtime.actions()).toContain('agent.describe');
   });
 });

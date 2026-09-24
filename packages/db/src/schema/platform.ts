@@ -18,6 +18,18 @@ export type AgentStatus = (typeof AGENT_STATUSES)[number];
 export const SESSION_STATUSES = ['active', 'ended', 'disconnected', 'abandoned'] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
+/**
+ * Why a run ended, as distinct from the fact that it did.
+ *
+ * A status says a run is over; this says whether it finished, crashed, or was
+ * stopped, which is the difference between a character that did the work and
+ * one that gave up. It is nullable because a run that disconnected or was
+ * abandoned never reached an ending, and an invented reason for those would be
+ * a fact the database does not have.
+ */
+export const SESSION_END_REASONS = ['completed', 'crashed', 'abandoned'] as const;
+export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
+
 export const MIN_AGENT_LEVEL = 1;
 
 function creationTimestamp() {
@@ -152,6 +164,7 @@ export const sessions = pgTable(
       .references(() => installations.id, { onDelete: 'cascade' }),
     projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     harnessSessionRef: text('harness_session_ref'),
+    endReason: text('end_reason', { enum: SESSION_END_REASONS }),
     status: text('status', { enum: SESSION_STATUSES }).notNull().default('active'),
     startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
     endedAt: timestamp('ended_at', { withTimezone: true }),

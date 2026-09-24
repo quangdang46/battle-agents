@@ -150,19 +150,23 @@ strip_from_composition_root() {
   # with "cannot find name agentFeature" instead of saying what it meant. The
   # specifier names the package, so it has exactly one spelling.
   #
-  # The extensions[] pattern requires the line to start with nothing but the
-  # factory call and end with its closing paren, so it cannot swallow a
-  # neighbour's entry. It allows any suffix on the factory name, because the
-  # directory is named after the feature rather than after the factory, and any
-  # argument list, because a feature that needs storage is wired on the same
-  # line it is constructed on. Pinning either would make the first feature with
-  # a dependency fail the removal test for a reason that has nothing to do with
-  # coupling — which is the failure mode this whole script exists to prevent.
+  # The extensions[] pattern handles an entry written on one line and an entry
+  # prettier wrapped across several, because a feature with dependencies is
+  # exactly the one whose call is too long to stay on one line, and a strip that
+  # only matched the short form would fail the removal test for a feature that
+  # is perfectly removable.
+  #
+  # It allows any suffix on the factory name, since the directory is named after
+  # the feature rather than after the factory, and stops at the entry's own
+  # closing so it cannot swallow a neighbour. The lazy match means it ends at the
+  # FIRST `)` that ends a line, which is the entry's own in the shape this
+  # script produces — a nested call ending a line would confuse it, and that
+  # shows up as a removal-test failure rather than a silent pass.
   #
   # The backslash before @ is for perl, which would otherwise read @battle as
   # an array in the pattern and interpolate it to nothing.
   perl -0pi -e "s/^import (?:type )?\{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${target}"
-  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(.*\)[ \t]*,?[ \t]*\r?\n//mg" "${target}"
+  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(.*?(?:\)[[:space:]]*,?[[:space:]]*\n|^[[:space:]]*\}\)[[:space:]]*,?[[:space:]]*\n)//msg" "${target}"
 }
 
 # A guard nobody has seen fail is not a guard, and this one had never been seen
@@ -198,7 +202,12 @@ FIXTURE
 
   strip_from_composition_root agent "${fixture}"
 
-  if grep -qE "@battle-agents/agent|\bagent\w*\(\)" "${fixture}"; then
+  # The factory NAME at a call, not `agent\w*()`: the leftover this has to
+  # catch is `agentFeature({` — a wrapped call whose closing paren is not on the
+  # line it opened on — and a pattern that requires the paren on the same line
+  # does not see it. That is precisely the shape an earlier strip could not
+  # remove, and a self-test that cannot see it passes on a broken strip.
+  if grep -qE "@battle-agents/agent|\bagent\w*\(" "${fixture}"; then
     printf '  self-test: stripping agent left a reference behind:\n' >&2
     sed 's/^/    /' "${fixture}" >&2
     failures=1

@@ -7,7 +7,7 @@ import type {
   SessionRepository,
   SweepRepository,
 } from './hello.js';
-import type { SessionStatus } from './session.js';
+import type { SessionEndReason, SessionStatus } from './session.js';
 
 const NOW = '2026-09-24T12:00:00.000Z';
 const MINUTE_MS = 60_000;
@@ -57,6 +57,19 @@ class FakeSessionRepository implements SessionRepository {
 
   async findResumableSessions(): Promise<readonly ResumableSession[]> {
     return this.resumable;
+  }
+
+  readonly heartbeats: string[] = [];
+  readonly ended: string[] = [];
+
+  async heartbeat(sessionId: string): Promise<SessionStatus | undefined> {
+    this.heartbeats.push(sessionId);
+    return 'active';
+  }
+
+  async end(sessionId: string, _reason: SessionEndReason): Promise<SessionStatus | undefined> {
+    this.ended.push(sessionId);
+    return 'ended';
   }
 
   async createSession(): Promise<{ id: string }> {

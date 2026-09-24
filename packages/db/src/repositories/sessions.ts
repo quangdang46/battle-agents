@@ -1,8 +1,8 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
-import type { SessionStatus } from '../schema/index.js';
 import { agents, installations, projects, sessions } from '../schema/index.js';
+import type { SessionEndReason, SessionStatus } from '../schema/index.js';
 
 /**
  * Postgres storage for the session lifecycle.
@@ -142,6 +142,36 @@ export class DrizzleSessionRepository {
       .update(sessions)
       .set({ status: 'active', endedAt: null, lastHeartbeatAt: at })
       .where(eq(sessions.id, sessionId));
+  }
+
+  /**
+   * Touches a run that is still alive.
+   *
+   * The `status = 'active'` predicate is load-bearing: without it a heartbeat
+   * from a process that outlived its run would move an ended or abandoned
+   * session back to active, and the sweeper would never reap it again.
+   */
+  async heartbeat(sessionId: string, now: string): Promise<SessionStatus | undefined> {
+    const [row] = await this.#database
+      .update(sessions)
+      .set({ lastHeartbeatAt: new Date(now) })
+      .where(and(eq(sessions.id, sessionId), eq(sessions.status, 'active')))
+      .returning({ status: sessions.status });
+    return row?.status;
+  }
+
+  /** Ends a run. The character it played is untouched, by design. */
+  async end(
+    sessionId: string,
+    reason: SessionEndReason,
+    now: string,
+  ): Promise<SessionStatus | undefined> {
+    const [row] = await this.#database
+      .update(sessions)
+      .set({ status: 'ended', endReason: reason, endedAt: new Date(now) })
+      .where(and(eq(sessions.id, sessionId), eq(sessions.status, 'active')))
+      .returning({ status: sessions.status });
+    return row?.status;
   }
 }
 

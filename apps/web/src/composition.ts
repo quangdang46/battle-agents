@@ -9,6 +9,7 @@ import {
   createDatabasePool,
   DrizzleAgentRepository,
   DrizzleQuestRepository,
+  DrizzleSessionRepository,
 } from '@battle-agents/db';
 
 /**
@@ -52,6 +53,10 @@ export interface GameRuntimeDependencies {
    * failure that only shows up when somebody tries to play.
    */
   readonly questRepository: DrizzleQuestRepository;
+  /** Session storage. What makes the session actions exist at all: without it the
+   *  agent feature registers no session.heartbeat or session.end, and `discover`
+   *  says so rather than offering operations that throw. */
+  readonly sessionRepository: DrizzleSessionRepository;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -67,7 +72,10 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       // `extensions: [` where the strip pattern cannot see it. The test then
       // fails on a perfectly removable feature, which is how a contributor
       // learns to stop believing the test.
-      agentFeature({ repository: dependencies.agentRepository }),
+      agentFeature({
+        repository: dependencies.agentRepository,
+        sessionRepository: dependencies.sessionRepository,
+      }),
       questFeature({ repository: dependencies.questRepository }),
     ],
     store: dependencies.store,

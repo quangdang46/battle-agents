@@ -4,7 +4,7 @@ import {
   isWithinResumeGrace,
   nextSessionStatus,
 } from './session.js';
-import type { SessionStatus } from './session.js';
+import type { SessionEndReason, SessionStatus } from './session.js';
 
 /**
  * The HELLO handshake: an adapter announcing itself, and the server deciding
@@ -81,6 +81,25 @@ export interface SessionRepository {
   }): Promise<{ id: string }>;
 
   markSessionActive(sessionId: string, now: string): Promise<void>;
+
+  /**
+   * Records that a run is still alive.
+   *
+   * Refused for anything but an active session, and the refusal is the point: a
+   * heartbeat from a process that outlived its run must not resurrect a
+   * character that has moved on. The sweeper decides what went quiet; a
+   * heartbeat is evidence from the run itself and has no standing to undo that.
+   */
+  heartbeat(sessionId: string, now: string): Promise<SessionStatus | undefined>;
+
+  /**
+   * Ends a run, recording why.
+   *
+   * A run that ends is over even though its character is not — that is the
+   * whole reason sessions and agents are different things. A late heartbeat
+   * cannot reopen it.
+   */
+  end(sessionId: string, reason: SessionEndReason, now: string): Promise<SessionStatus | undefined>;
 }
 
 export interface ResumableSession {

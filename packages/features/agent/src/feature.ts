@@ -15,6 +15,8 @@ import {
   type AgentRepository,
   type StoredAgent,
 } from './repository.js';
+import type { SessionRepository } from './hello.js';
+import { SESSION_END_REASONS, type SessionEndReason } from './session.js';
 
 export const AGENT_REGISTERED = 'agent.registered';
 export const AGENT_REGISTRATION_REJECTED = 'agent.registration_rejected';
@@ -64,8 +66,17 @@ export interface AgentSummary {
  * to other features that react to `agent.registered`, which is the whole reason
  * features are not allowed to import one another — the reaction is the contract.
  */
-export function agentFeature(dependencies: { readonly repository: AgentRepository }): GameFeature {
-  const { repository } = dependencies;
+export function agentFeature(dependencies: {
+  readonly repository: AgentRepository;
+  /**
+   * Session storage. Optional, so a host that only registers characters can run
+   * without wiring storage it does not use: the session actions are then absent
+   * rather than registered and throwing. `discover` reports the difference, and
+   * a required dependency would force every caller to provide it.
+   */
+  readonly sessionRepository?: SessionRepository;
+}): GameFeature {
+  const { repository, sessionRepository } = dependencies;
 
   const registerAgent: CommandHandler<RegisterAgentPayload> = {
     type: 'agent.register',
@@ -116,6 +127,7 @@ export function agentFeature(dependencies: { readonly repository: AgentRepositor
       { name: AGENT_DESCRIBE, description: 'List the characters the caller owns.' },
     ],
     actionDefs: [
+      ...(sessionRepository === undefined ? [] : sessionActions(sessionRepository)),
       defineAction({
         id: 'agent.describe',
         permissions: [AGENT_DESCRIBE],
@@ -165,4 +177,53 @@ function rejection(
     actorId: ownerId,
     payload: { ownerId, name, reason } satisfies AgentRegistrationRejectedPayload,
   };
+}
+
+/**
+ * The actions a running session needs, or none at all.
+ *
+ * Returning an empty list rather than actions that throw keeps `discover` honest:
+ * a host with no session storage has no session operations, and saying so is
+ * what lets a caller find that out without triggering a failure.
+ */
+function sessionActions(sessionRepository: SessionRepository) {
+  return [
+    defineAction({
+      id: 'session.heartbeat',
+      permissions: ['session.heartbeat'],
+      run: async (input: { sessionId: string }, context) => {
+        const status = await sessionRepository.heartbeat(input.sessionId, context.now());
+        if (status === undefined) {
+          throw new Error(`session ${input.sessionId} is not running`);
+        }
+        return { sessionId: input.sessionId, status };
+      },
+    }),
+    defineAction({
+      id: 'session.end',
+      permissions: ['session.end'],
+      run: async (input: { sessionId: string; reason?: string }, context) => {
+        const reason = toEndReason(input.reason);
+        const status = await sessionRepository.end(input.sessionId, reason, context.now());
+        if (status === undefined) {
+          throw new Error(`session ${input.sessionId} is not running`);
+        }
+        return { sessionId: input.sessionId, status, reason };
+      },
+    }),
+  ];
+}
+
+/**
+ * An ending a session row can hold.
+ *
+ * Unrecognised input becomes 'crashed' rather than being passed through: a
+ * caller inventing a reason would otherwise write a value no reader of this
+ * codebase knows how to interpret, and the column is an enum precisely so that
+ * cannot happen quietly.
+ */
+function toEndReason(reason: string | undefined): SessionEndReason {
+  return SESSION_END_REASONS.includes(reason as SessionEndReason)
+    ? (reason as SessionEndReason)
+    : 'crashed';
 }
