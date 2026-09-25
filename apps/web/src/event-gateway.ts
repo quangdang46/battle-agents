@@ -1,5 +1,5 @@
-import { authenticate } from '@battle-agents/agent';
 import { isAuthenticationFailure } from '@battle-agents/api';
+import { authenticate } from '@battle-agents/db';
 import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
 import {

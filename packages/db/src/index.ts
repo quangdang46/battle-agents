@@ -7,6 +7,7 @@
  * importing them: the two sides agree on a contract, and apps/web — the only
  * place allowed to see both — is where that agreement is checked.
  */
+export * from './auth.js';
 export { and, eq, or, sql } from 'drizzle-orm';
 // Re-exported so a consumer can build a query without depending on drizzle
 // directly. A caller that needs to delete a row is doing infrastructure work

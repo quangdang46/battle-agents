@@ -11,14 +11,11 @@ export type {
   AgentSummary,
   RegisterAgentPayload,
 } from './feature.js';
-export { authenticate, AuthenticationError, readBearerToken } from './auth.js';
-export type {
-  AuthFailure,
-  AuthenticatedCaller,
-  AuthOptions,
-  CredentialRecord,
-  CredentialStore,
-} from './auth.js';
+// Verifying a bearer token against a credential is infrastructure and lives in
+// @battle-agents/db, so the transport can ask whether a request is
+// authenticated without importing a game concept. These four are the MODEL:
+// what a credential is, and the port the store must satisfy.
+export type { CredentialRecord } from './auth.js';
 export {
   CREDENTIAL_TOKEN_BYTES,
   DEFAULT_TOKEN_LIFETIME_MS,

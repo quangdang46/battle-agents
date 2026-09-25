@@ -1,4 +1,5 @@
-import { authenticate, issueCredential } from '@battle-agents/agent';
+import { issueCredential } from '@battle-agents/agent';
+import { authenticate } from '@battle-agents/db';
 import {
   agents,
   closeDatabasePool,

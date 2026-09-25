@@ -1,9 +1,5 @@
-import {
-  authenticate,
-  AuthenticationError,
-  hashToken,
-  issueCredential,
-} from '@battle-agents/agent';
+import { hashToken, issueCredential } from '@battle-agents/agent';
+import { authenticate, AuthenticationError } from '@battle-agents/db';
 import {
   agents,
   closeDatabasePool,
