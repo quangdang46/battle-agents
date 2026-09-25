@@ -9,6 +9,8 @@ import {
 } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
 
+import { bootstrapGameAccount } from './bootstrap.js';
+
 /**
  * Better Auth, and nothing else.
  *
@@ -36,6 +38,7 @@ export interface AuthEnvironment {
 }
 
 const LOCALHOST_URL = /^https?:\/\/localhost([:/]|$)/i;
+const GITHUB_PROVIDER_ID = 'github';
 
 /**
  * Reads the auth configuration from the environment, or explains what is wrong.
@@ -145,6 +148,57 @@ export function createAuth(database: Database, environment: AuthEnvironment) {
         clientSecret: environment.githubClientSecret,
       },
     },
+    // The first GitHub login is when a game account comes into existence, and
+    // this is the hook that knows it: the ACCOUNT row is where the provider's own
+    // id lands, and the game account is keyed on that. The user hook cannot do
+    // it, because the record it receives is Better Auth's internal user with no
+    // provider id in it.
+    //
+    // It was unwired for a while and nothing caught it. The function existed,
+    // was correct, and had a green e2e test — a test that calls it directly,
+    // which proves the function and says nothing about whether anything calls
+    // it. A comment inside the function even claimed the row was created here,
+    // so the code read as wired. A real login created the Better Auth user and
+    // no game account, and the dashboard had nothing to read.
+    databaseHooks: {
+      account: {
+        create: {
+          after: (account) => linkAuthAccountToGameAccount(database, account),
+        },
+      },
+    },
+  });
+}
+
+/** The row of the `account` table that Better Auth creates, as this hook sees it. */
+export interface LinkedAuthAccount {
+  readonly userId: string;
+  readonly providerId: string;
+  readonly accountId: string;
+}
+
+/**
+ * A freshly linked auth account becomes a game account.
+ *
+ * Exported so the wiring can be tested rather than trusted. The version this
+ * replaces was called by a test and by nothing else, which is the shape that
+ * let a real login create an auth user and no game account while every test
+ * stayed green.
+ *
+ * Only GitHub identifies a human to this project. A passkey or an email link
+ * arriving later must not create a second identity, and must not create a game
+ * account keyed on an id that is not a GitHub one.
+ */
+export async function linkAuthAccountToGameAccount(
+  database: Database,
+  account: LinkedAuthAccount,
+): Promise<void> {
+  if (account.providerId !== GITHUB_PROVIDER_ID) return;
+  await bootstrapGameAccount(database, {
+    authUserId: account.userId,
+    githubId: account.accountId,
+    login: account.accountId,
+    avatarUrl: null,
   });
 }
 
