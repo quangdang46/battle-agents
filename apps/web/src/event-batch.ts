@@ -1,6 +1,8 @@
 import { AgentEventSchema, PROTOCOL_VERSION } from '@battle-agents/protocol';
 import type { AgentEvent } from '@battle-agents/protocol';
 
+import { DEFAULT_BATCH_LIMITS, type BatchLimits } from '@battle-agents/protocol';
+
 /**
  * Batching for the telemetry plane, and the batch parser that guards the door.
  *
@@ -18,33 +20,6 @@ import type { AgentEvent } from '@battle-agents/protocol';
  * agent believes it sent and the log does not have. Both failure modes are worse
  * than an honest "slow down", which is what 413 + `Retry-After` says.
  */
-
-/** The three batching limits plus the backoff the refusal advertises. */
-export interface BatchLimits {
-  /** How long the client waits for more events before flushing. */
-  readonly flushIntervalMs: number;
-  /** How many events the client puts in one batch before flushing early. */
-  readonly maxBatchEvents: number;
-  /** Above this the server refuses the batch outright (413 + Retry-After). */
-  readonly maxRejectEvents: number;
-  /** The `Retry-After` a refused batch advertises, in whole seconds. */
-  readonly retryAfterSeconds: number;
-}
-
-/**
- * The plan's starting values, as the fallback when the environment is silent.
- *
- * These are DEFAULTS, applied only when an env var is absent. They are the
- * floor a fresh install runs on, not a ceiling baked into the request path: the
- * values actually used come from `readBatchLimits`, and a caller can hold a
- * different `BatchLimits` in memory without touching these.
- */
-export const DEFAULT_BATCH_LIMITS: BatchLimits = {
-  flushIntervalMs: 250,
-  maxBatchEvents: 50,
-  maxRejectEvents: 100,
-  retryAfterSeconds: 1,
-};
 
 // Not NodeJS.ProcessEnv: Next.js augments that type to REQUIRE NODE_ENV, so every
 // caller and test would have to supply a variable this reader does not use. The
@@ -212,63 +187,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// ── client-side buffer ───────────────────────────────────────────────────────
-
-export interface EventBufferOptions {
-  /** Injectable so a test can advance time without sleeping. */
-  readonly now?: () => number;
-}
-
-/**
- * The adapter-side buffer: accumulates events and hands back a batch.
- *
- * Pure by construction. It has no timer of its own; the caller drives it by
- * calling `flushIfDue()` on whatever cadence it already has (a real adapter
- * uses a 250ms interval), and `push()` returns a batch by itself the moment the
- * buffer reaches `maxBatchEvents`. That split keeps the timing decision in the
- * caller and the batching decision here, and it means the unit tests can prove
- * the 250ms boundary by moving an injected clock rather than by waiting.
- */
-export class EventBuffer {
-  readonly #limits: BatchLimits;
-  readonly #now: () => number;
-  #events: AgentEvent[] = [];
-  #firstBufferedAt: number | undefined;
-
-  constructor(limits: BatchLimits, options: EventBufferOptions = {}) {
-    this.#limits = limits;
-    this.#now = options.now ?? (() => Date.now());
-  }
-
-  /** Adds an event, returning a batch if this push filled the buffer. */
-  push(event: AgentEvent): readonly AgentEvent[] | undefined {
-    if (this.#events.length === 0) {
-      this.#firstBufferedAt = this.#now();
-    }
-    this.#events.push(event);
-    return this.#events.length >= this.#limits.maxBatchEvents ? this.flush() : undefined;
-  }
-
-  /** Returns a batch if the flush interval has elapsed since the first event. */
-  flushIfDue(): readonly AgentEvent[] | undefined {
-    if (this.#events.length === 0 || this.#firstBufferedAt === undefined) {
-      return undefined;
-    }
-    return this.#now() - this.#firstBufferedAt >= this.#limits.flushIntervalMs
-      ? this.flush()
-      : undefined;
-  }
-
-  /** Returns whatever is buffered, empty or not, and resets the window. */
-  flush(): readonly AgentEvent[] {
-    const batch = this.#events;
-    this.#events = [];
-    this.#firstBufferedAt = undefined;
-    return batch;
-  }
-
-  /** How many events are waiting. */
-  get size(): number {
-    return this.#events.length;
-  }
-}
+// The buffer, its limits and the defaults moved to @battle-agents/protocol,
+// because an adapter has to use the same batching rules and the dependency
+// rules stop it importing this module. They are re-exported here so existing
+// imports in the web app keep working, but the definition is upstream now and
+// there is one copy of it.
+export {
+  DEFAULT_BATCH_LIMITS,
+  EventBuffer,
+  type BatchLimits,
+  type EventBufferOptions,
+} from '@battle-agents/protocol';

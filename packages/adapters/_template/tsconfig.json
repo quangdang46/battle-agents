@@ -2,7 +2,12 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // The base sets types: [] on purpose, so a library package does not acquire
+    // a Node assumption. An adapter IS a Node process: it polls files, sets an
+    // interval and reads the user's config, so it opts back in. Every adapter
+    // needs this line and it is the first thing that goes missing in a new one.
+    "types": ["node"]
   },
   "references": [
     {

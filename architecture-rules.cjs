@@ -251,6 +251,46 @@ function listSourceFiles(repoRoot) {
   return files.sort((left, right) => left.path.localeCompare(right.path));
 }
 
+/**
+ * The package a repo-relative path belongs to: everything up to and including
+ * the leaf package directory, so `packages/adapters/claude/src/parser.ts` and
+ * `packages/adapters/claude/src/index.ts` share `packages/adapters/claude`.
+ *
+ * A package importing its own files is not crossing a layer. The rule set has
+ * to say so explicitly, because `no-adapter-game-code` lists 'adapter' among
+ * the forbidden targets to stop one adapter reaching into another, and without
+ * this that same rule flags an adapter importing a sibling file in its own
+ * directory. That is not a cosmetic difference: it would make "a new CLI is one
+ * subdirectory" impossible to keep, because any adapter with more than one file
+ * would fail the gate.
+ */
+function packageRootOf(repoRelativePath) {
+  const parts = repoRelativePath.split('/');
+  // FEATURES_DIR and ADAPTERS_DIR are full prefixes like 'packages/features',
+  // so the test is on the first two segments, not on a leaf name. Comparing
+  // the wrong thing here silently collapsed every feature into one package,
+  // and the exemption then swallowed feature-to-feature imports, which is the
+  // one thing the rule exists to catch.
+  const head = parts.slice(0, 2).join('/');
+  const featuresAt = head === FEATURES_DIR ? 1 : -1;
+  const adaptersAt = head === ADAPTERS_DIR ? 1 : -1;
+  const cut =
+    featuresAt === -1
+      ? adaptersAt
+      : adaptersAt === -1
+        ? featuresAt
+        : Math.min(featuresAt, adaptersAt);
+  if (cut === -1) {
+    // Not a nested package: apps/web, or a top-level package like core.
+    return parts.slice(0, 2).join('/');
+  }
+  return parts.slice(0, cut + 2).join('/');
+}
+
+function isSamePackage(fromPath, toPath) {
+  return packageRootOf(fromPath) === packageRootOf(toPath);
+}
+
 function classifyPath(repoRelativePath) {
   for (const layer of LAYERS) {
     const match = layer.instance.exec(repoRelativePath);
@@ -369,6 +409,13 @@ function checkImports({ files, packages }) {
         );
         continue;
       }
+      // An import that stays inside one package is not a layer crossing, and
+      // several rules list their own layer among the forbidden targets. Check
+      // this before consulting the rules, or a multi-file adapter cannot exist.
+      if (isSamePackage(file.path, target)) {
+        continue;
+      }
+
       const rule = FORBIDDEN.find((candidate) =>
         violatesRule(candidate, source, classifyPath(target)),
       );
