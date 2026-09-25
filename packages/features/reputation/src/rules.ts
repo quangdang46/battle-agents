@@ -41,9 +41,12 @@ const TRUST_FLOOR = 0;
  *     costs a maintainer their time as well as the solver theirs.
  *
  * The plan's worked example — 47 done, $8420 earned, 91% acceptance, 4.7 review
- * — lands at 8921 here, which is the shape of figure the plan was reaching
- * for. It is illustrative rather than a specification, so the numbers below are
- * chosen for a reason and written down, not reverse-engineered to reproduce it.
+ * — lands at 8929 here, which is the shape of figure the plan was reaching for.
+ * It is illustrative rather than a specification, so the numbers below are
+ * chosen for a reason and written down, not reverse-engineered to reproduce the
+ * plan's own 8,921. The one is not the other: they differ by eight points, and
+ * rules.test.ts pins the total so a weight change fails a test rather than
+ * leaving this line quietly wrong.
  */
 export function trustScore(record: ReputationRecord): number {
   const earned = Math.max(0, record.earnedCents) / 100;

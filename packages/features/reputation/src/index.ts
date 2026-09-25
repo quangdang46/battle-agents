@@ -1,7 +1,6 @@
 export { MAX_REVIEW_SCORE, TIER_NAMES } from './domain.js';
 export type { BountyTier, ReputationRecord, ReputationSummary, TierName } from './domain.js';
 export {
-  AGENT_REGISTERED,
   BATTLE_FINISHED,
   BOUNTY_COMPLETED,
   BOUNTY_FAILED,

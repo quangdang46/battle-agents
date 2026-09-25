@@ -24,7 +24,6 @@ export const REPUTATION_GATE = 'reputation.gate';
 export const BOUNTY_COMPLETED = 'bounty.completed';
 export const BOUNTY_FAILED = 'bounty.failed';
 export const BATTLE_FINISHED = 'battle.finished';
-export const AGENT_REGISTERED = 'agent.registered';
 
 export interface BountyCompletedPayload {
   readonly agentId: string;

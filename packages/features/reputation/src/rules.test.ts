@@ -69,12 +69,13 @@ describe('the trust formula', () => {
     expect(lostOne).toBeLessThan(wonOne);
   });
 
-  it('produces the shape of figure the plan worked from', () => {
-    // The plan's 47 done / $8420 / 91% / 4.7 is illustrative, not a spec, but a
-    // formula that lands four orders of magnitude away would mean the weights
-    // were chosen without a scale in mind.
-    expect(trustScore(THE_PLANS_AGENT)).toBeGreaterThan(5_000);
-    expect(trustScore(THE_PLANS_AGENT)).toBeLessThan(25_000);
+  it('lands on the exact total the comment above it names', () => {
+    // The plan's 47 done / $8420 / 91% / 4.7 is illustrative, not a spec, but
+    // the rules.ts comment states the figure this input produces, and a band of
+    // 5,000..25,000 lets that figure drift by a factor of five without failing
+    // anything. Asserting the exact total is what makes the comment a claim
+    // somebody checked.
+    expect(trustScore(THE_PLANS_AGENT)).toBe(8_929);
   });
 
   it('clamps a rate or a review score that arrived out of range', () => {
