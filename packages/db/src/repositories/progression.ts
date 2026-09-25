@@ -168,7 +168,11 @@ export class DrizzleProgressionRepository implements ProgressionStore {
     await this.database
       .update(agentStats)
       .set({
-        skillsJson: {},
+        // `skills_json` is deliberately absent. The column holds a skill map
+        // that `ProgressionRow` does not carry, so a save has nothing to say
+        // about it — and writing `{}` on every award destroys the map the
+        // instant anything populates it. Leaving the column out of the update
+        // is what "the feature does not own this" has to mean in SQL.
         build: progress.build,
         // The column is typed as a mutable array while the feature's port hands
         // out a readonly one, so the copy is what makes the two agree. A cast

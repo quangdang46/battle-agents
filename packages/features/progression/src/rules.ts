@@ -25,16 +25,32 @@
  * A token economy would reward spending tokens to earn experience for spending
  * tokens. It is the one design in this plan that would make the product worse
  * the more people used it.
+ *
+ * The name is not always the whole condition — `battle.finished` pays only when
+ * the payload says the battle was won — so a lookup that finds a row is not yet
+ * an award. `qualifies` is what turns the row into a decision.
  */
 export const OUTCOME_TYPES = [
   'bounty.completed',
   'pr.merged',
   'test.passed',
   'session.recovered',
-  'battle.won',
+  'battle.finished',
 ] as const;
 
 export type OutcomeType = (typeof OUTCOME_TYPES)[number];
+
+/**
+ * A condition the event's payload must satisfy before the row pays.
+ *
+ * A field name and the one value that satisfies it, rather than a predicate
+ * function. `progression.awards` spreads a row into its reply, so a function
+ * here would travel with it and cross the wire as a value nothing can call.
+ */
+export interface OutcomeCondition {
+  readonly field: string;
+  readonly equals: boolean;
+}
 
 /**
  * One outcome, described once.
@@ -55,6 +71,13 @@ export interface Outcome {
   readonly xp: number;
   readonly build: Exclude<Build, 'generalist'>;
   readonly weight: number;
+  /**
+   * What the payload has to carry for this row to pay, when the event name
+   * alone does not decide it. `battle.finished` arrives for a loss as well as a
+   * win, and an award table keyed only on the event name would hand a defeated
+   * agent the same five hundred experience as a victorious one.
+   */
+  readonly requires?: OutcomeCondition;
 }
 
 export const OUTCOMES: Readonly<Record<OutcomeType, Outcome>> = {
@@ -62,8 +85,36 @@ export const OUTCOMES: Readonly<Record<OutcomeType, Outcome>> = {
   'pr.merged': { xp: 500, build: 'refactorer', weight: 1 },
   'test.passed': { xp: 100, build: 'tester', weight: 1 },
   'session.recovered': { xp: 150, build: 'debugger', weight: 1 },
-  'battle.won': { xp: 500, build: 'infrastructure', weight: 1 },
+  'battle.finished': {
+    xp: 500,
+    build: 'infrastructure',
+    weight: 1,
+    requires: { field: 'won', equals: true },
+  },
 };
+
+/**
+ * Whether an outcome's row applies to the payload that arrived.
+ *
+ * False rather than an error, and checked before anything is written, so a
+ * defeat pays nothing AND leaves no behaviour signal. The second half is the
+ * one that matters: the table has no entry saying a lost battle is evidence of
+ * anything, and recording one anyway would make losing fights a route to an
+ * infrastructure build that winning them is supposed to be.
+ *
+ * An outcome with no condition always applies, which is what makes the field
+ * optional.
+ */
+export function qualifies(outcome: Outcome, payload: unknown): boolean {
+  const condition = outcome.requires;
+  if (condition === undefined) {
+    return true;
+  }
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+  return (payload as { [key: string]: unknown })[condition.field] === condition.equals;
+}
 
 /** What an outcome is worth, or undefined when the event is not one. */
 export function outcomeFor(eventType: string): Outcome | undefined {

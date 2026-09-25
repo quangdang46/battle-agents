@@ -8,7 +8,12 @@
  * NOT the commands and NOT the event names. An id here is what `act()` accepts,
  * and anything dispatched rather than acted on has no action id.
  */
-export const PROGRESSION_ACTION_IDS = ['progression.awards', 'progression.read'] as const;
+export const PROGRESSION_ACTION_IDS = [
+  'progression.awards',
+  'progression.gate',
+  'progression.read',
+  'progression.tiers',
+] as const;
 
 export type ProgressionActionId = (typeof PROGRESSION_ACTION_IDS)[number];
 

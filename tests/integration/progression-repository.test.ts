@@ -1,8 +1,10 @@
 import {
+  agentStats,
   closeDatabasePool,
   createDatabase,
   DrizzleAgentRepository,
   DrizzleProgressionRepository,
+  eq,
   users,
 } from '@battle-agents/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -22,6 +24,7 @@ import { Pool } from 'pg';
 const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 
 let pool: Pool;
+let database: ReturnType<typeof createDatabase>;
 let repository: DrizzleProgressionRepository;
 let agentId: string;
 
@@ -33,7 +36,7 @@ beforeAll(async () => {
     );
   }
   pool = new Pool({ connectionString, max: 4 });
-  const database = createDatabase(pool);
+  database = createDatabase(pool);
   repository = new DrizzleProgressionRepository(database);
   const agentRepository = new DrizzleAgentRepository(database);
   const agent = await agentRepository.create(
@@ -118,5 +121,35 @@ describe('the progression repository, over a real database', () => {
         '2026-09-25T00:02:00.000Z',
       ),
     ).rejects.toThrow();
+  });
+
+  it('leaves a skill map alone when it saves something else', async () => {
+    // `skills_json` is not a field of ProgressionRow, so a save has nothing to
+    // say about it. A column is not the absence of a writer: this one is
+    // reserved for the independent-skills model, and writing `{}` on every
+    // award would erase a map the moment anything populated it — silently,
+    // because until then nothing observes the loss.
+    const now = '2026-09-25T00:03:00.000Z';
+    const skills = { coding: 7, debugging: 3 };
+    await database
+      .update(agentStats)
+      .set({ skillsJson: skills })
+      .where(eq(agentStats.agentId, agentId));
+
+    await repository.save({
+      agentId,
+      xp: 900,
+      level: 3,
+      build: 'tester',
+      history: [{ build: 'tester', weight: 1, at: now }],
+      updatedAt: now,
+    });
+
+    const [row] = await database
+      .select({ skillsJson: agentStats.skillsJson })
+      .from(agentStats)
+      .where(eq(agentStats.agentId, agentId))
+      .limit(1);
+    expect(row?.skillsJson).toEqual(skills);
   });
 });

@@ -4,8 +4,16 @@ import { describe, expect, it } from 'vitest';
 
 import { AGENT_LEVEL_UP, type AgentProgress } from './domain.js';
 import { isNoSuchProgress, type ProgressionRepository } from './repository.js';
-import { apply, progressionFeature } from './feature.js';
-import { DEFAULT_BUILD, OUTCOMES } from './rules.js';
+import { apply, progressionFeature, type GateDecision, type LevelGateView } from './feature.js';
+import {
+  DEFAULT_BUILD,
+  DEFAULT_BUILD_WEIGHTS,
+  LEVEL_GATES,
+  meetsGate,
+  OUTCOMES,
+  totalXpToReach,
+  type BuildWeights,
+} from './rules.js';
 
 const NOW = '2026-09-24T12:00:00.000Z';
 const AGENT = 'agent-1';
@@ -42,7 +50,7 @@ class InMemoryProgressionRepository implements ProgressionRepository {
   }
 }
 
-function harness(): {
+function harness(weights?: BuildWeights): {
   runtime: Runtime;
   repository: InMemoryProgressionRepository;
   seen: GameEvent[];
@@ -52,7 +60,9 @@ function harness(): {
   const seen: GameEvent[] = [];
   bus.subscribe((event) => seen.push(event));
   const runtime = createRuntime({
-    extensions: [progressionFeature({ repository })],
+    extensions: [
+      progressionFeature(weights === undefined ? { repository } : { repository, weights }),
+    ],
     store: new InMemoryStateStore(),
     bus,
     now: () => NOW,
@@ -60,12 +70,16 @@ function harness(): {
   return { runtime, repository, seen };
 }
 
-function outcomeEvent(type: string, agentId: string | null = AGENT): GameEvent {
+function outcomeEvent(
+  type: string,
+  agentId: string | null = AGENT,
+  extra: Record<string, unknown> = {},
+): GameEvent {
   return {
     type,
     occurredAt: NOW,
     actorId: 'system',
-    payload: agentId === null ? {} : { agentId },
+    payload: agentId === null ? { ...extra } : { agentId, ...extra },
   };
 }
 
@@ -141,7 +155,7 @@ describe('a failed run still teaches', () => {
     await runtime.emit(outcomeEvent('bounty.completed'));
     const before = repository.rows.get(AGENT);
 
-    for (const type of ['session.recovered', 'battle.won', 'test.passed']) {
+    for (const type of ['session.recovered', 'test.passed']) {
       await runtime.emit(outcomeEvent(type));
     }
 
@@ -149,6 +163,54 @@ describe('a failed run still teaches', () => {
     expect(repository.rows.size).toBe(1);
     expect(after?.xp).toBeGreaterThan(before?.xp ?? 0);
     expect(after?.agentId).toBe(AGENT);
+  });
+});
+
+describe('a battle pays for winning, not for happening', () => {
+  it('pays the win bonus when the payload says the battle was won', async () => {
+    const { runtime, repository } = harness();
+
+    await runtime.emit(outcomeEvent('battle.finished', AGENT, { won: true }));
+
+    const progress = repository.rows.get(AGENT);
+    expect(progress?.xp).toBe(OUTCOMES['battle.finished'].xp);
+    expect(progress?.build).toBe('infrastructure');
+  });
+
+  it('pays nothing for a loss, and leaves the character where it was', async () => {
+    // The trap in the rename: awardFor used to look at event.type alone, so
+    // subscribing to battle.finished as it is named in the plan would have
+    // handed a defeated agent the same five hundred as a victorious one.
+    const { runtime, repository } = harness();
+    await runtime.emit(outcomeEvent('test.passed'));
+    const before = repository.rows.get(AGENT);
+
+    await runtime.emit(outcomeEvent('battle.finished', AGENT, { won: false }));
+
+    const after = repository.rows.get(AGENT);
+    expect(after?.xp).toBe(before?.xp);
+    expect(after?.history).toHaveLength(before?.history.length ?? 0);
+    // And the loss is not evidence for anything: an infrastructure build from
+    // a defeat is a character the classifier was never told about.
+    expect(after?.build).toBe('tester');
+  });
+
+  it('pays nothing for a battle whose result nobody recorded', async () => {
+    const { runtime, repository } = harness();
+
+    await runtime.emit(outcomeEvent('battle.finished'));
+
+    expect(repository.rows.size).toBe(0);
+  });
+
+  it('no longer pays an event called battle.won', async () => {
+    // The name the plan does not use. If it ever pays again, two spellings of
+    // one event are live and only the one a real emitter sends can work.
+    const { runtime, repository } = harness();
+
+    await runtime.emit(outcomeEvent('battle.won'));
+
+    expect(repository.rows.size).toBe(0);
   });
 });
 
@@ -211,6 +273,155 @@ describe('reading progress', () => {
         { eventType: 'tokens.spent' },
       ),
     ).resolves.toMatchObject({ xp: 0, recognised: false });
+  });
+
+  it('reports the condition a battle has to meet, so a caller can predict it', async () => {
+    const { runtime } = harness();
+
+    // The row is spread into the reply, so a predicate function in the table
+    // would cross the wire as a value nothing can call. What comes back is
+    // data: the field, and the one value that satisfies it.
+    await expect(
+      runtime.runAction<{ eventType: string }, { requires?: { field: string; equals: boolean } }>(
+        'progression.awards',
+        { eventType: 'battle.finished' },
+      ),
+    ).resolves.toMatchObject({ requires: { field: 'won', equals: true } });
+  });
+});
+
+describe('a level is access, and a gate is the question that enforces it', () => {
+  const GATE_LEVEL = 5;
+
+  it('refuses one level below a gate and allows at it', async () => {
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('test.passed'));
+    await runtime.emit(outcomeEvent('test.passed'));
+    // 200 experience is level 2, so the level-5 gate is out of reach.
+    const below = await runtime.runAction<
+      { agentId: string; requiredLevel: number },
+      { allowed: boolean; level: number; unlocks: string | null }
+    >('progression.gate', { agentId: AGENT, requiredLevel: GATE_LEVEL });
+    expect(below).toMatchObject({ allowed: false, level: 2, unlocks: 'advanced bounties' });
+
+    // Walk up to exactly the gate from the curve rather than a number written
+    // here, so retuning the curve does not quietly make this test a lie.
+    const stillNeeded = totalXpToReach(GATE_LEVEL) - 200;
+    for (let index = 0; index < stillNeeded / OUTCOMES['test.passed'].xp; index += 1) {
+      await runtime.emit(outcomeEvent('test.passed'));
+    }
+
+    const at = await runtime.runAction<
+      { agentId: string; requiredLevel: number },
+      { allowed: boolean; level: number }
+    >('progression.gate', { agentId: AGENT, requiredLevel: GATE_LEVEL });
+    expect(at).toMatchObject({ allowed: true, level: GATE_LEVEL });
+  });
+
+  it('answers for a character nobody has heard of, rather than refusing', async () => {
+    // A gate that throws is a gate that fails open: every caller wrapping the
+    // call defensively turns the exception into "allow". The character is level
+    // 1, and the only question is whether 1 is enough — which it is not.
+    const { runtime } = harness();
+
+    await expect(
+      runtime.runAction<{ agentId: string; requiredLevel: number }, GateDecision>(
+        'progression.gate',
+        { agentId: 'never-seen', requiredLevel: 5 },
+      ),
+    ).resolves.toMatchObject({ allowed: false, level: 1, unlocks: 'advanced bounties' });
+  });
+
+  it('says nothing is unlocked at a level the ladder does not name', async () => {
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    await expect(
+      runtime.runAction<{ agentId: string; requiredLevel: number }, GateDecision>(
+        'progression.gate',
+        { agentId: AGENT, requiredLevel: 7 },
+      ),
+    ).resolves.toMatchObject({ allowed: false, unlocks: null });
+  });
+
+  it('lists the ladder, so a client renders the gates rather than hardcoding them', async () => {
+    const { runtime } = harness();
+
+    const tiers = await runtime.runAction<unknown, LevelGateView[]>('progression.tiers', {});
+
+    expect(tiers.length).toBeGreaterThan(0);
+    expect(tiers).toEqual(
+      LEVEL_GATES.map((gate) => ({ level: gate.level, unlocks: gate.unlocks })),
+    );
+  });
+
+  it('agrees with the rules it wraps, at every level on the ladder', async () => {
+    // The action is a transport, not a second opinion. A gate whose answer
+    // disagreed with meetsGate would be worse than having no gate at all.
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('bounty.completed'));
+    const { level } = await runtime.runAction<
+      { agentId: string; requiredLevel: number },
+      GateDecision
+    >('progression.gate', {
+      agentId: AGENT,
+      requiredLevel: 1,
+    });
+
+    for (const gate of LEVEL_GATES) {
+      const decision = await runtime.runAction<
+        { agentId: string; requiredLevel: number },
+        { allowed: boolean }
+      >('progression.gate', { agentId: AGENT, requiredLevel: gate.level });
+      expect(decision.allowed, gate.unlocks).toBe(meetsGate(level, gate.level));
+    }
+  });
+});
+
+describe('a retune changes what the feature believes, not only what it says', () => {
+  it('stores the build the configured weights produce', async () => {
+    // Two recoveries and one bounty: a debugger by default, a builder once the
+    // retune says a shipped bounty is stronger evidence than a repair.
+    const builderHeavy: BuildWeights = { ...DEFAULT_BUILD_WEIGHTS, builder: 5 };
+    const { runtime, repository } = harness(builderHeavy);
+
+    await runtime.emit(outcomeEvent('session.recovered'));
+    await runtime.emit(outcomeEvent('session.recovered'));
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    // The row, not the classification. apply() used to call classifyBuild with
+    // no weights, so a retune reached explainBuild and changed nothing the
+    // feature had actually decided.
+    expect(repository.rows.get(AGENT)?.build).toBe('builder');
+  });
+
+  it('stores the opposite build under the default weights, from the same history', async () => {
+    const { runtime, repository } = harness();
+
+    await runtime.emit(outcomeEvent('session.recovered'));
+    await runtime.emit(outcomeEvent('session.recovered'));
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    expect(repository.rows.get(AGENT)?.build).toBe('debugger');
+  });
+
+  it('never reports a build that disagrees with its own classification', async () => {
+    // The defect this fixes was visible on the read: `build` came from storage
+    // and `classification.build` was computed with the custom weights, so the
+    // two parted the moment anyone supplied non-default ones.
+    const builderHeavy: BuildWeights = { ...DEFAULT_BUILD_WEIGHTS, builder: 5 };
+    const { runtime } = harness(builderHeavy);
+    await runtime.emit(outcomeEvent('session.recovered'));
+    await runtime.emit(outcomeEvent('session.recovered'));
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    const summary = await runtime.runAction<
+      { agentId: string },
+      { build: string; classification: { build: string } }
+    >('progression.read', { agentId: AGENT });
+
+    expect(summary.build).toBe('builder');
+    expect(summary.classification.build).toBe(summary.build);
   });
 });
 

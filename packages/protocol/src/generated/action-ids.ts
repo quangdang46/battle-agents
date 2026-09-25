@@ -24,7 +24,8 @@ export type QuestActionId =
   'quest.create' | 'quest.list' | 'quest.claim' | 'quest.submit' | 'quest.admin.revoke';
 
 /** progression */
-export type ProgressionActionId = 'progression.awards' | 'progression.read';
+export type ProgressionActionId =
+  'progression.awards' | 'progression.gate' | 'progression.read' | 'progression.tiers';
 
 /** reputation */
 export type ReputationActionId = 'reputation.gate' | 'reputation.read' | 'reputation.tiers';
@@ -34,7 +35,9 @@ export type RegisteredActionId =
   | 'agent.describe'
   | 'agent.read'
   | 'progression.awards'
+  | 'progression.gate'
   | 'progression.read'
+  | 'progression.tiers'
   | 'quest.admin.revoke'
   | 'quest.claim'
   | 'quest.create'
@@ -63,7 +66,9 @@ export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'agent.describe',
   'agent.read',
   'progression.awards',
+  'progression.gate',
   'progression.read',
+  'progression.tiers',
   'quest.admin.revoke',
   'quest.claim',
   'quest.create',

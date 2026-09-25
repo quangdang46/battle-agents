@@ -13,6 +13,7 @@ import {
   OUTCOMES,
   OUTCOME_TYPES,
   outcomeFor,
+  qualifies,
   totalXpToReach,
   xpToAdvanceFrom,
   type BehaviourSignal,
@@ -43,6 +44,15 @@ describe('experience comes from outcomes, and only outcomes', () => {
     expect(outcomeFor('session.heartbeat')).toBeUndefined();
   });
 
+  it('lists a battle under the name the plan uses, and no longer under a name it does not', () => {
+    // The brief and section 24 both name battle.finished, and reputation already
+    // models that exact event. A second spelling for the same thing means the
+    // two features subscribe to different events and neither one ever fires.
+    expect(OUTCOME_TYPES).toContain('battle.finished');
+    expect(isOutcomeType('battle.finished')).toBe(true);
+    expect(isOutcomeType('battle.won')).toBe(false);
+  });
+
   it('has no way to pay from a token count', () => {
     // The structural claim, asserted. Experience is a lookup in a closed table
     // and nothing else, so a token event cannot reach it. If a future edit adds
@@ -65,6 +75,38 @@ describe('experience comes from outcomes, and only outcomes', () => {
     }
     for (const type of ['bounty.claimed', 'agent.level_up', 'nonsense']) {
       expect(isOutcomeType(type), type).toBe(false);
+    }
+  });
+});
+
+describe('an event name is not always the whole condition', () => {
+  const battle = OUTCOMES['battle.finished'];
+
+  it('pays a won battle and not a lost one', () => {
+    expect(qualifies(battle, { agentId: 'a-1', won: true })).toBe(true);
+    expect(qualifies(battle, { agentId: 'a-1', won: false })).toBe(false);
+  });
+
+  it('pays nothing when the payload never says how the battle went', () => {
+    // Absent is not won. A battle whose result nobody recorded is the one case
+    // where guessing would hand experience to an agent that may have lost it.
+    expect(qualifies(battle, { agentId: 'a-1' })).toBe(false);
+    expect(qualifies(battle, undefined)).toBe(false);
+    expect(qualifies(battle, null)).toBe(false);
+    expect(qualifies(battle, 'battle.finished')).toBe(false);
+  });
+
+  it('is not fooled by a won that is not a boolean', () => {
+    expect(qualifies(battle, { won: 'true' })).toBe(false);
+    expect(qualifies(battle, { won: 1 })).toBe(false);
+  });
+
+  it('leaves an outcome with no condition always applicable', () => {
+    for (const [type, outcome] of Object.entries(OUTCOMES)) {
+      if (type === 'battle.finished') continue;
+      expect(outcome.requires, type).toBeUndefined();
+      expect(qualifies(outcome, undefined), type).toBe(true);
+      expect(qualifies(outcome, { anything: 'at all' }), type).toBe(true);
     }
   });
 });

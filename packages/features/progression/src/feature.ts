@@ -7,15 +7,20 @@ import {
   classifyBuild,
   DEFAULT_BUILD_WEIGHTS,
   explainBuild,
+  LEVEL_GATES,
   levelForXp,
+  meetsGate,
   outcomeFor,
   OUTCOME_TYPES,
+  qualifies,
   type BehaviourSignal,
   type BuildWeights,
 } from './rules.js';
 
 export const PROGRESSION_READ = 'progression.read';
 export const PROGRESSION_AWARDS = 'progression.awards';
+export const PROGRESSION_GATE = 'progression.gate';
+export const PROGRESSION_TIERS = 'progression.tiers';
 
 export interface ProgressionSummary {
   readonly agentId: string;
@@ -23,6 +28,22 @@ export interface ProgressionSummary {
   readonly level: number;
   readonly build: string;
   readonly classification: ReturnType<typeof explainBuild>;
+}
+
+/** What a caller asking "may this character have this?" is told. */
+export interface GateDecision {
+  readonly agentId: string;
+  readonly requiredLevel: number;
+  readonly allowed: boolean;
+  readonly level: number;
+  /** What the level being asked about unlocks, or null when nothing does. */
+  readonly unlocks: string | null;
+}
+
+/** The ladder, so a client can render the gates without hardcoding them. */
+export interface LevelGateView {
+  readonly level: number;
+  readonly unlocks: string;
 }
 
 export interface ProgressionDependencies {
@@ -64,13 +85,21 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
     if (outcome === undefined) {
       return;
     }
+    // The event name finds the row; the payload decides whether the row applies.
+    // A battle that was lost is dropped whole — no experience and no history
+    // entry — because the award table has nothing to say a defeat is evidence
+    // of, and a signal written anyway would let an agent collect the build by
+    // losing.
+    if (!qualifies(outcome, event.payload)) {
+      return;
+    }
     const agentId = agentIdOf(event);
     if (agentId === undefined) {
       return;
     }
 
     const before = await repository.ensure({ agentId }, context.now());
-    const after = apply(before, outcome, context.now());
+    const after = apply(before, outcome, context.now(), weights);
     if (after.xp === before.xp && after.level === before.level) {
       return;
     }
@@ -99,6 +128,8 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
     capabilities: [
       { name: PROGRESSION_READ, description: "Read a character's experience, level and build." },
       { name: PROGRESSION_AWARDS, description: 'Ask what an outcome is worth before it happens.' },
+      { name: PROGRESSION_GATE, description: 'Ask whether a character has reached a level.' },
+      { name: PROGRESSION_TIERS, description: 'List the levels and what each one unlocks.' },
     ],
     actionDefs: [
       defineAction({
@@ -116,7 +147,46 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
             : { eventType: input.eventType, ...outcome, recognised: true };
         },
       }),
+      defineAction({
+        id: 'progression.gate',
+        permissions: [PROGRESSION_GATE],
+        run: async (input: { agentId: string; requiredLevel: number }) =>
+          decideGate(repository, input.agentId, input.requiredLevel),
+      }),
+      defineAction({
+        id: 'progression.tiers',
+        permissions: [PROGRESSION_TIERS],
+        run: async () => LEVEL_GATES.map<LevelGateView>((gate) => ({ ...gate })),
+      }),
     ],
+  };
+}
+
+/**
+ * Whether a character has reached a level.
+ *
+ * Answers for an agent with no record rather than refusing, which is a
+ * deliberate difference from `progression.read`. A read is a character sheet,
+ * and a sheet for nobody has nothing to draw. A gate is a decision, and a
+ * decision a caller has to catch an exception to make is a gate that fails
+ * open — every defensive caller turns the error into "allow". A character
+ * nobody has heard of is level 1, and the only question here is whether level
+ * 1 is enough.
+ */
+async function decideGate(
+  repository: ProgressionRepository,
+  agentId: string,
+  requiredLevel: number,
+): Promise<GateDecision> {
+  const progress = await repository.find(agentId);
+  const level = progress?.level ?? levelForXp(0);
+  const gate = LEVEL_GATES.find((entry) => entry.level === requiredLevel);
+  return {
+    agentId,
+    requiredLevel,
+    allowed: meetsGate(level, requiredLevel),
+    level,
+    unlocks: gate?.unlocks ?? null,
   };
 }
 
@@ -151,6 +221,11 @@ async function summarize(
  * recomputed from the whole history on every award rather than adjusted, so a
  * mis-awarded outcome self-corrects instead of leaving a permanently wrong
  * specialisation behind.
+ *
+ * The weights belong on this signature and not only on the read path. A build
+ * stored under one set of weights and reported under another is a record that
+ * disagrees with itself, and a retune that only reaches `explainBuild` changes
+ * what the feature SAYS about a character without changing what it BELIEVES.
  */
 export function apply(
   before: AgentProgress,
@@ -160,6 +235,7 @@ export function apply(
     readonly weight: number;
   },
   now: string,
+  weights: BuildWeights = DEFAULT_BUILD_WEIGHTS,
 ): AgentProgress {
   const history: BehaviourSignal[] = [
     ...before.history,
@@ -170,7 +246,7 @@ export function apply(
     ...before,
     xp,
     level: levelForXp(xp),
-    build: classifyBuild(history),
+    build: classifyBuild(history, weights),
     history,
     updatedAt: now,
   };
