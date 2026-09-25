@@ -3,9 +3,6 @@ import { authenticate } from '@battle-agents/db';
 import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
 import {
-  closeDatabasePool,
-  createDatabase,
-  createDatabasePool,
   DrizzleAgentRepository,
   DrizzleCredentialStore,
   DrizzleProgressionRepository,
@@ -16,6 +13,8 @@ import {
   type Database,
 } from '@battle-agents/db';
 import { PROTOCOL_VERSION } from '@battle-agents/protocol';
+
+import { sharedRuntime } from './shared-runtime.js';
 
 import { readBatchLimits, type BatchLimits } from './event-batch.js';
 import { createEventRoutes } from './event-routes.js';
@@ -39,14 +38,13 @@ import type { HttpRequest, HttpResponse } from './routes.js';
  * become "we drop it", because dropping is a decision neither of them is in a
  * position to make.
  *
- * Why the gateway owns its own runtime rather than borrowing the one in
- * `routes.ts`. The hub has to be attached to the same bus the ingest runtime
- * publishes on, and borrowing a runtime that routes.ts builds privately would
- * mean reaching into it. The two runtimes share the durable store — the same
- * `event_log` table — and the event plane is otherwise self-contained. Folding
- * the two runtimes into one is a real simplification, but it belongs with the
- * work that makes the act path a first-class publisher, not with a bead whose
- * subject is the telemetry plane.
+ * The runtime and bus arrive from `sharedRuntime()`. This file used to build
+ * its own, and the paragraph that used to sit here argued for it: folding the
+ * two runtimes together "belongs with the work that makes the act path a
+ * first-class publisher". MCP is that work, and the fold is done — see
+ * `shared-runtime.ts` for why two buses were a correctness bug rather than an
+ * inefficiency, and `tests/integration/shared-runtime-fold.test.ts` for the
+ * assertion that holds them together.
  */
 
 export interface EventGatewayDependencies {
@@ -65,6 +63,20 @@ export interface EventGatewayDependencies {
   readonly authenticate?: (request: unknown) => Promise<{ readonly installationId: string }>;
 
   readonly database: Database;
+  /**
+   * The runtime and bus to publish on. Supplied by the app so the telemetry
+   * plane and the action plane share one bus; omitted by a test that wants an
+   * isolated runtime of its own.
+   *
+   * This is the seam that removed the two-bus defect. The gateway used to build
+   * its own runtime and its own `createInMemoryEventBus()`, which meant an event
+   * emitted by a game action through the Application API was published to a bus
+   * no subscriber was on. The gateway's own header had recorded the fold as
+   * belonging with the work that makes the act path a first-class publisher, and
+   * MCP is that work.
+   */
+  readonly runtime?: Runtime;
+  readonly bus?: EventBus;
   /** Resolved once here, at composition time, so a bad env var fails at startup. */
   readonly limits?: BatchLimits;
   /** Injectable so a test can pin the clock the token expiry is judged against. */
@@ -85,7 +97,7 @@ export interface EventGateway {
 export function createEventGateway(dependencies: EventGatewayDependencies): EventGateway {
   const limits = dependencies.limits ?? readBatchLimits(process.env);
 
-  const bus = createInMemoryEventBus();
+  const bus = dependencies.bus ?? createInMemoryEventBus();
   const store = new DrizzleStateStore(dependencies.database);
   const sessionRepository = new DrizzleSessionRepository(dependencies.database);
 
@@ -97,15 +109,17 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
     dependencies.authenticate ??
     ((): Promise<never> => Promise.reject(new Error('no authenticator was supplied')));
 
-  const runtime = createGameRuntime({
-    store,
-    bus,
-    agentRepository: new DrizzleAgentRepository(dependencies.database),
-    questRepository: new DrizzleQuestRepository(dependencies.database),
-    sessionRepository,
-    progressionRepository: new DrizzleProgressionRepository(dependencies.database),
-    reputationRepository: new DrizzleReputationRepository(dependencies.database),
-  });
+  const runtime =
+    dependencies.runtime ??
+    createGameRuntime({
+      store,
+      bus,
+      agentRepository: new DrizzleAgentRepository(dependencies.database),
+      questRepository: new DrizzleQuestRepository(dependencies.database),
+      sessionRepository,
+      progressionRepository: new DrizzleProgressionRepository(dependencies.database),
+      reputationRepository: new DrizzleReputationRepository(dependencies.database),
+    });
 
   // The snapshot is deliberately synchronous and deliberately empty of live
   // sessions. Synchronous because the hub takes a subscriber's snapshot and
@@ -207,16 +221,17 @@ let cached: { gateway: EventGateway; close: () => Promise<void> } | undefined;
 /**
  * The process-wide gateway, built on first use.
  *
- * Module scope for the same reason `sharedApi` is: a database pool is fine once
- * and fatal per request, and the hub has to be the SAME hub every request sees,
- * because a second one would be a second realtime plane with no events in it.
+ * The hub has to be the SAME hub every request sees, because a second one would
+ * be a second realtime plane with no events in it. The runtime and bus come from
+ * `sharedRuntime()` so they are also the ones the Application API acts through —
+ * that is the whole point of the fold, and it is why the gateway no longer opens
+ * a pool of its own.
  */
 export function sharedEventGateway(): EventGateway {
   if (cached !== undefined) {
     return cached.gateway;
   }
-  const pool = createDatabasePool();
-  const database = createDatabase(pool);
+  const { database, runtime, bus } = sharedRuntime();
   // The authenticator is the one thing here that needs the agent feature, and it
   // is supplied here rather than imported, so this file has no feature import and
   // the removal test can take the feature out without touching it. This function
@@ -224,6 +239,8 @@ export function sharedEventGateway(): EventGateway {
   // the decision of which features exist belongs.
   const gateway = createEventGateway({
     database,
+    runtime,
+    bus,
     authenticate: async (request) => {
       const caller = await authenticate(
         { store: new DrizzleCredentialStore(database), now: new Date().toISOString() },
@@ -232,7 +249,7 @@ export function sharedEventGateway(): EventGateway {
       return { installationId: caller.installationId };
     },
   });
-  cached = { gateway, close: () => closeDatabasePool(pool) };
+  cached = { gateway, close: () => Promise.resolve() };
   return gateway;
 }
 

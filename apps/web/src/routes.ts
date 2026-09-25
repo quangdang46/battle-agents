@@ -6,20 +6,8 @@ import {
 } from '@battle-agents/api';
 import { isRegisteredActionId } from '@battle-agents/protocol';
 import type { ApplicationApi } from '@battle-agents/api';
-import { createInMemoryEventBus } from '@battle-agents/core';
-import {
-  closeDatabasePool,
-  createDatabase,
-  createDatabasePool,
-  DrizzleAgentRepository,
-  DrizzleProgressionRepository,
-  DrizzleQuestRepository,
-  DrizzleReputationRepository,
-  DrizzleSessionRepository,
-  DrizzleStateStore,
-} from '@battle-agents/db';
 
-import { createGameRuntime } from './composition.js';
+import { closeSharedRuntime, sharedRuntime } from './shared-runtime.js';
 
 /**
  * The HTTP surface.
@@ -150,37 +138,30 @@ function describeFailure(error: unknown): HttpResponse {
 }
 
 /**
- * A process-wide runtime, built once.
+ * The Application API, over the process-wide runtime.
  *
- * Module scope on purpose: building it per request would open a database pool
- * per request, and a pool is the sort of thing that is fine in development and
- * fatal under load. It reads DATABASE_URL itself through the db package, which
- * is the only place that knows how a connection string is configured.
+ * The runtime, its bus and its pool all come from `sharedRuntime()` so that an
+ * action taken through this API publishes to the same bus the SSE stream is
+ * subscribed to. Building a second runtime here is what made game events
+ * invisible to spectators: this used to create its own
+ * `createInMemoryEventBus()`, which nothing else could see.
+ *
+ * The API itself is cached on top of the shared runtime rather than rebuilt per
+ * request, because it is a thin object over a runtime that is already shared and
+ * rebuilding it would allocate five closures per request for no gain.
  */
-let cached: { api: ApplicationApi; close: () => Promise<void> } | undefined;
+let cached: ApplicationApi | undefined;
 
 export function sharedApi(): ApplicationApi {
-  if (cached !== undefined) {
-    return cached.api;
+  if (cached === undefined) {
+    const { runtime, bus } = sharedRuntime();
+    cached = createApplicationApi(runtime, bus);
   }
-  const pool = createDatabasePool();
-  const database = createDatabase(pool);
-  const runtime = createGameRuntime({
-    store: new DrizzleStateStore(database),
-    bus: createInMemoryEventBus(),
-    agentRepository: new DrizzleAgentRepository(database),
-    questRepository: new DrizzleQuestRepository(database),
-    sessionRepository: new DrizzleSessionRepository(database),
-    progressionRepository: new DrizzleProgressionRepository(database),
-    reputationRepository: new DrizzleReputationRepository(database),
-  });
-  const api = createApplicationApi(runtime);
-  cached = { api, close: () => closeDatabasePool(pool) };
-  return api;
+  return cached;
 }
 
-/** Releases the pool. For a graceful shutdown, not for per-request cleanup. */
+/** Releases the runtime's pool. For a graceful shutdown, not per request. */
 export async function closeSharedApi(): Promise<void> {
-  await cached?.close();
   cached = undefined;
+  await closeSharedRuntime();
 }
