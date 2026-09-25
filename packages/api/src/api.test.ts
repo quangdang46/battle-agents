@@ -73,45 +73,52 @@ describe('the application API', () => {
     );
   });
 
-  it('grows the registry when a feature is added, without growing the surface', () => {
+  it('grows the registry when a feature is added, without growing the surface', async () => {
     const before = Object.keys(createApplicationApi(runtimeWith(2)));
     const after = Object.keys(createApplicationApi(runtimeWith(3)));
 
     expect(after.sort()).toEqual(before.sort());
-    expect(createApplicationApi(runtimeWith(3)).discover().domains).toHaveLength(3);
-    expect(createApplicationApi(runtimeWith(2)).discover().domains).toHaveLength(2);
+    await expect(createApplicationApi(runtimeWith(3)).discover()).resolves.toHaveProperty(
+      'domains',
+    );
+    expect((await createApplicationApi(runtimeWith(3)).discover()).domains).toHaveLength(3);
+    expect((await createApplicationApi(runtimeWith(2)).discover()).domains).toHaveLength(2);
   });
 
-  it('hands a connecting client the domains, not the whole catalog', () => {
+  it('hands a connecting client the domains, not the whole catalog', async () => {
     const { api } = harness(3);
 
-    expect(api.discover()).toEqual({ domains: ['progression', 'quest', 'reputation'] });
+    await expect(api.discover()).resolves.toEqual({
+      domains: ['progression', 'quest', 'reputation'],
+    });
   });
 
-  it('fetches one domain on request', () => {
+  it('fetches one domain on request', async () => {
     const { api } = harness(2);
 
-    const detail = api.discover('reputation').detail;
+    const detail = (await api.discover('reputation')).detail;
 
     expect(detail?.capabilities.map((each) => each.name)).toEqual(['reputation.read']);
     expect(detail?.actions.map((each) => each.id)).toEqual(['reputation.read']);
   });
 
-  it('refuses a domain it does not have, and names the ones it does', () => {
+  it('refuses a domain it does not have, and names the ones it does', async () => {
     const { api } = harness(2);
 
-    expect(() => api.discover('guild')).toThrow(UnknownDomainError);
-    expect(() => api.discover('guild')).toThrow(/quest, reputation/);
+    await expect(api.discover('guild')).rejects.toThrow(UnknownDomainError);
+    await expect(api.discover('guild')).rejects.toThrow(/quest, reputation/);
   });
 
-  it('searches within a domain by name fragment', () => {
+  it('searches within a domain by name fragment', async () => {
     const { api } = harness(2);
 
-    expect(api.search({ type: 'reputation' })).toEqual([{ id: 'reputation.read', name: 'read' }]);
-    expect(api.search({ type: 'reputation', name: 'rea' })).toEqual([
+    await expect(api.search({ type: 'reputation' })).resolves.toEqual([
       { id: 'reputation.read', name: 'read' },
     ]);
-    expect(api.search({ type: 'reputation', name: 'nothing' })).toEqual([]);
+    await expect(api.search({ type: 'reputation', name: 'rea' })).resolves.toEqual([
+      { id: 'reputation.read', name: 'read' },
+    ]);
+    await expect(api.search({ type: 'reputation', name: 'nothing' })).resolves.toEqual([]);
   });
 
   it('runs an action through act()', async () => {

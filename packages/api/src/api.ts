@@ -64,8 +64,22 @@ export interface Observer {
 }
 
 export interface ApplicationApi {
-  discover(domain?: string): Discovery;
-  search(query: SearchQuery): readonly SearchResult[];
+  /**
+   * Every method is async, including the two that could be synchronous.
+   *
+   * discover and search were declared sync because the first implementation
+   * held the object in the same heap. That made the interface un-implementable
+   * by anything else: an HTTP client cannot answer without awaiting, and the
+   * CLI had no client because of it. An interface named for a surface that
+   * only one process can provide is not a surface.
+   *
+   * The in-process implementation is async for the same reason; TypeScript
+   * does not let a function returning T stand in for one returning
+   * Promise<T>, so leaving it synchronous would have been a second, subtler
+   * version of the same problem.
+   */
+  discover(domain?: string): Promise<Discovery>;
+  search(query: SearchQuery): Promise<readonly SearchResult[]>;
   inspect(query: InspectQuery): Promise<unknown>;
   /**
    * Run a registered action.
@@ -150,7 +164,7 @@ export class UnknownDomainError extends Error {
  */
 export function createApplicationApi(runtime: Runtime): ApplicationApi {
   return {
-    discover(domain?: string): Discovery {
+    async discover(domain?: string): Promise<Discovery> {
       if (domain === undefined) {
         return { domains: runtime.domains() };
       }
@@ -159,7 +173,7 @@ export function createApplicationApi(runtime: Runtime): ApplicationApi {
       return { detail: { capabilities: detail.capabilities, actions: detail.actions } };
     },
 
-    search(query: SearchQuery): readonly SearchResult[] {
+    async search(query: SearchQuery): Promise<readonly SearchResult[]> {
       // Search is a name lookup over the catalog, so it never reaches a store
       // and never depends on a feature existing yet.
       const detail = runtime.describeDomain(query.type);

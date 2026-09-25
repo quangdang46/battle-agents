@@ -86,9 +86,11 @@ async function route(api: ApplicationApi, request: HttpRequest): Promise<HttpRes
 
   switch (`${request.method} ${url.pathname}`) {
     case 'GET /api/discover':
-      return json(200, api.discover(url.searchParams.get('domain') ?? undefined));
+      // Awaited, not wrapped. json() takes a value, and a Promise placed in a
+      // body serialises to {} — a response that looks fine and carries nothing.
+      return json(200, await api.discover(url.searchParams.get('domain') ?? undefined));
     case 'GET /api/search':
-      return json(200, api.search(searchFrom(url)));
+      return json(200, await api.search(searchFrom(url)));
     case 'GET /api/inspect':
       return json(
         200,
@@ -122,7 +124,7 @@ async function act(api: ApplicationApi, request: HttpRequest): Promise<HttpRespo
   if (!isRegisteredActionId(action)) {
     // The API owns this error wording; throwing its class keeps one message
     // rather than a terser second copy that says less to whoever reads it.
-    throw new UnknownActionError(action, api.discover().domains ?? []);
+    throw new UnknownActionError(action, (await api.discover()).domains ?? []);
   }
   return json(200, await api.act(action, input ?? {}));
 }

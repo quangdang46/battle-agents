@@ -151,9 +151,9 @@ export function createTools(): ReadonlyMap<Primitive, ToolDefinition> {
       inputSchema: actInput,
       // No outputSchema, and the reason is at the top of this function.
       inputJsonSchema: inputJsonOf(actInput),
-      handle: (context, input) => {
+      handle: async (context, input) => {
         if (!isRegisteredActionId(input.action)) {
-          throw new UnknownActionError(input.action, context.api.discover().domains ?? []);
+          throw new UnknownActionError(input.action, (await context.api.discover()).domains ?? []);
         }
         return context.api.act(input.action, input.input ?? {});
       },

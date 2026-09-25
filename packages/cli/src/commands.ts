@@ -86,13 +86,13 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
 
   if (first === 'discover') {
     const domain = rest[0];
-    return emit(domain === undefined ? api.discover() : api.discover(domain));
+    return emit(domain === undefined ? await api.discover() : await api.discover(domain));
   }
 
   if (first === 'status') {
     // A platform fact, not a game one: is anything registered, and is anything
     // degraded. It answers from the API, never from a local database.
-    const domains = api.discover().domains ?? [];
+    const domains = (await api.discover()).domains ?? [];
     return emit({
       domains,
       note:
@@ -103,7 +103,7 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
   }
 
   if (first === 'doctor') {
-    return doctor(api, emit);
+    return await doctor(api, emit);
   }
 
   if (PLATFORM_COMMANDS.has(first)) {
@@ -124,7 +124,7 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
   const actionId = `${first}.${verb}`;
   if (!resolved.offers(actionId)) {
     // The verb is not an action, so it is a filter: `quest list` lists.
-    const results = api.search({ type: first, name: verb });
+    const results = await api.search({ type: first, name: verb });
     if (results.length === 0) {
       throw new UsageError(
         `no "${verb}" under "${first}". This domain offers: ${describeActions(resolved.detail).join(', ')}`,
@@ -167,16 +167,16 @@ async function resolve(api: ApplicationApi, domain: string): Promise<Resolved> {
   // it answered without detail — and a caller should not be able to tell which.
   let discovery: Discovery;
   try {
-    discovery = api.discover(domain);
+    discovery = await api.discover(domain);
   } catch (error) {
     if (!(error instanceof UnknownDomainError)) {
       throw error;
     }
-    throw unknownDomain(domain, api.discover().domains ?? []);
+    throw unknownDomain(domain, (await api.discover()).domains ?? []);
   }
 
   if (discovery.detail === undefined) {
-    throw unknownDomain(domain, api.discover().domains ?? []);
+    throw unknownDomain(domain, (await api.discover()).domains ?? []);
   }
   const offered = new Set(discovery.detail.actions.map((action) => action.id));
   return {
@@ -207,8 +207,11 @@ function describeActions(detail: DomainDetail): string[] {
   return detail.actions.map((action) => action.id.split('.').slice(1).join('.'));
 }
 
-function doctor(api: ApplicationApi, emit: (value: unknown) => CommandResult): CommandResult {
-  const domains = api.discover().domains ?? [];
+async function doctor(
+  api: ApplicationApi,
+  emit: (value: unknown) => CommandResult,
+): Promise<CommandResult> {
+  const domains = (await api.discover()).domains ?? [];
   return emit({
     reachable: true,
     domains: domains.length,
