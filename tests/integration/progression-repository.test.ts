@@ -78,18 +78,18 @@ describe('the progression repository, over a real database', () => {
       agentId,
       xp: 340,
       level: 4,
-      build: { 'ship-code': 3, review: 1 },
-      history: [{ kind: 'pr.merged', weight: 2, at: now }],
+      build: 'builder',
+      history: [{ build: 'builder', weight: 2, at: now }],
       updatedAt: now,
     });
 
     const read = await repository.find(agentId);
     expect(read?.xp).toBe(340);
     expect(read?.level).toBe(4);
-    expect(read?.build).toEqual({ 'ship-code': 3, review: 1 });
+    expect(read?.build).toBe('builder');
     // The history is the reason the column exists. A feature that says a
     // reclassification is a re-read has to be able to read it back.
-    expect(read?.history).toEqual([{ kind: 'pr.merged', weight: 2, at: now }]);
+    expect(read?.history).toEqual([{ build: 'builder', weight: 2, at: now }]);
   });
 
   it('is idempotent for two awards arriving together', async () => {
