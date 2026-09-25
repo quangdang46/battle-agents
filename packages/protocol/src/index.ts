@@ -1,4 +1,5 @@
 export * from './agent-event.js';
+export * from './tool-map.js';
 export { PROTOCOL_VERSION, protocolVersionSchema } from './version.js';
 
 export type {
