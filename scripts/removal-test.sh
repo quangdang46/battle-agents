@@ -51,6 +51,7 @@ readonly EXIT_CODE_SIGHUP=129
 cleanup() {
   local exit_code=$1
   restore_in_flight
+  release_lock
   # The stash is deliberately left in place on an abnormal exit. It is inside
   # the repo rather than in TMPDIR so recover_stashed_features can find it on the
   # next run, which is the only recovery path for SIGKILL.
@@ -88,24 +89,109 @@ restore_in_flight() {
   fi
 }
 
+# Whether a directory is a real feature rather than a rebuild stub.
+#
+# This distinction is the whole recovery. "Does the directory exist" is the
+# wrong test: `pnpm -r typecheck`, which this script runs after moving a feature
+# away, recreates the package directory — package.json, node_modules symlink
+# farm, dist — with NO src/ and NO tsconfig.json. A run interrupted in that
+# window left the real source in the stash and a stub in the tree, and the
+# previous version of this function saw the stub, declared the feature present,
+# and discarded the only copy of its source. The tree then failed typecheck for
+# a reason nothing in the tree could explain.
+#
+# A feature is real when it has both a tsconfig and a src/ directory, because
+# every one in this repo has both and a rebuild stub has neither.
+feature_is_present() {
+  local dir="$1"
+  [[ -d "${dir}" && -d "${dir}/src" && -f "${dir}/tsconfig.json" ]]
+}
+
 # SIGKILL cannot be trapped, so a hard kill mid-run leaves a feature missing
 # from the tree. The next run repairs it before doing anything else, which turns
 # an unrecoverable silent deletion into a self-healing one.
+#
+# The two directories are parameters so the self-test can drive this against a
+# temp tree. The old version read them from readonly globals, which meant the
+# one function that can restore deleted source was the one function nobody could
+# exercise — and it is the function that had a bug in it.
 recover_stashed_features() {
-  [[ -d "${STASH_DIR}" ]] || return 0
+  local features_dir="${1:-${FEATURES_DIR}}"
+  local stash_dir="${2:-${STASH_DIR}}"
+  [[ -d "${stash_dir}" ]] || return 0
   local stashed
-  for stashed in "${STASH_DIR}"/*/; do
+  for stashed in "${stash_dir}"/*/; do
     [[ -d "${stashed}" ]] || continue
     local name
     name="$(basename "${stashed}")"
-    if [[ -e "${FEATURES_DIR}/${name}" ]]; then
+    if feature_is_present "${features_dir}/${name}"; then
       printf 'removal-test: %s is already present; discarding a stale stash entry.\n' "${name}"
       continue
     fi
+    if [[ -e "${features_dir}/${name}" ]]; then
+      # A stub, not a feature. Removing it is safe precisely because the real
+      # content is in the stash we are about to move into its place.
+      printf 'removal-test: %s exists as a rebuild stub with no source; replacing it from the stash.\n' "${name}"
+      rm -rf -- "${features_dir:?}/${name}"
+    fi
     printf 'removal-test: recovering %s from an interrupted earlier run.\n' "${name}"
-    mv "${stashed}" "${FEATURES_DIR}/${name}"
+    mv "${stashed}" "${features_dir}/${name}"
   done
-  rmdir "${STASH_DIR}" 2>/dev/null || true
+  rmdir "${stash_dir}" 2>/dev/null || true
+}
+
+# Two removal tests at once corrupt the tree, and the corruption is silent.
+#
+# Each run moves a feature into STASH_DIR, runs `pnpm -r typecheck` — which
+# recreates the package directory as a stub — and moves it back. Two runs
+# interleaving those steps fight over the same directory: one restores a feature
+# while the other has just moved it away, and the source ends up in a stash
+# nobody reads, or in a directory with the wrong contents. The pipeline's
+# EXIT trap restores what IT moved, so a run killed outright leaves the tree
+# short a feature and the next run is expected to heal it.
+#
+# mkdir is the lock primitive because it is atomic on POSIX, and a lock left by
+# a killed run is reclaimed by checking whether the holder is still alive. A
+# plain lock file would deadlock the tree permanently after one hard kill, which
+# is a worse failure than the one it prevents.
+readonly LOCK_DIR="${REPO_ROOT}/.tmp/removal-test.lock"
+LOCK_HELD=0
+
+lock_holder_is_alive() {
+  local pid="$1"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+acquire_lock() {
+  if mkdir "${LOCK_DIR}" 2>/dev/null; then
+    printf '%s\n' "$$" >"${LOCK_DIR}/pid"
+    LOCK_HELD=1
+    return 0
+  fi
+  local holder=""
+  [[ -f "${LOCK_DIR}/pid" ]] && holder="$(cat "${LOCK_DIR}/pid" 2>/dev/null || true)"
+  if lock_holder_is_alive "${holder}"; then
+    printf 'removal-test: refusing to start — another run (pid %s) holds the lock.\n' "${holder}" >&2
+    printf 'removal-test: two runs at once silently corrupt packages/features.\n' >&2
+    return 1
+  fi
+  printf 'removal-test: reclaiming a lock left by dead pid %s.\n' "${holder:-unknown}" >&2
+  rm -rf -- "${LOCK_DIR:?}"
+  mkdir "${LOCK_DIR}" 2>/dev/null || {
+    printf 'removal-test: could not take the lock after reclaiming it.\n' >&2
+    return 1
+  }
+  printf '%s\n' "$$" >"${LOCK_DIR}/pid"
+  LOCK_HELD=1
+  return 0
+}
+
+release_lock() {
+  if [[ "${LOCK_HELD}" = "1" ]]; then
+    rm -rf -- "${LOCK_DIR:?}"
+    LOCK_HELD=0
+  fi
 }
 
 trap 'cleanup $?' EXIT
@@ -289,6 +375,69 @@ FIXTURE
   printf 'self-test ok: stripping removes exactly one feature and leaves the rest byte-identical.\n'
 }
 
+# The recovery path, against a temp tree.
+#
+# This exists because the recovery HAD a bug and no test. It treated "the
+# directory exists" as "the feature is present", and the directory a rebuild
+# leaves behind does exist — with package.json and dist and no source. An
+# interrupted run therefore discarded the only copy of a feature's source and
+# left a tree that failed typecheck for a reason nothing in it could explain.
+#
+# The stub shape below is the real one: what `pnpm -r typecheck` recreates after
+# a feature's directory is moved away.
+self_test_recovery() {
+  local work_dir failures=0
+  work_dir="$(mktemp -d)"
+  local features="${work_dir}/features" stash="${work_dir}/stash"
+  mkdir -p "${features}" "${stash}"
+
+  # A real feature, moved away by an interrupted run.
+  mkdir -p "${stash}/quest/src"
+  printf 'export const quest = 1;\n' >"${stash}/quest/src/index.ts"
+  printf '{}\n' >"${stash}/quest/package.json"
+  printf '{}\n' >"${stash}/quest/tsconfig.json"
+
+  # ... and the stub `pnpm -r typecheck` recreated in its place. A directory, a
+  # package.json and a dist, and no source: exactly the state that made the old
+  # check declare the feature present.
+  mkdir -p "${features}/quest/dist"
+  printf '{}\n' >"${features}/quest/package.json"
+
+  recover_stashed_features "${features}" "${stash}" >/dev/null 2>&1
+
+  if [[ ! -f "${features}/quest/src/index.ts" ]]; then
+    printf '  recovery self-test: the stash entry was discarded over a rebuild stub,\n'
+    printf '    which is how a features directory lost its only copy of its source.\n' >&2
+    failures=1
+  fi
+  if ! feature_is_present "${features}/quest"; then
+    printf '  recovery self-test: the recovered feature is still not a feature.\n' >&2
+    failures=1
+  fi
+
+  # A real feature in the tree means the stash entry IS stale, and discarding it
+  # is correct. Checking the other half matters: a recovery that always
+  # overwrites would undo a legitimate change.
+  mkdir -p "${stash}/bounty/src" "${features}/bounty/src"
+  printf 'export const bounty = 1;\n' >"${stash}/bounty/src/index.ts"
+  printf '{}\n' >"${features}/bounty/tsconfig.json"
+  printf 'export const kept = 1;\n' >"${features}/bounty/src/index.ts"
+
+  recover_stashed_features "${features}" "${stash}" >/dev/null 2>&1
+
+  if grep -q 'bounty = 1' "${features}/bounty/src/index.ts" 2>/dev/null; then
+    printf '  recovery self-test: a stale stash entry overwrote a real feature.\n' >&2
+    failures=1
+  fi
+
+  rm -rf "${work_dir}"
+  if [[ ${failures} -ne 0 ]]; then
+    printf 'removal-test recovery self-test FAILED: an interrupted run could not heal itself.\n' >&2
+    return 1
+  fi
+  printf 'recovery self-test ok: a stub is replaced from the stash, and a real feature is left alone.\n'
+}
+
 run_checks() {
   local feature_name="$1"
   ( cd "${REPO_ROOT}" && "${TYPECHECK_CMD[@]}" ) >/dev/null 2>&1 && return 0
@@ -318,9 +467,14 @@ main() {
   local tree_before
   tree_before=$(tree_signature)
 
+  # Before the recovery, not after: recovery MOVES directories, and it must not
+  # run while another run is doing the same.
+  acquire_lock || return 1
+
   recover_stashed_features
 
   self_test
+  self_test_recovery
 
   if [[ ! -d "${FEATURES_DIR}" ]]; then
     printf 'removal-test: %s does not exist\n' "${FEATURES_DIR}" >&2
