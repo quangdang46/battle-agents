@@ -137,3 +137,20 @@ describe('the tool sets', () => {
     }
   });
 });
+
+describe('normalizeToolInput on an input that is not an object', () => {
+  // `tool_input` is optional in the protocol and `Bash` frequently posts none,
+  // so this is the common case rather than a corner. The signature used to say
+  // Record and the body believed it, and every adapter that called the helper
+  // with an absent input got "Cannot use 'in' operator to search in undefined"
+  // from inside it.
+  it('treats an absent or non-object input as an empty one', () => {
+    for (const input of [undefined, null, 'a string', 42, true]) {
+      expect(normalizeToolInput(input)).toEqual({});
+    }
+  });
+
+  it('still normalises a real object', () => {
+    expect(normalizeToolInput({ filePath: 'a.ts', other: 1 })).toEqual({ file_path: 'a.ts', other: 1 });
+  });
+});

@@ -202,16 +202,24 @@ const CAMEL_TO_SNAKE: Readonly<Record<string, string>> = {
  * else is passed through untouched, so a harness adding a new input field does
  * not need a change here to keep working.
  */
-export function normalizeToolInput(
-  input: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-  const present = Object.keys(CAMEL_TO_SNAKE).filter((key) => key in input);
-  if (present.length === 0) return { ...input };
+export function normalizeToolInput(input: unknown): Record<string, unknown> {
+  // A tool with no arguments is normal, not malformed: `Bash` frequently posts
+  // no input, and `tool_input` is optional in the protocol. The signature said
+  // Record and the body believed it, so `key in undefined` threw
+  // "Cannot use 'in' operator" from inside the helper every adapter calls —
+  // and it threw on the common case, not a rare one. `unknown` in the
+  // signature is what forces the next caller to think about it.
+  if (typeof input !== 'object' || input === null) {
+    return {};
+  }
+  const record = input as Record<string, unknown>;
+  const present = Object.keys(CAMEL_TO_SNAKE).filter((key) => key in record);
+  if (present.length === 0) return { ...record };
 
-  const normalized: Record<string, unknown> = { ...input };
+  const normalized: Record<string, unknown> = { ...record };
   for (const key of present) {
     const snake = CAMEL_TO_SNAKE[key] as string;
-    normalized[snake] = input[key];
+    normalized[snake] = record[key];
     delete normalized[key];
   }
   return normalized;
