@@ -200,7 +200,8 @@ async function postEvents(
  * now would be a guess about a policy that has not been written down.
  */
 function streamEvents(dependencies: EventRouteDependencies): HttpResponse {
-  const subscriber = dependencies.hub.subscribe();
+  // Explicit: this is the spectator view, so the public classification applies.
+  const subscriber = dependencies.hub.subscribe('public');
   const encoder = new TextEncoder();
 
   const body = new ReadableStream<Uint8Array>({

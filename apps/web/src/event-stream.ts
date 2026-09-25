@@ -48,6 +48,70 @@ export interface FullStateFrame {
  * one would hydrate from a delta or patch from a snapshot. The type makes the
  * two mutually exclusive at compile time and the test makes it true at runtime.
  */
+/**
+ * What the public stream may carry, and what it must not.
+ *
+ * The classification is not this file's invention: it is
+ * docs/design/public-event-stream.md, written before the filter so that the
+ * filter could be a consequence of a decision rather than a guess. Read that
+ * document to change anything here.
+ *
+ * The shape of the fix follows from one fact about the protocol. In
+ * packages/protocol/src/agent-event.ts the payload fields are
+ * `identifierSchema`, which is `z.string().min(...)` — an unbounded string.
+ * So `file.write.path`, `command.run.argv0`, `message.sent.body` and
+ * `thinking` can hold anything, and an event cannot be published and then have
+ * its dangerous field stripped. A public event is built here, field by field,
+ * and an event with nothing publishable in it yields undefined rather than an
+ * empty object.
+ */
+
+/** Events a spectator may see whole. None of them carries a free-form field. */
+const PUBLISHED_WHOLE: ReadonlySet<string> = new Set([
+  'session.started',
+  'session.ended',
+  'session.resumed',
+  'subagent.spawned',
+  'subagent.completed',
+]);
+
+/**
+ * Events a spectator may see in reduced form.
+ *
+ * The reduction is not a filter applied afterwards. `test.failed.failure` and
+ * `waiting.reason` are unbounded strings, so publishing the event and
+ * deleting the field is the same as publishing the field.
+ */
+const PUBLISHED_REDUCED: Readonly<Record<string, readonly string[]>> = {
+  'test.passed': ['suite', 'count'],
+  'test.failed': ['suite'],
+  waiting: [],
+};
+
+/**
+ * The public form of an event, or undefined when it has none.
+ *
+ * Returning undefined rather than a stripped copy matters: an empty frame is a
+ * frame a client has to interpret, and there is no sensible reading of a delta
+ * with no event in it.
+ */
+export function toPublicEvent(event: GameEvent): GameEvent | undefined {
+  if (PUBLISHED_WHOLE.has(event.type)) return event;
+
+  const kept = PUBLISHED_REDUCED[event.type];
+  if (kept === undefined) return undefined;
+
+  const source = event.payload;
+  const payload: Record<string, unknown> = {};
+  for (const field of kept) {
+    const value = (source as Record<string, unknown>)[field];
+    // Copied only when present, so a reduced event never grows a key the
+    // feature did not set.
+    if (value !== undefined) payload[field] = value;
+  }
+  return { ...event, payload };
+}
+
 export interface DeltaFrame {
   readonly kind: 'delta';
   readonly event: GameEvent;
@@ -83,16 +147,33 @@ const DEFAULT_MAX_SUBSCRIBER_LAG = 1024;
  * it. The highWaterMark of whatever is writing these frames is the backpressure
  * signal; this queue is where the decision to give up on the client is made.
  */
+/**
+ * Who is receiving.
+ *
+ * `public` is a spectator: a socket anyone can open, so it gets the
+ * classification and nothing more. `operator` is the game's own activity view,
+ * which is entitled to the transient events the spectator view drops — a busy
+ * agent is exactly what that view exists to show, and the ingest bead is
+ * explicit that not persisting must not become dropping.
+ *
+ * The default is the strict one. A new caller gets the safe view unless it
+ * says otherwise, so a forgotten argument narrows what is shared rather than
+ * widening it.
+ */
+export type StreamView = 'public' | 'operator';
+
 export class StreamSubscriber {
   readonly #queue: StreamFrame[] = [];
   readonly #maxLag: number;
   readonly #onClose: () => void;
+  readonly view: StreamView;
   #closed = false;
   #waiter: (() => void) | undefined;
 
-  constructor(maxLag: number, onClose: () => void) {
+  constructor(maxLag: number, onClose: () => void, view: StreamView = 'public') {
     this.#maxLag = maxLag;
     this.#onClose = onClose;
+    this.view = view;
   }
 
   /**
@@ -178,6 +259,16 @@ export class EventStreamHub {
     // The hub reads the bus directly. This is the realtime path, and it has no
     // dependency on the store: whether or not an event was persisted, everything
     // on the bus is a delta to whoever is watching.
+    // Everything on the bus reaches the hub. The classification is applied per
+    // subscriber instead, at the point of delivery, because there are two
+    // different viewers and only one of them is a spectator.
+    //
+    // The first attempt filtered here, on the bus. That broke the property the
+    // ingest bead cares most about: a transient event must reach the game's own
+    // activity view, because "we do not persist it" must not quietly become "we
+    // drop it". Filtering at the bus made every viewer public by default and
+    // took the game with it. The activity log keeps the detail and so does the
+    // operator view; the spectator view keeps the scoreboard.
     this.#unsubscribeBus = options.bus.subscribe((event) => {
       this.broadcast(event);
     });
@@ -192,22 +283,32 @@ export class EventStreamHub {
    * full_state-then-delta contract rests on, and it is why the snapshot provider
    * is synchronous: an async one would reopen exactly that window.
    */
-  subscribe(): StreamSubscriber {
+  subscribe(view: StreamView = 'public'): StreamSubscriber {
     let subscriber: StreamSubscriber;
     const forget = (): void => {
       this.#subscribers.delete(subscriber);
     };
-    subscriber = new StreamSubscriber(this.#maxLag, forget);
+    subscriber = new StreamSubscriber(this.#maxLag, forget, view);
     subscriber.offer({ kind: 'full_state', state: this.#snapshot() });
     this.#subscribers.add(subscriber);
     return subscriber;
   }
 
-  /** Fans one event out to every subscriber as a delta. */
+  /**
+   * Fans one event out to the subscribers allowed to see it.
+   *
+   * Copied because offer can close a subscriber, which deletes it from the set
+   * mid-iteration.
+   */
   broadcast(event: GameEvent): void {
-    // Copied: offer can close a subscriber, which deletes it from the set
-    // mid-iteration.
     for (const subscriber of [...this.#subscribers]) {
+      if (subscriber.view === 'public') {
+        const publishable = toPublicEvent(event);
+        // Undefined rather than an empty frame: there is no sensible reading of
+        // a delta carrying no event, and a client would have to invent one.
+        if (publishable !== undefined) subscriber.offer({ kind: 'delta', event: publishable });
+        continue;
+      }
       subscriber.offer({ kind: 'delta', event });
     }
   }

@@ -271,7 +271,7 @@ describe('the persistence split, over a real database', () => {
     // by accident: 0 database rows AND 150 deltas. A filter placed on the way to
     // the bus instead of the way to the store would pass a persistence-only test
     // and fail this one.
-    const subscriber = gateway.hub.subscribe();
+    const subscriber = gateway.hub.subscribe('operator');
     // The opening full_state; the deltas follow it.
     expect(await subscriber.pull()).toMatchObject({ kind: 'full_state' });
 
@@ -298,7 +298,7 @@ describe('the persistence split, over a real database', () => {
     // A mixed batch: the filter is per event, not per batch. A key event and a
     // transient one in the same POST must split — one row, one delta each, no
     // coupling between the two.
-    const subscriber = gateway.hub.subscribe();
+    const subscriber = gateway.hub.subscribe('operator');
     await subscriber.pull(); // full_state
 
     const response = await post(batch([keyEvent(), transient(), keyEvent(), transient()]));

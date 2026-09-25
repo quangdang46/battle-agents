@@ -37,6 +37,11 @@ function transient(sessionId = SESSION_ID): AgentEvent {
   return { type: 'tool.started', sessionId, at: AT, tool: 'Read' };
 }
 
+/** A reduced event: public, but published without its free-form fields. */
+function reducedEvent(sessionId = SESSION_ID): AgentEvent {
+  return { type: 'waiting', sessionId, at: AT };
+}
+
 /** A key event: one the persistence policy is willing to keep. */
 function keyEvent(sessionId = SESSION_ID): AgentEvent {
   return {
@@ -306,7 +311,13 @@ describe('not persisting is not dropping', () => {
   // a spectator, which is the failure this file exists to catch.
   it('persists a key event and shows it to a subscriber', async () => {
     const h = harness();
-    const subscriber = h.hub.subscribe();
+    // 'operator' is this file's subject. These tests assert that a transient
+    // event reaches the game's own activity view, which the ingest bead calls
+    // out by name: "we do not persist it" must not quietly become "we drop it".
+    // The hub gained a second view in the same commit, and the default is the
+    // strict one, so the argument is written out here rather than left to a
+    // reader who assumes the default is what these tests mean.
+    const subscriber = h.hub.subscribe('operator');
     await subscriber.pull(); // the full_state opening frame
 
     await post(h, batch([keyEvent()]));
@@ -318,7 +329,7 @@ describe('not persisting is not dropping', () => {
 
   it('keeps a transient event off the store and still delivers it to a subscriber', async () => {
     const h = harness();
-    const subscriber = h.hub.subscribe();
+    const subscriber = h.hub.subscribe('operator');
     await subscriber.pull();
 
     await post(h, batch([transient()]));
@@ -336,7 +347,7 @@ describe('not persisting is not dropping', () => {
     // batch every time, so this is about the fan-out and the filter, not the
     // 413 gate (which has its own tests above).
     const h = harness();
-    const subscriber = h.hub.subscribe();
+    const subscriber = h.hub.subscribe('operator');
     await subscriber.pull(); // full_state
 
     for (let batchIndex = 0; batchIndex < 3; batchIndex += 1) {
@@ -391,12 +402,17 @@ describe('GET /api/events/stream — full_state first, deltas after', () => {
     expect(first).toMatchObject({ state: { protocolVersion: PROTOCOL_VERSION } });
 
     // Two deltas, one event each — broadcast as diffs, never as whole state.
-    await post(h, batch([transient()]));
+    // Both events are ones the spectator classification carries, because this
+    // test is about the SHAPE of the frames, not about which events survive.
+    // The content policy has its own file, and the operator view's willingness
+    // to carry a transient event is asserted in the tests above, which
+    // subscribe with 'operator' for that reason.
+    await post(h, batch([reducedEvent()]));
     await post(h, batch([keyEvent()]));
 
     const second = decodeStreamFrame(decoder.decode((await reader.read()).value));
     const third = decodeStreamFrame(decoder.decode((await reader.read()).value));
-    expect(second).toMatchObject({ kind: 'delta', event: { type: 'tool.started' } });
+    expect(second).toMatchObject({ kind: 'delta', event: { type: 'waiting' } });
     expect(third).toMatchObject({ kind: 'delta', event: { type: 'session.started' } });
   });
 
@@ -405,7 +421,7 @@ describe('GET /api/events/stream — full_state first, deltas after', () => {
     // is at runtime: a client that switches on `'state' in frame` must see state
     // on the snapshot and on NOTHING else, or "hydrate or patch" becomes a guess.
     const h = harness();
-    const subscriber = h.hub.subscribe();
+    const subscriber = h.hub.subscribe('operator');
 
     const full = await subscriber.pull();
     expect(full).toHaveProperty('state');
@@ -422,7 +438,7 @@ describe('GET /api/events/stream — full_state first, deltas after', () => {
     // tell it. Closing is the only safe response, and the reconnect is what
     // repairs the state.
     const h = harness({}, 2);
-    const subscriber = h.hub.subscribe();
+    const subscriber = h.hub.subscribe('operator');
     await subscriber.pull(); // full_state
 
     // Two queued deltas reach the lag limit; the third cannot be accepted.
@@ -434,7 +450,7 @@ describe('GET /api/events/stream — full_state first, deltas after', () => {
 
     // And the hub has let go of it, so a reconnect starts clean.
     expect(h.hub.subscriberCount).toBe(0);
-    const reconnected = h.hub.subscribe();
+    const reconnected = h.hub.subscribe('operator');
     expect(await reconnected.pull()).toMatchObject({ kind: 'full_state' });
   });
 });
