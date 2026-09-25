@@ -30,5 +30,10 @@ typecheck
 architecture
 schema-hygiene
 removal-test
+# The Moltbook check resolves every cited file:line against the checkout and
+# fails on an uncited assertion of a claim the note records as dropped. It runs
+# here because a check nobody invokes is the exact failure ba-risk-gates-e74
+# exists to prevent, and this one was written to pass while enforcing nothing.
+moltbook-claims
 license
 e2e-smoke

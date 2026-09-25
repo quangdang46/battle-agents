@@ -54,6 +54,7 @@ readonly CANONICAL_STAGES=(
   architecture
   schema-hygiene
   removal-test
+  moltbook-claims
   license
   e2e-smoke
 )
@@ -86,6 +87,7 @@ readonly DATABASE_URL_ENV="M0_DATABASE_URL"
 readonly OWNER_DB="ba-db-schema-drizzle-fki"
 readonly OWNER_REMOVAL_TEST="ba-removal-test-e33"
 readonly OWNER_LICENSE="ba-license-hygiene-qy7"
+readonly OWNER_MOLTBOOK="ba-moltbook-verification-0zc"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
 readonly OWNER_CONTRACT="ba-contract-extension-api-w29"
 readonly OWNER_ARCHITECTURE="ba-dependency-rules-os1"
@@ -640,6 +642,17 @@ run_stage_removal_test() {
   run_delegated removal-test "$OWNER_REMOVAL_TEST" script:removal-test file:scripts/removal-test.sh
 }
 
+run_stage_moltbook_claims() {
+  # Every Moltbook mechanic the plan states, re-checked against the note that
+  # actually read the source, plus a resolution of every cited file:line against
+  # the checkout. The check existed and passed while nothing invoked it, which is
+  # the failure mode ba-risk-gates-e74 was opened over: a gate that is not wired
+  # is a comment. It ships with its own self-test asserting every sub-check goes
+  # red on the mutation meant to defeat it, so a future edit cannot quietly turn
+  # it into a script that exits 0.
+  run_delegated moltbook-claims "$OWNER_MOLTBOOK" script:check:moltbook
+}
+
 run_stage_license() {
   run_delegated license "$OWNER_LICENSE" file:scripts/check-licenses.sh script:check:licenses
 }
@@ -667,6 +680,7 @@ run_stage() {
     unit) run_stage_unit ;;
     integration) run_stage_integration ;;
     removal-test) run_stage_removal_test ;;
+    moltbook-claims) run_stage_moltbook_claims ;;
     license) run_stage_license ;;
     e2e-smoke) run_stage_e2e_smoke ;;
     *) fail "no runner registered for stage '$1'" ;;
