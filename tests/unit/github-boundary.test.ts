@@ -73,11 +73,14 @@ function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
-function specifiersIn(file: string): string[] {
-  const source = stripComments(readFileSync(file, 'utf8'));
-  return IMPORT_PATTERNS.flatMap((pattern) => [...source.matchAll(pattern)]).map(
+function specifiersInSource(source: string): string[] {
+  return IMPORT_PATTERNS.flatMap((pattern) => [...stripComments(source).matchAll(pattern)]).map(
     (match) => match[1] ?? '',
   );
+}
+
+function specifiersIn(file: string): string[] {
+  return specifiersInSource(readFileSync(file, 'utf8'));
 }
 
 function relativeToRepo(file: string): string {
@@ -124,9 +127,27 @@ describe('features never reach outside the workspace', () => {
 
   it('reads a specifier, rather than a word in a comment', () => {
     // The guard asserting it is not fooled, so the guard above is worth having.
-    expect(specifiersIn(join(FEATURES_DIR, 'social/src/feature.ts'))).not.toContain(
-      'somebody in another guild said this',
-    );
+    //
+    // It used to read packages/features/social/src/feature.ts off disk, which
+    // broke the removal test: that script strips a feature out of the
+    // composition root and moves its directory, so this threw ENOENT on every
+    // removal of `social` — a test failing at the boundary of a file the
+    // repository is designed to be able to delete. It parses a literal now, so
+    // it depends on no file that can legitimately be removed, and it is a
+    // sharper statement of the same thing.
+    expect(
+      specifiersInSource(
+        [
+          "import { DatabaseSync } from 'node:sqlite';",
+          '// import { x } from "somebody in another guild said this";',
+          '/* the plan says features never import @octokit/rest here */',
+        ].join('\n'),
+      ),
+    ).not.toContain('somebody in another guild said this');
+
+    expect(specifiersInSource("import { DatabaseSync } from 'node:sqlite';")).toEqual([
+      'node:sqlite',
+    ]);
   });
 });
 
