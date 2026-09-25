@@ -26,6 +26,7 @@
     "@battle-agents/progression": "workspace:*",
     "@battle-agents/quest": "workspace:*",
     "@battle-agents/reputation": "workspace:*",
+    "@battle-agents/social": "workspace:*",
     "better-auth": "^1.3.34",
     "next": "^15.5.4",
     "react": "^19.2.0",

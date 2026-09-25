@@ -32,6 +32,7 @@ const MANIFESTS: Readonly<Record<string, readonly string[]>> = {
   quest: QUEST_ACTION_IDS,
   progression: PROGRESSION_ACTION_IDS,
   reputation: REPUTATION_ACTION_IDS,
+  social: SOCIAL_ACTION_IDS,
 };
 
 /**
@@ -96,7 +97,10 @@ function assertEveryManifestIsRegistered(): void {
         'MANIFESTS, so their ids would be missing from the union and act() ' +
         'would reject them at runtime:\n' +
         missing
-          .map(([feature, name]) => `  - ${feature} (${name}_ACTION_IDS, packages/features/${feature})`)
+          .map(
+            ([feature, name]) =>
+              `  - ${feature} (${name}_ACTION_IDS, packages/features/${feature})`,
+          )
           .join('\n') +
         '\nAdd the import and the entry, then run pnpm codegen again.',
     );
@@ -207,5 +211,6 @@ import { AGENT_ACTION_IDS } from '../packages/features/agent/src/manifest.js';
 import { PROGRESSION_ACTION_IDS } from '../packages/features/progression/src/manifest.js';
 import { QUEST_ACTION_IDS } from '../packages/features/quest/src/manifest.js';
 import { REPUTATION_ACTION_IDS } from '../packages/features/reputation/src/manifest.js';
+import { SOCIAL_ACTION_IDS } from '../packages/features/social/src/manifest.js';
 
 main();

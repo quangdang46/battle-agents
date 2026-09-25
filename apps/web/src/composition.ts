@@ -2,6 +2,7 @@ import { agentFeature } from '@battle-agents/agent';
 import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { reputationFeature } from '@battle-agents/reputation';
+import { socialFeature } from '@battle-agents/social';
 import { createRuntime } from '@battle-agents/core';
 import type { EventBus, Logger, Runtime, StateStore } from '@battle-agents/core';
 
@@ -14,6 +15,7 @@ import {
   DrizzleQuestRepository,
   DrizzleReputationRepository,
   DrizzleSessionRepository,
+  DrizzleSocialRepository,
 } from '@battle-agents/db';
 
 /**
@@ -73,6 +75,21 @@ export interface GameRuntimeDependencies {
    * record was lost are different situations.
    */
   readonly reputationRepository: DrizzleReputationRepository;
+  /**
+   * Social storage. Required for the same reason as the others: a character
+   * sheet and a leaderboard answer from memory when there is no store, which is
+   * indistinguishable from a genuinely empty board, and an inbox that cannot be
+   * written to is a messaging feature that only fails when somebody tries to use
+   * it.
+   *
+   * Note that installing this feature does not make messaging work: social
+   * requires the `guild.can_talk_to` capability, and no feature provides it yet,
+   * so a composed runtime reports social as degraded and `social.send` refuses.
+   * That is the fail-closed half of an authorization boundary this repository
+   * has deliberately not decided, and it is why the degradation is a property
+   * worth wiring rather than a gap to paper over.
+   */
+  readonly socialRepository: DrizzleSocialRepository;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -95,6 +112,7 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       questFeature({ repository: dependencies.questRepository }),
       progressionFeature({ repository: dependencies.progressionRepository }),
       reputationFeature({ repository: dependencies.reputationRepository }),
+      socialFeature({ repository: dependencies.socialRepository }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

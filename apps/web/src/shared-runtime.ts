@@ -9,6 +9,7 @@ import {
   DrizzleQuestRepository,
   DrizzleReputationRepository,
   DrizzleSessionRepository,
+  DrizzleSocialRepository,
   DrizzleStateStore,
 } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
@@ -72,6 +73,7 @@ export function sharedRuntime(): SharedRuntime {
     sessionRepository,
     progressionRepository: new DrizzleProgressionRepository(database),
     reputationRepository: new DrizzleReputationRepository(database),
+    socialRepository: new DrizzleSocialRepository(database),
   });
 
   cached = { shared: { database, runtime, bus }, close: () => closeDatabasePool(pool) };

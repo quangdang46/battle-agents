@@ -35,6 +35,16 @@ export type {
 export { DrizzleQuestRepository } from './repositories/quests.js';
 export { DrizzleCredentialStore } from './repositories/credentials.js';
 export type { NewStoredCredential, StoredCredential } from './repositories/credentials.js';
+export { DrizzleSocialRepository } from './repositories/social.js';
+export type {
+  NewSocialMessageRow,
+  SocialBoardMetric,
+  SocialBoardQuery,
+  SocialLeaderboardRow,
+  SocialMessageRow,
+  SocialProfileRow,
+  SocialStore,
+} from './repositories/social.js';
 export { DrizzleSessionRepository, DrizzleSessionSweeper } from './repositories/sessions.js';
 export { DrizzleStateStore } from './repositories/state-store.js';
 export { seedDatabase } from './seed/seed.js';

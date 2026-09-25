@@ -30,6 +30,15 @@ export type ProgressionActionId =
 /** reputation */
 export type ReputationActionId = 'reputation.gate' | 'reputation.read' | 'reputation.tiers';
 
+/** social */
+export type SocialActionId =
+  | 'social.broadcast'
+  | 'social.inbox'
+  | 'social.leaderboard'
+  | 'social.poke'
+  | 'social.profile'
+  | 'social.send';
+
 /** Every action id in this build, sorted. The type `act()` is checked against. */
 export type RegisteredActionId =
   | 'agent.describe'
@@ -47,7 +56,13 @@ export type RegisteredActionId =
   | 'reputation.read'
   | 'reputation.tiers'
   | 'session.end'
-  | 'session.heartbeat';
+  | 'session.heartbeat'
+  | 'social.broadcast'
+  | 'social.inbox'
+  | 'social.leaderboard'
+  | 'social.poke'
+  | 'social.profile'
+  | 'social.send';
 
 /**
  * Whether a string names an action this build registers.
@@ -79,4 +94,10 @@ export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'reputation.tiers',
   'session.end',
   'session.heartbeat',
+  'social.broadcast',
+  'social.inbox',
+  'social.leaderboard',
+  'social.poke',
+  'social.profile',
+  'social.send',
 ];
