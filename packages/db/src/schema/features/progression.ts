@@ -1,13 +1,20 @@
 import { sql } from 'drizzle-orm';
-import { check, integer, jsonb, pgTable, uuid } from 'drizzle-orm/pg-core';
+import { check, integer, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 
 import { agents } from '../platform.js';
 
 export type AgentSkills = Record<string, number>;
 
-/** One recorded award, kept so a reclassification is a re-read. */
+/**
+ * One recorded award, kept so a reclassification is a re-read.
+ *
+ * `build` is spelled as a string here and narrowed by the adapter, for the same
+ * reason the build name is: this package may not import the feature that owns
+ * the union. Naming the field `kind` would have matched nothing — the feature's
+ * signal carries the build it implies, not a category of its own.
+ */
 export interface ProgressionSignal {
-  readonly kind: string;
+  readonly build: string;
   readonly weight: number;
   readonly at: string;
 }
@@ -32,6 +39,12 @@ export const agentStats = pgTable(
     // column the feature's promise that a reclassification is a re-read rather
     // than a guess cannot be kept once the process restarts.
     historyJson: jsonb('history_json').$type<ProgressionSignal[]>().notNull().default([]),
+    // The classified build, stored rather than recomputed on read. The feature
+    // classifies from the history on every award and saves the result, so the
+    // value here is always the freshest one; recomputing it in the adapter
+    // would mean importing the classifier, and infrastructure may not depend on
+    // the layers that consume it.
+    build: text('build').notNull().default('generalist'),
   },
   (table) => [
     check('agent_stats_prs_opened_non_negative', sql`${table.prsOpened} >= 0`),

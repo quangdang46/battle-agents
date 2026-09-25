@@ -1,4 +1,5 @@
 import { agentFeature } from '@battle-agents/agent';
+import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { createRuntime } from '@battle-agents/core';
 import type { EventBus, Logger, Runtime, StateStore } from '@battle-agents/core';
@@ -8,6 +9,7 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleProgressionRepository,
   DrizzleQuestRepository,
   DrizzleSessionRepository,
 } from '@battle-agents/db';
@@ -57,6 +59,12 @@ export interface GameRuntimeDependencies {
    *  agent feature registers no session.heartbeat or session.end, and `discover`
    *  says so rather than offering operations that throw. */
   readonly sessionRepository: DrizzleSessionRepository;
+  /**
+   * Progression storage. Required for the same reason as the others: xp and
+   * level answer zero with no store, and a character at level 1 is
+   * indistinguishable from one whose progress was never recorded.
+   */
+  readonly progressionRepository: DrizzleProgressionRepository;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -77,6 +85,7 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
         sessionRepository: dependencies.sessionRepository,
       }),
       questFeature({ repository: dependencies.questRepository }),
+      progressionFeature({ repository: dependencies.progressionRepository }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

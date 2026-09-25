@@ -12,6 +12,7 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleProgressionRepository,
   DrizzleQuestRepository,
   DrizzleSessionRepository,
   DrizzleStateStore,
@@ -169,6 +170,7 @@ export function sharedApi(): ApplicationApi {
     agentRepository: new DrizzleAgentRepository(database),
     questRepository: new DrizzleQuestRepository(database),
     sessionRepository: new DrizzleSessionRepository(database),
+    progressionRepository: new DrizzleProgressionRepository(database),
   });
   const api = createApplicationApi(runtime);
   cached = { api, close: () => closeDatabasePool(pool) };

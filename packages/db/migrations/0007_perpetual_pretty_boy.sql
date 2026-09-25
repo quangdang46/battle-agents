@@ -1,0 +1,1 @@
+ALTER TABLE "agent_stats" ADD COLUMN "build" text DEFAULT 'generalist' NOT NULL;

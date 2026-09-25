@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 
 import { agentStats } from '../schema/features/progression.js';
 import { agents } from '../schema/index.js';
-import type { ProgressionSignal } from '../schema/features/progression.js';
 import type { Database } from '../client.js';
 
 /**
@@ -27,12 +26,55 @@ import type { Database } from '../client.js';
  */
 
 /** The shape the feature's port expects, kept honest by a conformance check. */
+export /**
+ * The builds a character can be, spelled out rather than imported.
+ *
+ * The duplication is the price of the layering rule: this package may not
+ * import the feature that declares the union. Spelling it out is honest about
+ * that, where a cast to `string` would be a claim that the two can drift
+ * freely. If a build is added to the feature and not here, the conformance
+ * check in apps/web fails — which is the point of spelling it out.
+ */
+type BuildName =
+  | 'generalist'
+  | 'debugger'
+  | 'researcher'
+  | 'builder'
+  | 'tester'
+  | 'refactorer'
+  | 'security'
+  | 'infrastructure';
+
+const DEFAULT_BUILD: BuildName = 'generalist';
+
+const BUILD_NAMES: ReadonlySet<string> = new Set<BuildName>([
+  'generalist',
+  'debugger',
+  'researcher',
+  'builder',
+  'tester',
+  'refactorer',
+  'security',
+  'infrastructure',
+]);
+
+/** One recorded award with its build narrowed. */
+interface StoredSignal {
+  readonly build: Exclude<BuildName, 'generalist'>;
+  readonly weight: number;
+  readonly at: string;
+}
+
+function isBuildName(value: string | undefined): value is BuildName {
+  return value !== undefined && BUILD_NAMES.has(value);
+}
+
 export interface ProgressionRow {
   readonly agentId: string;
   readonly xp: number;
   readonly level: number;
-  readonly build: Readonly<Record<string, number>>;
-  readonly history: readonly ProgressionSignal[];
+  readonly build: BuildName;
+  readonly history: readonly StoredSignal[];
   readonly updatedAt: string;
 }
 
@@ -58,7 +100,11 @@ export class DrizzleProgressionRepository implements ProgressionStore {
     if (agent === undefined) return undefined;
 
     const [stats] = await this.database
-      .select({ skillsJson: agentStats.skillsJson, historyJson: agentStats.historyJson })
+      .select({
+        skillsJson: agentStats.skillsJson,
+        historyJson: agentStats.historyJson,
+        build: agentStats.build,
+      })
       .from(agentStats)
       .where(eq(agentStats.agentId, agentId))
       .limit(1);
@@ -66,8 +112,20 @@ export class DrizzleProgressionRepository implements ProgressionStore {
       agentId,
       xp: agent.xp,
       level: agent.level,
-      build: stats?.skillsJson ?? {},
-      history: stats?.historyJson ?? [],
+      // Narrowed rather than cast: a row can only hold one of the names the
+      // column's default is drawn from, and a value outside the union is a
+      // stored corruption that a cast would pass along as a valid build.
+      build: isBuildName(stats?.build) ? stats.build : DEFAULT_BUILD,
+      // Narrowed for the same reason the build is: a stored signal naming a
+      // build that no longer exists is corruption, and passing it through as a
+      // valid Specialist would make the classifier trust it.
+      history: (stats?.historyJson ?? [])
+        .filter((signal) => isBuildName(signal.build))
+        .map((signal) => ({
+          build: signal.build as Exclude<BuildName, 'generalist'>,
+          weight: signal.weight,
+          at: signal.at,
+        })),
       // No updated_at column exists, so this is read time. The value is the
       // feature's contract and the schema cannot yet keep it; the comment is
       // here so the gap is visible rather than implied.
@@ -110,7 +168,8 @@ export class DrizzleProgressionRepository implements ProgressionStore {
     await this.database
       .update(agentStats)
       .set({
-        skillsJson: progress.build,
+        skillsJson: {},
+        build: progress.build,
         // The column is typed as a mutable array while the feature's port hands
         // out a readonly one, so the copy is what makes the two agree. A cast
         // here would silence the compiler and nothing else.
