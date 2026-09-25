@@ -65,6 +65,23 @@ describe('the app publishes on one bus', () => {
     expect(sharedApi()).toBe(sharedApi());
     expect(sharedEventGateway()).toBe(sharedEventGateway());
   });
+
+  it('reuses one pool rather than opening one per caller', () => {
+    // The beginner trap plan §7.1 names: never construct a new connection and
+    // connect per query, always use a pooled driver. createDatabasePool()
+    // returns a NEW Pool on every call, so the thing that actually has to be
+    // proved is that nothing calls it per request — and the observable is the
+    // database handle built over that pool. A fresh Pool yields a fresh drizzle
+    // instance, so identity here is identity of the connection pool underneath.
+    //
+    // The existing assertions above prove the runtime and the API are shared.
+    // They did not prove the POOL was, which is the part that exhausts
+    // connections under load: 100 agents at 20 events/s is 2000 writes/s, and
+    // the failure is invisible in a test that only ever makes one request.
+    requireDatabase();
+
+    expect(sharedRuntime().database).toBe(sharedRuntime().database);
+  });
 });
 
 describe('a game action reaches the public stream', () => {
