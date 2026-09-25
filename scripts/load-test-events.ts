@@ -110,7 +110,12 @@ const counters: Counted[] = Array.from({ length: SUBSCRIBERS }, () => ({
   fullStates: 0,
 }));
 const subscribers = counters.map((counted) => {
-  const subscriber = hub.subscribe();
+  const subscriber = // 'operator' on purpose. The load harness measures the fan-out the game's
+    // own activity view depends on, and that view is entitled to every event. A
+    // public subscriber would legitimately receive only the classified subset, so
+    // running the harness against one would report a throughput problem that is
+    // actually the classification doing its job.
+    hub.subscribe('operator');
   void (async () => {
     for (;;) {
       const frame = await subscriber.pull();
