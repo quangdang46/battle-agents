@@ -1,0 +1,130 @@
+# AGENTS.md
+
+Everything an agent needs to work in this repository, in the order it needs it.
+The root [README.md](README.md) has the vision; this file has the map.
+
+## What this is
+
+A universal protocol and runtime that normalizes many coding CLIs into one
+vocabulary, plus a game built on top of it. An agent claims bounties on real
+GitHub issues, opens a PR, earns XP, and battles other agents.
+
+## Before you write code
+
+```bash
+pnpm install
+docker compose -f compose.yaml -f compose.test.yaml up -d --wait
+export DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/battle_test
+pnpm db:migrate && pnpm db:seed
+```
+
+`pnpm test:m0` is the whole gate. It is the same command CI runs, in the same
+images. Budget several minutes; use the targeted stages while iterating.
+
+## The one rule that is not negotiable
+
+```
+presentation  ->  features  ->  core  <-  infrastructure
+```
+
+- **features never import each other.** A feature that needs another feature's
+  data subscribes to its events or declares `requires` and degrades.
+- **adapters import `core` and `protocol` and nothing else.**
+- **`core` knows no game vocabulary.** A unit test in
+  `tests/unit/scaffold.test.ts` strips comments and literals, then fails on a
+  Bounty, Guild, Battle, XP or Quest identifier in `packages/core`. The words
+  appear in comments there, because the comments explain the rule; what must not
+  exist is the code. This is checked by `pnpm test:unit`, not by
+  `pnpm architecture`.
+
+Adding a feature is a new package and a manifest entry. **A change that has to
+edit `core/`, `cli/` or `mcp/` is an architecture failure.** That is not a
+preference; the plan freezes those three deliberately, and review rejects the PR.
+
+## Where things are
+
+| Path                           | What lives there                                      |
+| ------------------------------ | ----------------------------------------------------- |
+| `packages/core/src/`           | primitives, the Extension API, the hook-provider seam |
+| `packages/protocol/src/`       | the AgentEvent union, tool-name normalization         |
+| `packages/features/<concept>/` | one package per game concept                          |
+| `packages/adapters/<harness>/` | one package per coding harness                        |
+| `packages/api/src/`            | the Application API every surface calls               |
+| `packages/db/src/`             | Drizzle schema and repositories                       |
+| `apps/web/`                    | Next.js UI, auth mount, HTTP surface                  |
+| `docs/design/`                 | decisions that took a while, and why                  |
+| `docs/research/`               | other projects, with commit SHAs and caveats          |
+| `scripts/stages.manifest`      | the single definition of what the gate runs           |
+
+`packages/core` has **zero dependencies**. That is load-bearing: it is what lets
+the layering checker treat a violation as structural rather than as a
+convention.
+
+## The contracts
+
+Four things are locked before feature work, because getting them wrong means
+every feature written against them is wrong. Read the plan section for each
+before touching it.
+
+1. **Extension API**: `GameFeature` and `createRuntime` in `packages/core`.
+   `emit()` persists, then runs handlers, then publishes. Adding a domain
+   operation to core is the failure this prevents.
+2. **Agent identity**: an `agents` row and a credential. A GitHub OAuth token
+   is never an agent identity; it identifies a _person_.
+3. **Session**: `sessions.agent_id -> agents.id`. Never `sessions.user_id` as
+   agent identity. A session is one run; an agent outlives it.
+4. **Agent protocol**: the Application API. CLI, MCP and web are three
+   consumers of one implementation, not three implementations.
+
+## Things that will bite you
+
+Each of these has already cost time here, so they are written down rather than
+rediscovered.
+
+- **Tests run against source, and that is deliberate.** The vitest stages alias
+  every `@battle-agents/*` to `src/index.ts`. Without that alias a suite runs
+  whatever was last built. If you add a package, add it to the alias; a test
+  asserts the alias and the tsconfig paths cover the same set, and will fail
+  otherwise.
+- **A gate that cannot fail is worse than no gate.** Every check in this repo
+  was, at some point, green while checking nothing: an extraction that stopped
+  at the first space, a scanner reading a file it never loaded, a self-test
+  that called its own parser instead of the real path. When you write a check,
+  break the thing it guards and watch it go red before you believe it.
+- **Comments are claims.** Several have been wrong here, including one asserting
+  a branch was matched by an implementation that was dead code. A comment
+  describing behaviour is only true once something tried to break it.
+- **`dist` is build output, not source.** Do not read a `.d.ts` to learn what a
+  package does. Read its `src`.
+- **A migration reporting success is not proof.** drizzle-kit keeps its ledger
+  in a separate schema, so dropping the application schema leaves it believing
+  everything applied. The `migrations` and `schema-drift` stages check the
+  tables and the artifact directly for exactly this reason.
+
+## Working a bead
+
+The tracker is the source of truth for what to do next:
+
+```bash
+br ready      # what is unblocked
+br show <id>  # the full brief, including the reasoning
+br close <id> --reason "what actually landed, and what you deliberately did not"
+```
+
+A bead is a whole brief. It carries the reason the work exists, the decisions
+already made, and the traps. Read it before touching the tree. Most of the
+mistakes available here are avoidable by reading two paragraphs.
+
+When you close a bead, the reason is the only record of a decision that went
+the other way. Write what you chose _and_ what you did not.
+
+## House style
+
+- Comments explain **why**, not what. If a comment could be deleted without
+  losing information about behaviour, delete it.
+- Prefer a named constant to a number whose meaning is in the commit history.
+- Public interfaces are typed. `any` in a boundary is a bug report you have not
+  filed yet.
+- The vocabulary in the plan is load-bearing: a session is a run, an agent is
+  the character, a capability is a registry entry, an action is a typed
+  dispatch. Using the words loosely is how a feature ends up owning a tool.
