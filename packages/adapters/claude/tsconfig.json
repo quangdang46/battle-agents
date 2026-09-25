@@ -2,7 +2,11 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // This adapter reads the filesystem and writes a settings file, so it needs
+    // the node globals. The base sets `types: []` to keep library packages free
+    // of a Node assumption, and an adapter that watches a harness is not one.
+    "types": ["node"]
   },
   "references": [
     {
