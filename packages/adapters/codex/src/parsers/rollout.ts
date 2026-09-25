@@ -1,4 +1,5 @@
-import { readFile, stat } from 'node:fs/promises';
+import { open, readdir, stat } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,6 +32,69 @@ const CODEX_DIRECTORY = 'sessions';
 /** Where Codex keeps its sessions, by year, month and day. */
 export function codexSessionsDirectory(home = homedir()): string {
   return join(home, '.codex', CODEX_DIRECTORY);
+}
+
+/** The only name Codex writes a session into. */
+const ROLLOUT_FILE = /^rollout-.*\.jsonl$/;
+
+export interface RolloutFile {
+  readonly path: string;
+  readonly size: number;
+}
+
+/**
+ * Every rollout under `root`, which is what the watcher actually has to watch.
+ *
+ * There is no path to be told. The Claude adapter is handed the transcript of
+ * the session it was asked about; Codex exposes no such thing — the process
+ * writes a dated file and nothing reports its name, so the adapter has to go and
+ * find it. That is also why a new session has to be picked up rather than
+ * configured: the second `codex` of the morning lands in a directory nobody
+ * mentioned.
+ *
+ * The whole tree is walked, not just today's directory, because a session that
+ * started yesterday is still the one being appended to. A walk costs a readdir
+ * per date directory and a stat per rollout — a few hundred calls, on a poll
+ * that is seconds apart, which is cheaper than the correctness of guessing which
+ * directory holds the live one.
+ *
+ * Symlinks are not followed, because `readdir` reports one as neither a
+ * directory nor a file and a link pointing at an ancestor would otherwise make
+ * the walk unbounded.
+ */
+export async function listRolloutFiles(
+  root = codexSessionsDirectory(),
+): Promise<readonly RolloutFile[]> {
+  const pending: string[] = [root];
+  const found: RolloutFile[] = [];
+  while (pending.length > 0) {
+    const directory = pending.pop() as string;
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      // A date directory can be removed by the harness between polls. Nothing to
+      // read is a normal answer here, not a failure to report.
+      continue;
+    }
+    for (const entry of entries) {
+      const full = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(full);
+        continue;
+      }
+      if (!ROLLOUT_FILE.test(entry.name)) continue;
+      try {
+        found.push({ path: full, size: (await stat(full)).size });
+      } catch {
+        // Listed and then gone. A file that vanished cannot be the live session.
+        continue;
+      }
+    }
+  }
+  // Sorted so a poll reads files in the same order every time, which is what
+  // makes a test that counts batches reproducible.
+  return found.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export interface ParsedRolloutLine {
@@ -125,7 +189,14 @@ export function parseRolloutLine(line: string): ParsedRolloutLine {
       const agentId = stringAt(payload, 'agent_id') ?? sessionId;
       const projectId = stringAt(payload, 'cwd') ?? stringAt(payload, 'project_id') ?? sessionId;
       return {
-        event: { ...base, type: 'session.started', agentId, installationId, projectId, harness: 'codex' },
+        event: {
+          ...base,
+          type: 'session.started',
+          agentId,
+          installationId,
+          projectId,
+          harness: 'codex',
+        },
         skipped: undefined,
       };
     }
@@ -180,7 +251,18 @@ function parseResponseItem(
       }
       const output = payload.output ?? payload.result;
       return {
-        event: { ...base, type: 'tool.completed', tool: normalizeToolName(name), ok: !isFailure(output), durationMs: 0 },
+        // A rollout records when a call came back, never when it went out, so
+        // the interval is not knowable from this log. The protocol requires the
+        // field and rejects a missing one, so 0 is a floor rather than a
+        // measurement — a client that reads it as "this call was instant" is
+        // reading more than the file knows.
+        event: {
+          ...base,
+          type: 'tool.completed',
+          tool: normalizeToolName(name),
+          ok: !isFailure(output),
+          durationMs: 0,
+        },
         skipped: undefined,
       };
     }
@@ -229,39 +311,73 @@ function isFailure(output: unknown): boolean {
  *
  * Incremental, and a trailing line with no newline is left for the next poll: a
  * JSON document cut in half is not a document, and parsing half of one is how a
- * tailer invents events. A file that shrank — rotated, or replaced — resets the
- * cursor rather than reading from a stale offset into the middle of whatever
+ * tailer invents events. A file that shrank — rotated, or replaced — restarts
+ * from zero rather than reading from a stale offset into the middle of whatever
  * now occupies the path.
+ *
+ * THE CURSOR IS A BYTE OFFSET, AND IT HAS TO STAY ONE. A rollout line is UTF-8
+ * on disk and a byte is not a character: `sửa lỗi build 🚀` is 14 characters,
+ * 20 bytes. Read the whole file as a string, slice that string at a byte count,
+ * and the second poll begins past the end of the line before it — the events in
+ * between stop parsing and are counted as skips, so the session loses history
+ * and every test still passes, because the fixtures were all ASCII. The drift is
+ * always the same way round: `Buffer.byteLength` is never less than the
+ * character count, so the cursor runs ahead and the failure is a silent drop
+ * rather than a duplicate. The Claude reader had this too; a copied reader that
+ * slices a decoded string has it again.
  */
 export async function readNewRolloutLines(
   path: string,
   offset: number,
 ): Promise<{ readonly lines: readonly string[]; readonly offset: number }> {
-  let size: number;
+  let handle: FileHandle;
   try {
-    size = (await stat(path)).size;
+    handle = await open(path, 'r');
   } catch {
     return { lines: [], offset };
   }
-  if (size < offset) {
-    // The file shrank, so it was rotated or replaced. Reading from the stale
-    // offset would start wherever it happened to land in a DIFFERENT session's
-    // file. Restart from zero and read what is there now, rather than resetting
-    // the cursor and making the caller poll once more to find out.
-    return readNewRolloutLines(path, 0);
-  }
-  if (size === offset) {
-    return { lines: [], offset };
-  }
+  try {
+    // Sized and read through one handle, so a file replaced between the two
+    // cannot report the size of one session and deliver the bytes of another.
+    const { size } = await handle.stat();
+    if (size < offset) {
+      // Truncated in place, or the path was taken over by another session. The
+      // handle already points at whatever occupies the path now, so re-reading
+      // from zero is the whole of the recovery — no second open, and no poll
+      // spent discovering that the file moved.
+      offset = 0;
+    }
+    if (size === offset) {
+      return { lines: [], offset };
+    }
 
-  const fresh = (await readFile(path, 'utf8')).slice(offset);
-  const lastNewline = fresh.lastIndexOf('\n');
-  if (lastNewline === -1) {
-    return { lines: [], offset };
+    const fresh = Buffer.allocUnsafe(size - offset);
+    let filled = 0;
+    while (filled < fresh.length) {
+      const { bytesRead } = await handle.read(
+        fresh,
+        filled,
+        fresh.length - filled,
+        offset + filled,
+      );
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    // A short read is not fatal, but the cursor must advance over what was
+    // actually read: a buffer that claims bytes it never received would skip
+    // events, and a partial multi-byte character at the tail is already excluded
+    // by the newline search below.
+    const text = fresh.toString('utf8', 0, filled);
+    const lastNewline = text.lastIndexOf('\n');
+    if (lastNewline === -1) {
+      return { lines: [], offset };
+    }
+    const complete = text.slice(0, lastNewline);
+    return {
+      lines: complete.split('\n'),
+      offset: offset + Buffer.byteLength(complete, 'utf8') + 1,
+    };
+  } finally {
+    await handle.close();
   }
-  const complete = fresh.slice(0, lastNewline);
-  return {
-    lines: complete.split('\n'),
-    offset: offset + Buffer.byteLength(complete, 'utf8') + 1,
-  };
 }

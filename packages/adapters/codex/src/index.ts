@@ -11,8 +11,16 @@
  * wrapper around one CLI's extension points.
  */
 
-export { codexSessionsDirectory, parseRolloutLine, readNewRolloutLines } from './parsers/rollout.js';
-export type { ParsedRolloutLine } from './parsers/rollout.js';
+export {
+  codexSessionsDirectory,
+  listRolloutFiles,
+  parseRolloutLine,
+  readNewRolloutLines,
+} from './parsers/rollout.js';
+export type { ParsedRolloutLine, RolloutFile } from './parsers/rollout.js';
 
 export { CodexWatcher } from './watcher.js';
 export type { BatchSender, CodexWatcherOptions } from './watcher.js';
+
+export { createIngestSender, IngestRefusedError } from './ingest.js';
+export type { FetchLike, HttpResponseLike, IngestOptions } from './ingest.js';
