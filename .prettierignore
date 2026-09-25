@@ -8,5 +8,10 @@ pnpm-lock.yaml
 COMPREHENSIVE_PLAN_FOR_BATTLE_AGENTS.md
 LICENSE
 
-# Drizzle emits the SQL and its snapshot journal; they are not hand-maintained.
-drizzle/migrations
+# Drizzle emits the SQL, the snapshot and the journal; they are not
+# hand-maintained. The path was `drizzle/migrations` before the database moved
+# into packages/, and the stale entry ignored nothing — which is why a generated
+# snapshot was being reformatted. Reformatting a snapshot also makes it differ
+# from what drizzle emits, so schema-drift then reports a drift that is only
+# whitespace.
+packages/db/migrations/
