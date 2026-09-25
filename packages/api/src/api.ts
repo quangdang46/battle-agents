@@ -1,7 +1,7 @@
 import { defineAction } from '@battle-agents/core';
 import { isRegisteredActionId } from '@battle-agents/protocol';
 import type { RegisteredActionId } from '@battle-agents/protocol';
-import type { ActionSummary, Capability, Runtime } from '@battle-agents/core';
+import type { ActionSummary, Capability, EventBus, GameEvent, Runtime } from '@battle-agents/core';
 
 /**
  * The application API: the single definition of what an agent can do.
@@ -162,7 +162,7 @@ export class UnknownDomainError extends Error {
  * made here is a decision the CLI and the HTTP route and the MCP tool would all
  * have to make identically, and they would not.
  */
-export function createApplicationApi(runtime: Runtime): ApplicationApi {
+export function createApplicationApi(runtime: Runtime, bus?: EventBus): ApplicationApi {
   return {
     async discover(domain?: string): Promise<Discovery> {
       if (domain === undefined) {
@@ -221,15 +221,42 @@ export function createApplicationApi(runtime: Runtime): ApplicationApi {
     },
 
     observe(query: ObserveQuery, listener: (event: unknown) => void): Observer {
-      // A no-op subscription until a transport supplies a bus. Returning a real
-      // Observer that can be closed keeps a surface from having to special-case
-      // "the bus is not wired yet", which is the shape that grows into a
-      // different code path per surface.
-      void query;
-      void listener;
-      return { close() {} };
+      // A bus is optional because `Runtime` deliberately does not expose one:
+      // features get it through `RuntimeContext`, and the composition root holds
+      // the other end. Without it there is nothing to subscribe to, and
+      // returning a closable no-op keeps a surface from having to special-case
+      // "the bus is not wired yet" — the shape that grows into a different code
+      // path per surface.
+      //
+      // This was a permanent no-op that ignored both arguments, and the test
+      // suite did not notice because the only observe assertion was that a
+      // subscription opens and closes. `observe` is one of the five frozen
+      // primitives and was advertised to every agent as a working capability
+      // while delivering nothing.
+      if (bus === undefined) {
+        return { close() {} };
+      }
+      const unsubscribe = bus.subscribe((event: GameEvent) => {
+        if (query.domain === undefined || domainOf(event) === query.domain) {
+          listener(event);
+        }
+      });
+      return { close: unsubscribe };
     },
   };
+}
+
+/**
+ * The domain an event belongs to, taken from the segment before the first dot.
+ *
+ * The event type is the only place a domain is recorded: `GameEvent` carries
+ * `type`, `actorId` and a payload, and a payload is feature-owned, so reading a
+ * domain out of it would mean this file knew what each feature puts there. An
+ * undotted type (`waiting`) is its own domain, which is the same answer.
+ */
+function domainOf(event: GameEvent): string {
+  const separator = event.type.indexOf('.');
+  return separator === -1 ? event.type : event.type.slice(0, separator);
 }
 
 function assertKnownDomain(runtime: Runtime, domain: string): void {

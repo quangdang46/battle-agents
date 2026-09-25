@@ -135,6 +135,11 @@ const FIXTURE_FILES: readonly SourceFile[] = [
   sourceFile('packages/infrastructure/postgres/src/repository.ts', ['@battle-agents/progression']),
   sourceFile('packages/infrastructure/postgres/src/schema.ts', ['@battle-agents/core']),
   sourceFile('apps/web/src/index.ts', ['@battle-agents/battle']),
+  // A route handler reaching into a feature. The composition root one line
+  // above importing the same package is legal and produces no violation, so
+  // this pair is what proves the rule is scoped to the route tree rather than
+  // to the presentation layer as a whole.
+  sourceFile('apps/web/app/api/quest/route.ts', ['@battle-agents/quest']),
   // Presentation importing a feature is an ALLOWED direction, and animation is
   // a package that exists, so this produces no violation. It is kept in the
   // fixture to prove the engine distinguishes "legal" from "unresolvable":
@@ -182,6 +187,11 @@ const EXPECTED_FIXTURE_VIOLATIONS = [
     rule: 'no-interface-feature-implementation',
     from: 'packages/mcp-server/src/tools/discover.ts',
     specifier: '../../../features/social/src/index.js',
+  },
+  {
+    rule: 'no-route-handler-game-logic',
+    from: 'apps/web/app/api/quest/route.ts',
+    specifier: '@battle-agents/quest',
   },
   {
     // A specifier inside our own scope that names no package. There is no

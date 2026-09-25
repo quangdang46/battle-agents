@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -60,6 +60,17 @@ export function readSession(path = sessionPath()): StoredSession | undefined {
 export function writeSession(session: StoredSession, path = sessionPath()): void {
   mkdirSync(dirname(path), { recursive: true, mode: DIRECTORY_MODE });
   writeFileSync(path, `${JSON.stringify(session, null, 2)}\n`, { mode: FILE_MODE });
+  // `writeFileSync`'s mode applies only when it CREATES the file. On the second
+  // login the file already exists, the mode is ignored, and a file left at 0644
+  // by an older version — or restored from a backup — keeps those permissions
+  // while its contents are replaced with a fresh token. chmod is unconditional
+  // for that reason.
+  //
+  // There is a window between the write and the chmod in which a pre-existing
+  // loose mode is paired with the new token. Closing it needs a temp file and a
+  // rename, which is more machinery than a local session file earns; the window
+  // is microseconds and the alternative left the wrong mode in place forever.
+  chmodSync(path, FILE_MODE);
 }
 
 /** Removes the stored session. Absent is not an error: logging out twice is fine. */

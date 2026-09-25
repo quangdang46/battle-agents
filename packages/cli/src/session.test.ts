@@ -22,11 +22,32 @@ describe('the stored session', () => {
     expect(readSession(path)).toEqual({ baseUrl: 'http://api.test', token: 'secret' });
   });
 
-  it('creates the file so only its owner can read it', () => {
+  // Windows has no POSIX permission bits: Node synthesises 0o666 for a writable
+  // file regardless of what chmod was asked for, so the assertion below cannot
+  // pass there and its failure says nothing about the credential. Skipping is
+  // the honest response — a test that fails on a platform that cannot express
+  // the property trains people to ignore the one test guarding it.
+  const PERMISSIONS_APPLY = process.platform !== 'win32';
+
+  it.skipIf(!PERMISSIONS_APPLY)('creates the file so only its owner can read it', () => {
     // A credential readable by every account on a shared machine is a leaked
     // credential, and the mode is the only thing standing between them.
     const path = scratchFile();
     writeSession({ baseUrl: 'http://api.test', token: 'secret' }, path);
+
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  it.skipIf(!PERMISSIONS_APPLY)('tightens a pre-existing loose file when it replaces it', () => {
+    // The create path is the easy half. `writeFileSync`'s mode is ignored when
+    // the file already exists, so a second login against a file left at 0644 —
+    // by an older build, or by a backup restore — used to keep 0644 while its
+    // contents became a fresh token.
+    const path = scratchFile();
+    writeFileSync(path, JSON.stringify({ baseUrl: 'http://api.test', token: 'old' }), { mode: 0o644 });
+    expect(statSync(path).mode & 0o777).toBe(0o644);
+
+    writeSession({ baseUrl: 'http://api.test', token: 'new' }, path);
 
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });

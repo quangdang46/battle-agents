@@ -168,10 +168,22 @@ const FORBIDDEN = [
       'Interfaces consume features through the capability registry, never by importing a feature implementation (plan section 36).',
   },
   {
+    name: 'no-route-handler-game-logic',
+    from: {
+      layer: 'presentation',
+      // Only the Next.js route tree, not the whole presentation layer. The
+      // composition root in apps/web/src imports features on purpose and is the
+      // one place that decides which features exist.
+      files: ['apps/web/app/**/*.ts', 'apps/web/app/**/*.tsx'],
+    },
+    to: { layers: ['feature', 'adapter'] },
+    reason:
+      'A route handler authenticates, translates a request into an application command, and translates the answer back. Reaching into a feature or an adapter makes it the second place that knows a capability exists, and the CLI and MCP cannot reach that decision (plan sections 22 and 32).',
+  },
+  {
     name: 'no-infrastructure-import-of-upper-layers',
     from: { layer: 'infrastructure' },
-    to: { layers: ['feature', 'adapter', 'interface', 'presentation'] },
-    reason:
+    to: { layers: ['feature', 'adapter', 'interface', 'presentation'] },    reason:
       'Infrastructure implements the core persistence boundary, so it must not depend on the layers that consume it (plan section 19).',
   },
 ];
@@ -338,8 +350,34 @@ function resolveWorkspaceTarget({ fromPath, specifier, knownPaths, packageDirsBy
   return packageDirsByName.get(specifier) ?? UNRESOLVED_WORKSPACE_IMPORT;
 }
 
-function violatesRule(rule, source, target) {
+/**
+ * A `from.files` list narrows a rule to part of its layer.
+ *
+ * Layers are path-prefixed and too coarse for a rule that applies to one corner
+ * of a layer: the composition root in `apps/web/src` imports features on
+ * purpose, while a route handler under `apps/web/app` that imports one is
+ * deciding game questions at the transport edge. Without this the only options
+ * were to forbid the legal direction or to leave the illegal one unchecked.
+ */
+function globToRegExp(glob) {
+  // Split on `**/` rather than substituting a sentinel character, so a glob that
+  // legitimately contains the sentinel cannot be corrupted by it.
+  const [head, ...tail] = glob.split('**/');
+  const segments = [head, ...tail].map((part) =>
+    part.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*'),
+  );
+  return new RegExp(`^${segments.join('(?:.*/)?')}$`);
+}
+
+function matchesAnyGlob(patterns, repoRelativePath) {
+  return patterns.some((pattern) => globToRegExp(pattern).test(repoRelativePath));
+}
+
+function violatesRule(rule, source, target, fromPath) {
   if (source.layer !== rule.from.layer || !rule.to.layers.includes(target.layer)) {
+    return false;
+  }
+  if (rule.from.files !== undefined && !matchesAnyGlob(rule.from.files, fromPath)) {
     return false;
   }
   if (!rule.to.differentInstance) {
@@ -417,7 +455,7 @@ function checkImports({ files, packages }) {
       }
 
       const rule = FORBIDDEN.find((candidate) =>
-        violatesRule(candidate, source, classifyPath(target)),
+        violatesRule(candidate, source, classifyPath(target), file.path),
       );
       if (rule) {
         violations.push(

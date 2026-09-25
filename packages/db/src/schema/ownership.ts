@@ -34,6 +34,12 @@ export const FEATURE_TABLES = [
   'battles',
   'battle_participants',
   'agent_stats',
+  // The reputation feature added this table in ba-feature-reputation-nnj and the
+  // verifier caught it on the next schema-drift stage: a table that is not in
+  // either list belongs to no boundary, so nothing may migrate it and nothing
+  // asserts its invariants. That is the split doing its job — the failure was
+  // the manifest being one commit behind the schema, not the check.
+  'agent_reputation',
   'achievements',
   'messages',
 ] as const;

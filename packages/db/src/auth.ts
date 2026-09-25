@@ -169,7 +169,13 @@ export function readBearerToken(request: {
   // when the real problem is that it never sent one.
   const header = request.headers.get('authorization') ?? null;
 
-  if (fromQuery && header === null) {
+  // Refused whenever the URL carries one, not only when the header is missing.
+  // The first version tested `fromQuery && header === null`, which accepted a
+  // request that put the token in the URL *and* sent a valid header — the
+  // credential was already exposed to access logs, referrers and shell history
+  // by then, and the header being correct does not un-leak it. A client that
+  // leaks a token once should be told so loudly rather than served.
+  if (fromQuery) {
     throw new AuthenticationError({ reason: 'token-in-url' });
   }
   if (header === null) {

@@ -68,6 +68,9 @@ importers:
       '@battle-agents/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@battle-agents/mcp-server':
+        specifier: workspace:*
+        version: link:../../packages/mcp-server
       '@battle-agents/progression':
         specifier: workspace:*
         version: link:../../packages/features/progression
