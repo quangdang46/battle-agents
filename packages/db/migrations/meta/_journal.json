@@ -71,13 +71,6 @@
       "when": 1790364183964,
       "tag": "0009_github_delivery_claims",
       "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1790368931102,
-      "tag": "0010_jazzy_synch",
-      "breakpoints": true
     }
   ]
 }

@@ -84,18 +84,19 @@ describe('the MVP feature set', () => {
     expect(new Set(installed).size).toBe(installed.length);
   });
 
-  it('installs every feature the allowlist claims', () => {
-    // One direction is the scope gate; the other is a stale list. An allowlist
-    // that names a feature nobody installs is a claim about the product that has
-    // quietly stopped being true, which is the failure this repo keeps meeting
-    // in comments.
-    const installed = new Set(installedFeatures());
-    const claimedButAbsent = Object.keys(DECLARED_MVP_FEATURES).filter(
-      (name) => !installed.has(name),
-    );
-
-    expect(claimedButAbsent).toEqual([]);
-  });
+  // There is deliberately no "installs every feature the allowlist claims" test
+  // here, and its absence is load-bearing. This file originally had one, on the
+  // reasoning that an allowlist which has drifted from reality is a claim about
+  // the product that quietly stopped being true. The removal test caught it:
+  // scripts/removal-test.sh strips a feature out of the composition root and
+  // then runs the unit suite, so the check failed on every feature it removed —
+  // the exact operation that is this repository's defining property.
+  //
+  // The two directions are not symmetrical and cannot both be asserted. The list
+  // is an ALLOWLIST: it constrains what may be installed, and nothing in it
+  // claims every entry is currently installed. A feature legitimately vanishes
+  // from the composition root — that is what the removal test proves — so absence
+  // below the line is a valid state, not drift.
 
   it('gives every declared feature a non-empty reason', () => {
     for (const [name, reason] of Object.entries(DECLARED_MVP_FEATURES)) {
