@@ -1,6 +1,11 @@
 import { createApplicationApi } from '@battle-agents/api';
 import type { ApplicationApi } from '@battle-agents/api';
-import { createInMemoryEventBus, createRuntime, defineAction, InMemoryStateStore } from '@battle-agents/core';
+import {
+  createInMemoryEventBus,
+  createRuntime,
+  defineAction,
+  InMemoryStateStore,
+} from '@battle-agents/core';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -89,7 +94,12 @@ function routesWith(
 ) {
   const { api, publish } = apiWithBus();
   const sessions = createMcpSessionStore({ createServer: serverFactoryFor(api) });
-  const handle = createMcpRoutes({ authenticate, sessions, newSessionId: () => SESSION_ID, keepAliveMs });
+  const handle = createMcpRoutes({
+    authenticate,
+    sessions,
+    newSessionId: () => SESSION_ID,
+    keepAliveMs,
+  });
   return { handle, sessions, publish };
 }
 
@@ -146,7 +156,10 @@ describe('an authenticator that is itself broken', () => {
     const response = await handle(request(toolsCall(1, 'act')));
 
     expect(response.status).toBe(500);
-    expect(response.body).toEqual({ error: 'the authenticator failed', detail: 'connection pool exhausted' });
+    expect(response.body).toEqual({
+      error: 'the authenticator failed',
+      detail: 'connection pool exhausted',
+    });
   });
 });
 
@@ -217,7 +230,8 @@ describe('a session outlives the request that opened it', () => {
   });
 });
 
-describe('the notification stream', () => {  it('writes an observed event down the stream, as an SSE message', async () => {
+describe('the notification stream', () => {
+  it('writes an observed event down the stream, as an SSE message', async () => {
     const { handle, publish } = routesWith();
 
     await handle(request(INITIALIZE));

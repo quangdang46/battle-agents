@@ -44,7 +44,9 @@ describe('the stored session', () => {
     // by an older build, or by a backup restore — used to keep 0644 while its
     // contents became a fresh token.
     const path = scratchFile();
-    writeFileSync(path, JSON.stringify({ baseUrl: 'http://api.test', token: 'old' }), { mode: 0o644 });
+    writeFileSync(path, JSON.stringify({ baseUrl: 'http://api.test', token: 'old' }), {
+      mode: 0o644,
+    });
     expect(statSync(path).mode & 0o777).toBe(0o644);
 
     writeSession({ baseUrl: 'http://api.test', token: 'new' }, path);

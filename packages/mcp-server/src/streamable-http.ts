@@ -188,7 +188,12 @@ export async function handleMcpRequest(
   for (const message of messages.messages) {
     const parsed = messageSchema.safeParse(message);
     if (!parsed.success) {
-      outcomes.push(jsonRpcFailure(readId(message), new McpProtocolError(INVALID_REQUEST, describeIssues(parsed.error))));
+      outcomes.push(
+        jsonRpcFailure(
+          readId(message),
+          new McpProtocolError(INVALID_REQUEST, describeIssues(parsed.error)),
+        ),
+      );
       continue;
     }
 
@@ -226,7 +231,9 @@ export async function handleMcpRequest(
     return {
       status: ACCEPTED,
       body: null,
-      ...(assignedSessionId === undefined ? {} : { headers: { [SESSION_HEADER]: assignedSessionId } }),
+      ...(assignedSessionId === undefined
+        ? {}
+        : { headers: { [SESSION_HEADER]: assignedSessionId } }),
     };
   }
 
@@ -234,7 +241,9 @@ export async function handleMcpRequest(
   return {
     status: OK,
     body,
-    ...(assignedSessionId === undefined ? {} : { headers: { [SESSION_HEADER]: assignedSessionId } }),
+    ...(assignedSessionId === undefined
+      ? {}
+      : { headers: { [SESSION_HEADER]: assignedSessionId } }),
   };
 }
 
@@ -263,7 +272,10 @@ function rejectUnsupportedTransport(request: McpHttpRequest): McpHttpResponse | 
 
   const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.includes(JSON_CONTENT_TYPE)) {
-    return { status: UNSUPPORTED_MEDIA_TYPE, body: { error: `Content-Type must be ${JSON_CONTENT_TYPE}` } };
+    return {
+      status: UNSUPPORTED_MEDIA_TYPE,
+      body: { error: `Content-Type must be ${JSON_CONTENT_TYPE}` },
+    };
   }
 
   return undefined;
@@ -272,7 +284,9 @@ function rejectUnsupportedTransport(request: McpHttpRequest): McpHttpResponse | 
 function readBatch(body: unknown): { messages: unknown[] } | { error: McpProtocolError } {
   if (Array.isArray(body)) {
     if (body.length === 0) {
-      return { error: new McpProtocolError(INVALID_REQUEST, 'a batch must contain at least one message') };
+      return {
+        error: new McpProtocolError(INVALID_REQUEST, 'a batch must contain at least one message'),
+      };
     }
     return { messages: body };
   }
@@ -300,7 +314,11 @@ async function dispatch(server: McpServer, method: string, params: unknown): Pro
 function initialize(params: unknown): unknown {
   const parsed = initializeParamsSchema.safeParse(params);
   if (!parsed.success) {
-    throw new McpProtocolError(INVALID_PARAMS, 'initialize needs a protocolVersion', describeIssues(parsed.error));
+    throw new McpProtocolError(
+      INVALID_PARAMS,
+      'initialize needs a protocolVersion',
+      describeIssues(parsed.error),
+    );
   }
 
   // The client may ask for a revision this server predates. Answering with our
@@ -331,7 +349,11 @@ function listTools(server: McpServer): unknown {
 async function callTool(server: McpServer, params: unknown): Promise<unknown> {
   const parsed = callToolParamsSchema.safeParse(params);
   if (!parsed.success) {
-    throw new McpProtocolError(INVALID_PARAMS, 'tools/call needs a name', describeIssues(parsed.error));
+    throw new McpProtocolError(
+      INVALID_PARAMS,
+      'tools/call needs a name',
+      describeIssues(parsed.error),
+    );
   }
 
   const result = await server.callTool(parsed.data.name, parsed.data.arguments);
@@ -384,7 +406,9 @@ function readId(message: unknown): JsonRpcId {
 }
 
 function describeIssues(error: z.ZodError): string {
-  return error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join('; ');
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('; ');
 }
 
 function describeError(thrown: unknown): string {

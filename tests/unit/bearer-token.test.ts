@@ -50,18 +50,26 @@ describe('a token in the URL is refused', () => {
   });
 
   it('refuses the other two spellings a caller might reach for', () => {
-    expect(reasonFor(`Bearer ${TOKEN}`, 'https://host/api/mcp?access_token=leaked')).toBe('token-in-url');
-    expect(reasonFor(`Bearer ${TOKEN}`, 'https://host/api/mcp?api_key=leaked')).toBe('token-in-url');
+    expect(reasonFor(`Bearer ${TOKEN}`, 'https://host/api/mcp?access_token=leaked')).toBe(
+      'token-in-url',
+    );
+    expect(reasonFor(`Bearer ${TOKEN}`, 'https://host/api/mcp?api_key=leaked')).toBe(
+      'token-in-url',
+    );
   });
 
   it('refuses a token smuggled after another parameter', () => {
-    expect(reasonFor(`Bearer ${TOKEN}`, 'https://host/api/mcp?scope=mcp&token=leaked')).toBe('token-in-url');
+    expect(reasonFor(`Bearer ${TOKEN}`, 'https://host/api/mcp?scope=mcp&token=leaked')).toBe(
+      'token-in-url',
+    );
   });
 
   it('does not mistake a parameter merely named token for a credential', () => {
     // `?tokens=` and `?token=`-as-a-prefix are different requests, and refusing
     // them would train callers to stop reading the reason they were given.
-    expect(readBearerToken(request(`Bearer ${TOKEN}`, 'https://host/api/mcp?tokens=2'))).toBe(TOKEN);
+    expect(readBearerToken(request(`Bearer ${TOKEN}`, 'https://host/api/mcp?tokens=2'))).toBe(
+      TOKEN,
+    );
   });
 });
 

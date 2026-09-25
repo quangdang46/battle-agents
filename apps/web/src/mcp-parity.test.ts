@@ -1,6 +1,11 @@
 import { createApplicationApi } from '@battle-agents/api';
 import type { ApplicationApi } from '@battle-agents/api';
-import { createInMemoryEventBus, createRuntime, defineAction, InMemoryStateStore } from '@battle-agents/core';
+import {
+  createInMemoryEventBus,
+  createRuntime,
+  defineAction,
+  InMemoryStateStore,
+} from '@battle-agents/core';
 import type { GameEvent, Runtime } from '@battle-agents/core';
 import { createMcpServer } from '@battle-agents/mcp-server';
 

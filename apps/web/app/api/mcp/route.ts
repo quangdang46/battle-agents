@@ -29,7 +29,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function respond(request: Request): Promise<Response> {
-  const body: unknown = request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
+  const body: unknown =
+    request.method === 'GET' ? undefined : await request.json().catch(() => undefined);
   const httpRequest: HttpRequest = {
     method: request.method,
     url: request.url,

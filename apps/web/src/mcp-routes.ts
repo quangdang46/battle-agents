@@ -142,7 +142,10 @@ function encodeNotification(method: string, params: unknown): string {
  * arrives as a burst instead of one frame per timer tick. `wait` also returns on
  * its own timeout, which is what makes the keepalive possible.
  */
-function openNotificationStream(session: McpSession, keepAliveMs: number): ReadableStream<Uint8Array> {
+function openNotificationStream(
+  session: McpSession,
+  keepAliveMs: number,
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -155,7 +158,9 @@ function openNotificationStream(session: McpSession, keepAliveMs: number): Reada
             continue;
           }
           for (const notification of queued) {
-            controller.enqueue(encoder.encode(encodeNotification(notification.method, notification.params)));
+            controller.enqueue(
+              encoder.encode(encodeNotification(notification.method, notification.params)),
+            );
           }
         }
         controller.close();
@@ -207,7 +212,11 @@ export function createMcpRoutes(
     }
 
     if (request.method !== 'POST') {
-      return { status: 405, body: { error: 'use POST, GET or DELETE' }, headers: { allow: 'POST, GET, DELETE' } };
+      return {
+        status: 405,
+        body: { error: 'use POST, GET or DELETE' },
+        headers: { allow: 'POST, GET, DELETE' },
+      };
     }
 
     // A client that presents an id gets its own session back. A client that

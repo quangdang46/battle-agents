@@ -1,6 +1,11 @@
 import { createApplicationApi, PRIMITIVES } from '@battle-agents/api';
 import type { ApplicationApi } from '@battle-agents/api';
-import { createInMemoryEventBus, createRuntime, defineAction, InMemoryStateStore } from '@battle-agents/core';
+import {
+  createInMemoryEventBus,
+  createRuntime,
+  defineAction,
+  InMemoryStateStore,
+} from '@battle-agents/core';
 
 import { describe, expect, it } from 'vitest';
 
@@ -43,7 +48,9 @@ function apiWith(extensionCount: number): ApplicationApi {
 }
 
 /** The headers a conforming client sends. Overridable so a test can break one. */
-function clientHeaders(overrides: Record<string, string> = {}): { get(name: string): string | null } {
+function clientHeaders(overrides: Record<string, string> = {}): {
+  get(name: string): string | null;
+} {
   const headers = new Map<string, string>([
     ['accept', 'application/json, text/event-stream'],
     ['content-type', 'application/json'],
@@ -76,7 +83,10 @@ function call(id: number, method: string, params?: unknown): Record<string, unkn
 
 describe('the handshake a real client performs', () => {
   it('answers initialize with a protocol version, capabilities and a session id', async () => {
-    const response = await post(serverWith(), call(1, 'initialize', { protocolVersion: MCP_PROTOCOL_VERSION }));
+    const response = await post(
+      serverWith(),
+      call(1, 'initialize', { protocolVersion: MCP_PROTOCOL_VERSION }),
+    );
 
     expect(response.status).toBe(200);
     expect(response.headers?.['mcp-session-id']).toBe(FIXED_SESSION_ID);
@@ -90,7 +100,10 @@ describe('the handshake a real client performs', () => {
     // A client pinned to a revision this server predates should be told what it
     // got rather than being refused: the spec says the client disconnects if it
     // cannot use the answer, which is a clearer failure than a 4xx.
-    const response = await post(serverWith(), call(1, 'initialize', { protocolVersion: '2024-11-05' }));
+    const response = await post(
+      serverWith(),
+      call(1, 'initialize', { protocolVersion: '2024-11-05' }),
+    );
 
     const body = response.body as { result: { protocolVersion: string } };
     expect(body.result.protocolVersion).toBe('2024-11-05');
@@ -128,10 +141,15 @@ describe('tools/call reaches the application API', () => {
   it('dispatches act and returns the value as text content', async () => {
     const response = await post(
       serverWith(1),
-      call(3, 'tools/call', { name: 'act', arguments: { action: 'quest.claim', input: { args: 'an-issue' } } }),
+      call(3, 'tools/call', {
+        name: 'act',
+        arguments: { action: 'quest.claim', input: { args: 'an-issue' } },
+      }),
     );
 
-    const { result } = response.body as { result: { content: { type: string; text: string }[]; isError: boolean } };
+    const { result } = response.body as {
+      result: { content: { type: string; text: string }[]; isError: boolean };
+    };
     expect(result.isError).toBe(false);
 
     // noUncheckedIndexedAccess: indexing an array yields `T | undefined`, and
@@ -146,7 +164,10 @@ describe('tools/call reaches the application API', () => {
     // The distinction is the client's cue that the model should read the text
     // and correct itself. Collapsing it into a transport error makes an
     // unknown tool look like a broken server.
-    const response = await post(serverWith(1), call(3, 'tools/call', { name: 'guild.join', arguments: {} }));
+    const response = await post(
+      serverWith(1),
+      call(3, 'tools/call', { name: 'guild.join', arguments: {} }),
+    );
 
     const body = response.body as { error?: unknown; result?: { isError: boolean } };
     expect(body.error).toBeUndefined();
@@ -192,7 +213,10 @@ describe('the transport gate', () => {
   });
 
   it('answers a notification with 202 and no body', async () => {
-    const response = await post(serverWith(), { jsonrpc: '2.0', method: 'notifications/initialized' });
+    const response = await post(serverWith(), {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    });
 
     expect(response.status).toBe(202);
     expect(response.body).toBeNull();
