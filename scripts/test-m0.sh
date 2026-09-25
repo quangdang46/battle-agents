@@ -42,6 +42,7 @@ readonly RUN_ID
 
 # Order is the contract. Do not reorder without amending plan section 40.
 readonly CANONICAL_STAGES=(
+  build
   compose
   migrations
   seed
@@ -501,6 +502,25 @@ migrated_object_names_absent_from_sql() {
     done
 }
 
+run_stage_build() {
+  # The web app compiled or it did not, and nothing else in the pipeline
+  # found out: tsc and vitest both read tsconfig, and neither reads
+  # next.config.mjs or webpack's extension mapping. For several commits
+  # `next build` failed on an unresolvable `@/...js` import while every other
+  # stage was green, and a build that no gate runs is the same defect as a gate
+  # that checks nothing.
+  local build_status=0
+  ( cd "$REPO_ROOT" && pnpm -r build ) >/dev/null 2>&1 || build_status=$?
+
+  if [ "$build_status" -ne 0 ]; then
+    STAGE_STATUS="$STATUS_FAIL"
+    printf '  the workspace did not build (exit %s).\n' "$build_status"
+    printf '  Run `pnpm -r build` and read the compiler output; the output above\n'
+    printf '  is suppressed because it is long and the stage summary is not.\n'
+    return 1
+  fi
+}
+
 run_stage_schema_drift() {
   # A green integration suite can describe a schema the code no longer matches.
   # The integration test reads the DATABASE, which drizzle builds from the
@@ -610,6 +630,7 @@ run_stage() {
     seed) run_stage_seed ;;
     architecture) run_stage_architecture ;;
     schema-hygiene) run_stage_schema_hygiene ;;
+    build) run_stage_build ;;
     schema-drift) run_stage_schema_drift ;;
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;

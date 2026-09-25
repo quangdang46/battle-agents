@@ -8,6 +8,11 @@
 # scripts/check-stage-manifest.sh asserts this manifest, the stage list, and the
 # run_stage dispatch all agree. Three-way agreement means a stage cannot be
 # dropped, added in one place only, or left with no implementation.
+# `build` is here because the web app did not compile for several commits
+# and no stage noticed: tsc and vitest both read tsconfig, and neither reads
+# next.config.mjs or webpack's extension mapping. A check nobody runs is the
+# same defect as a gate that checks nothing.
+build
 compose
 migrations
 seed

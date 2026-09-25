@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 /** @type {import('next').NextConfig} */
 
 const nextConfig = {
@@ -17,15 +15,20 @@ const nextConfig = {
     // still has to be listed if the bundler sees it directly.
     '@battle-agents/protocol',
   ],
-  // `@` is the src directory. The route handlers import the gateway, the auth
-  // server and the shared route table through it, and the alias was never
-  // declared here, so `next build` failed to resolve every one of them while
-  // `tsc` and vitest passed: both of those read tsconfig paths, and neither
-  // reads this file. A build that no type check and no test can see failing
-  // is the same class of thing as the gates that were green while checking
-  // nothing.
+  // One webpack change, and it is the only one that was needed.
+  //
+  // Every import in this app carries a .js suffix, which is what the NodeNext
+  // module resolution the rest of the monorepo uses. webpack takes that suffix
+  // literally and looks for a .js file that does not exist, because the source
+  // is .ts — so `next build` failed to resolve every route handler's import
+  // while tsc and vitest both passed, because those two read tsconfig and
+  // neither reads this file.
+  //
+  // The `@` alias needs nothing here. Next reads `paths` out of the app's
+  // tsconfig by itself; a first attempt added a webpack alias for it, the build
+  // still failed, and the alias turned out to be redundant. A comment naming the
+  // wrong fix is worse than no comment, so this one names the one that held.
   webpack: (config) => {
-    config.resolve.alias['@'] = path.resolve('./src');
     // Every import in this app is written with a .js suffix, which is what the
     // NodeNext module resolution the rest of the monorepo uses. webpack takes
     // that suffix literally and looks for a .js file that does not exist,
