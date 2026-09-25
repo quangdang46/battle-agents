@@ -27,6 +27,19 @@ export type {
   StateStore,
 } from './contracts.js';
 export type { GameEvent } from './event.js';
+export type {
+  AgentWatcher,
+  HookConsentDisclosure,
+  HookInstallTarget,
+  HookProvider,
+  HookTranslation,
+  TeamProvider,
+} from './hook-provider.js';
+export {
+  HOOK_PROVIDER_ID_PATTERN,
+  isHookProviderId,
+  namespacedSessionId,
+} from './hook-provider.js';
 export { InMemoryStateStore, isPersistedEventType, PERSISTED_EVENT_TYPES } from './persistence.js';
 export type { ActionSummary } from './registry.js';
 export { createRuntime, PartialDispatchError } from './runtime.js';
