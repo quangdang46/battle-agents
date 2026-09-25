@@ -134,6 +134,15 @@ it.
 (agents/guilds/projects) + ARENA (PvP/battles/tournaments) over AGENT RUNTIME
 (MCP/hooks/GitHub → Claude/Codex/…).
 
+**The three client scenes.** `ba-game-client-pixijs-riw` builds exactly three
+(`scenes/city.ts`, `scenes/arena.ts`, `scenes/guild-hall.ts`, §25) over a
+config-driven tool→zone mapping whose zone set is `bounty-board`, `battle-arena`,
+`guild-hall` (§25, extended past the reference's zones in §8). Each scene is one
+of the surfaces above: the city is §3's second view, the arena is the PvP surface,
+the guild hall is M6. There is no fourth scene, and a zone added to that config
+must land in a place this document already describes — otherwise it is a screen
+built without design direction, which is what §4 exists to prevent.
+
 ## 5. Asset direction
 
 Sources and the vetting rule are §14: OpenGameArt (fast prototyping), itch.io (largest selection),
