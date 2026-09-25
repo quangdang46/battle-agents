@@ -2,7 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // `src/ingest.ts` is the `POST /api/events` client, and a client names two
+    // runtime globals — `fetch` and `setTimeout`. The base sets `types: []` to
+    // keep this package free of a Node assumption, and that assumption is still
+    // the right default for everything else in here: the event union, the
+    // buffer, the tool-map and the version are a wire format and use neither.
+    // Adding it here does not add it downstream, because none of the exported
+    // types in ingest.ts mention a Node type — the two globals are only in the
+    // two default arguments, which never reach a .d.ts.
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]

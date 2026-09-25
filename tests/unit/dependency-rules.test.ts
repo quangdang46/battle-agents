@@ -127,6 +127,16 @@ const FIXTURE_FILES: readonly SourceFile[] = [
   sourceFile('packages/core/src/contracts.ts', ['@battle-agents/protocol']),
   sourceFile('packages/adapters/claude/src/hooks.ts', ['@battle-agents/bounty']),
   sourceFile('packages/adapters/codex/src/index.ts', ['@battle-agents/protocol']),
+  // The two adapter-adapter routes the rule has to catch, one per resolution
+  // path. A workspace specifier is resolved through the package table, and a
+  // relative one through the file list, so a rule that only handled the first
+  // would pass these fixtures while a cursor file reaching into apps/web by
+  // relative path sailed through. Both are the same rule: an adapter importing
+  // another adapter, or the presentation layer, is adapter-game-code.
+  sourceFile('packages/adapters/cursor/src/parsers/transcript.ts', ['@battle-agents/gemini']),
+  sourceFile('packages/adapters/gemini/src/watcher.ts', [
+    '../../../../apps/web/src/event-batch.js',
+  ]),
   sourceFile('packages/cli/src/index.ts', ['@battle-agents/quest']),
   sourceFile('packages/mcp-server/src/tools/discover.ts', [
     '../../../features/social/src/index.js',
@@ -152,6 +162,16 @@ const EXPECTED_FIXTURE_VIOLATIONS = [
     rule: 'no-adapter-game-code',
     from: 'packages/adapters/claude/src/hooks.ts',
     specifier: '@battle-agents/bounty',
+  },
+  {
+    rule: 'no-adapter-game-code',
+    from: 'packages/adapters/cursor/src/parsers/transcript.ts',
+    specifier: '@battle-agents/gemini',
+  },
+  {
+    rule: 'no-adapter-game-code',
+    from: 'packages/adapters/gemini/src/watcher.ts',
+    specifier: '../../../../apps/web/src/event-batch.js',
   },
   {
     rule: 'no-core-import-of-outer-layers',
@@ -216,6 +236,8 @@ describe('layering rule engine', () => {
     { dir: 'packages/features/bounty', name: '@battle-agents/bounty' },
     { dir: 'packages/cli', name: '@battle-agents/cli' },
     { dir: 'packages/core', name: '@battle-agents/core' },
+    { dir: 'packages/adapters/cursor', name: '@battle-agents/cursor' },
+    { dir: 'packages/adapters/gemini', name: '@battle-agents/gemini' },
     { dir: 'packages/game-client', name: '@battle-agents/game-client' },
     { dir: 'packages/features/guild', name: '@battle-agents/guild' },
     { dir: 'packages/mcp-server', name: '@battle-agents/mcp-server' },

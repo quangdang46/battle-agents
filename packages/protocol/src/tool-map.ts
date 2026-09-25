@@ -17,10 +17,12 @@
  * silent divergence:
  *
  * 1. `TOOL_NAME_MAP` is exported here. Upstream keeps it module-private and
- *    reaches it only through `normalizeToolName`. Ours is exported because the
- *    adapter contract suite asserts against the map directly rather than
- *    inferring its contents by probing the function, and because an adapter
- *    registering a new harness name needs to read what is already taken.
+ *    reaches it only through `normalizeToolName`. Ours is exported because an
+ *    adapter registering a new harness's names needs to read what is already
+ *    taken rather than inferring it by probing the function, and so a test can
+ *    assert against the map rather than against a call that hides it. This
+ *    comment used to name a shared adapter contract suite as the reason, and
+ *    that suite does not exist; the reasons above are the ones that hold.
  * 2. `TOOL_ICONS` is not ported. It is emoji presentation and belongs to the
  *    game client; the protocol package has no business choosing how a tool is
  *    drawn.
@@ -28,12 +30,12 @@
  *    (bounty-board, battle-arena, guild-hall), because the game client maps
  *    tools onto our world and upstream's zones describe a different world.
  *
- * The entry counts are smaller than the plan implies — 41 name mappings and 29
- * zone mappings, not the ~50 quoted upstream. Both grow as harnesses ship new
- * tools, so the counts are not a contract. What is a contract is the behaviour
- * for an unknown tool: `getZoneForTool` returns a zone rather than dropping the
- * event, because an unmapped tool is still real activity and a gap in this
- * table must not break the pipeline.
+ * The entry counts are smaller than the plan implies, not the ~50 quoted
+ * upstream, and they grow as harnesses ship new tools, so the counts are not a
+ * contract. What is a contract is the behaviour for an unknown tool:
+ * `getZoneForTool` returns a zone rather than dropping the event, because an
+ * unmapped tool is still real activity and a gap in this table must not break
+ * the pipeline.
  */
 
 export type ZoneId =
@@ -103,6 +105,14 @@ export const TOOL_ZONE_MAP: Readonly<Record<string, ZoneId>> = {
   Agent: 'spawn',
   TeamCreate: 'spawn',
   TeamDelete: 'spawn',
+
+  // Cursor. Two of these are zone-only and have no canonical name, which is the
+  // split the two maps exist for: `Await` waits on a background command without
+  // running one, and `CallMcpTool` wraps a third-party MCP tool whose real name
+  // is only known once the call is made. Both are zoned by what they DO, and
+  // neither is renamed to a name it is not.
+  Await: 'terminal',
+  CallMcpTool: 'web',
 };
 
 /**
@@ -137,6 +147,20 @@ export const TOOL_NAME_MAP: Readonly<Record<string, string>> = {
   webfetch: 'WebFetch',
   todoread: 'TodoRead',
   todowrite: 'TodoWrite',
+
+  // OpenCode's own names for the same activities, counted across the 1153 tool
+  // calls in the database on this machine on 2026-09-26 (OpenCode 1.18.21).
+  // `shell` alone is 433 of them — the single most common tool it runs, and
+  // unmapped it would
+  // land in the thinking zone instead of the terminal, which is the exact
+  // failure the header above describes as "correct and unreadable". `execute` is
+  // 114 calls carrying `{code}`, a code runner, and the `js_repl: 'Bash'` entry
+  // below is the precedent for putting one in the terminal zone. `subagent` and
+  // `question` are 13 and 2 calls and are named for what they do.
+  shell: 'Bash',
+  execute: 'Bash',
+  subagent: 'Agent',
+  question: 'AskUserQuestion',
 
   // pi-specific
   'edit-diff': 'Patch',
@@ -173,6 +197,35 @@ export const TOOL_NAME_MAP: Readonly<Record<string, string>> = {
   image_generation: 'Write',
   write_stdin: 'Bash',
   search_apps: 'WebSearch',
+
+  // Cursor agent transcripts: the complete set of tool names across 4,013
+  // tool_use blocks in the 159 transcripts on the machine this map was extended
+  // from. Shell, Ls, Task and AskQuestion are the ones needing a canonical
+  // name; Read, Grep, Glob, Edit, TodoWrite and WebFetch are already canonical
+  // and so need no entry.
+  Shell: 'Bash',
+  Ls: 'Bash',
+  // Cursor's Task is a subagent dispatch, which is what Codex calls spawn_agent.
+  Task: 'Agent',
+  AskQuestion: 'AskUserQuestion',
+
+  // Gemini CLI 0.46.0, read out of the installed bundle's `Name` fields rather
+  // than from memory. `read_file`, `glob` and `web_search` already appear above
+  // and are deliberately not repeated. `save_memory` and `list_mcp_resource_
+  // todos` are not in this build, so they are absent here too — a name nobody
+  // has observed should not be in a shared table on the strength of a
+  // recollection.
+  read_many_files: 'Read',
+  replace: 'Edit',
+  write_file: 'Write',
+  run_shell_command: 'Bash',
+  search_file_content: 'Grep',
+  web_fetch: 'WebFetch',
+  google_web_search: 'WebSearch',
+  list_directory: 'Bash',
+  list_mcp_resources: 'Read',
+  list_background_processes: 'Bash',
+  read_background_output: 'Read',
 };
 
 /**
