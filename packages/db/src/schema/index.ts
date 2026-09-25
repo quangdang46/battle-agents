@@ -6,5 +6,6 @@ export * from './features/achievements.js';
 export * from './features/battle.js';
 export * from './features/bounty.js';
 export * from './features/progression.js';
+export * from './features/reputation.js';
 export * from './features/quest.js';
 export * from './features/social.js';

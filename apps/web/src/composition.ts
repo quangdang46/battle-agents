@@ -1,6 +1,7 @@
 import { agentFeature } from '@battle-agents/agent';
 import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
+import { reputationFeature } from '@battle-agents/reputation';
 import { createRuntime } from '@battle-agents/core';
 import type { EventBus, Logger, Runtime, StateStore } from '@battle-agents/core';
 
@@ -11,6 +12,7 @@ import {
   DrizzleAgentRepository,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
+  DrizzleReputationRepository,
   DrizzleSessionRepository,
 } from '@battle-agents/db';
 
@@ -65,6 +67,12 @@ export interface GameRuntimeDependencies {
    * indistinguishable from one whose progress was never recorded.
    */
   readonly progressionRepository: DrizzleProgressionRepository;
+  /**
+   * Reputation storage. Required for the same reason as the others: trust with
+   * no store answers zero, and an agent nobody has heard of and an agent whose
+   * record was lost are different situations.
+   */
+  readonly reputationRepository: DrizzleReputationRepository;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -86,6 +94,7 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       }),
       questFeature({ repository: dependencies.questRepository }),
       progressionFeature({ repository: dependencies.progressionRepository }),
+      reputationFeature({ repository: dependencies.reputationRepository }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

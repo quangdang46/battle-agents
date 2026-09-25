@@ -57,6 +57,13 @@
       "when": 1790305540822,
       "tag": "0007_perpetual_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790306633366,
+      "tag": "0008_big_mephistopheles",
+      "breakpoints": true
     }
   ]
 }

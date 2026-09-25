@@ -9,6 +9,7 @@ import {
   DrizzleCredentialStore,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
+  DrizzleReputationRepository,
   DrizzleSessionRepository,
   DrizzleStateStore,
   type Database,
@@ -82,6 +83,7 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
     questRepository: new DrizzleQuestRepository(dependencies.database),
     sessionRepository,
     progressionRepository: new DrizzleProgressionRepository(dependencies.database),
+    reputationRepository: new DrizzleReputationRepository(dependencies.database),
   });
 
   // The snapshot is deliberately synchronous and deliberately empty of live

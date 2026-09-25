@@ -14,6 +14,7 @@ import {
   DrizzleAgentRepository,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
+  DrizzleReputationRepository,
   DrizzleSessionRepository,
   DrizzleStateStore,
 } from '@battle-agents/db';
@@ -171,6 +172,7 @@ export function sharedApi(): ApplicationApi {
     questRepository: new DrizzleQuestRepository(database),
     sessionRepository: new DrizzleSessionRepository(database),
     progressionRepository: new DrizzleProgressionRepository(database),
+    reputationRepository: new DrizzleReputationRepository(database),
   });
   const api = createApplicationApi(runtime);
   cached = { api, close: () => closeDatabasePool(pool) };
