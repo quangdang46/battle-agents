@@ -95,7 +95,26 @@ export interface Capability {
 export interface ActionDef<I = unknown, O = unknown> {
   /** Dotted and lowercase, at least two segments: "quest.claim". */
   readonly id: string;
-  /** What a caller must hold to run this. Never empty. */
+  /**
+   * What a caller must hold to run this. Never empty.
+   *
+   * A DECLARATION, not an enforcement point, and the distinction is settled
+   * rather than left open. Nothing in core compares this against a caller, and
+   * `RuntimeContext` deliberately has no principal to compare against: the
+   * contract is frozen, and adding one would break every extension written
+   * against it.
+   *
+   * Enforcement belongs to the transport, which knows who is calling because it
+   * authenticated them, and every surface reaches the same Application API, so
+   * there is one place to get it right rather than three. Core validates that
+   * the list is non-empty, freezes it, and publishes it in the summary a
+   * transport reads.
+   *
+   * Consequence worth stating plainly: an action that should be restricted is
+   * not yet restricted by anything in this repository. Until the transport
+   * passes a caller's grants to the API, this field is documentation that
+   * happens to be machine-readable.
+   */
   readonly permissions: readonly string[];
   /**
    * What this action does, in a sentence a caller can act on.

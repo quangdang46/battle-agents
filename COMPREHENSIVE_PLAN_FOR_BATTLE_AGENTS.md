@@ -982,6 +982,12 @@ Review finding: `skill.md` could not be fetched directly (server returns Markdow
 
 If these four are right, everything above (bounty/battle/guild) stays tháo-lắp clean. If any is wrong, stop features and fix the contract.
 
+DECIDED 2026-09-25, three open questions the audit raised about the frozen contracts. Each was left open by an earlier review, and an open question on a frozen contract is a defect: it blocks work without anyone noticing it is blocking.
+
+1. **Authorization is the transport's job, not the registry's.** `ActionDef.permissions` is a DECLARATION. Core validates it is non-empty, freezes it, and publishes it in the summary; nothing in core compares it against a caller, and `RuntimeContext` deliberately carries no principal. Adding one would break every extension written against a contract this section calls frozen. Every surface already reaches the same Application API, so there is one place to enforce it rather than three. The consequence is stated rather than hidden: until a transport passes a caller's grants to the API, an action that should be restricted is not yet restricted by anything in this repository.
+2. **`inspect` describes; it does not run.** It previously called `runAction`, so a primitive advertised as "describe one operation, without running it" could mutate durable state. `ActionDef` carries an optional `description` and `inspect` answers from the registry catalogue; an action with no description is reported as undescribed rather than given a sentence nobody wrote. The field is optional so the frozen contract does not break declarations already written.
+3. **`emit` publishes after handlers, not before.** A live subscriber receives deltas over SSE, so publishing first would let a client take a delta and then read a `full_state` that does not yet include it. The reverse cost is smaller: a handler that throws means the bus never sees the event, and a throwing handler is a bug the caller still gets to act on. All three are now pinned by tests that were watched failing.
+
 ### 29.2 Thin core, extension-first, NO plugin system yet
 
 Core stays exactly §20 (runtime/commands/events/state/entities/extension-api) — knows no Bounty/Battle/Guild/XP. Extensions compose explicitly (`createRuntime({extensions:[Agent,Bounty,Progression]})`); each extension is `commands/events/state/domain/index`. **Banned for MVP**: marketplace, plugin installer, dynamic/remote plugin loading, distributed event infra, microservices. (Paperclip/Pi alignment: "thin core, rich edges" as direction, not copied implementation.)
