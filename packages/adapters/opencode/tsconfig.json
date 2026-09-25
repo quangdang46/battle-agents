@@ -2,7 +2,14 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // The base sets types: [] on purpose, so a library package does not acquire
+    // a Node assumption. An adapter IS a Node process: it opens a database, sets
+    // a timer and reads the user's home directory, so it opts back in. See the
+    // same line in packages/adapters/_template/tsconfig.json, where the comment
+    // that predicts this being the first thing to go missing in a new adapter
+    // lives.
+    "types": ["node"]
   },
   "references": [
     {
@@ -12,5 +19,17 @@
       "path": "../../protocol"
     }
   ],
+  // A `composite` project has to list every file it transitively reaches, so the
+  // test file cannot be in this project while the fixture it imports is out of
+  // it. Both are out, and both are still typechecked: the root tsconfig includes
+  // every `*.test.ts` under the adapters for exactly this, which is what its own
+  // comment says package tsconfigs are supposed to do. The other three adapters
+  // do not exclude their test files, so theirs build emits them into dist; this
+  // one does not, and neither difference is load-bearing for anything.
+  //
+  // The fixture is test support regardless: it opens a write handle and inserts
+  // rows, which is the one thing the reader under test must never do, and
+  // shipping it in the published package would be absurd.
+  "exclude": ["src/**/*.test.ts", "src/fixtures/**"],
   "include": ["src/**/*.ts"]
 }

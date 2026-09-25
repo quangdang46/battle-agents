@@ -48,6 +48,8 @@ from, and the license it carries. Keep it updated in the same commit that adds t
 | ------------------------------------------ | ------------------------------------------------------------------- | -------------- | ---------- |
 | `apps/web/public/assets/tiny-swords-cc0/`  | `agent-quest/client/public/assets/themes/tiny-swords-cc0/`          | `010c791207c9` | CC0-1.0    |
 | `packages/protocol/src/tool-map.ts`        | `agent-move/packages/shared/src/constants/tools.ts`                 | `85d377110721` | MIT        |
+| `packages/adapters/opencode/src/parsers/sqlite.ts` | `agent-move/packages/server/src/watcher/opencode/{opencode-watcher,opencode-parser,opencode-paths}.ts` | `85d377110721` | MIT        |
+| `packages/adapters/opencode/src/watcher.ts` | `agent-move/packages/server/src/watcher/{agent-watcher,opencode/opencode-watcher}.ts` | `85d377110721` | MIT        |
 | `packages/core/src/` provider seam         | `pixel-agents/core/src/provider.ts`, `teamProvider.ts`              | `3537e140c209` | MIT        |
 | `packages/features/battle/` gates          | `agent-dashboard/adapters/claude-code/hooks/`                       | `b3c04cf7f0aa` | MIT        |
 | `packages/features/agent/` presence        | `arcane-agents/src/server/status/decide.ts`                         | `edcaf4018ab4` | MIT        |
