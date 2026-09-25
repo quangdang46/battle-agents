@@ -21,6 +21,7 @@ import {
   type ListQuestsInput,
   type SubmitQuestInput,
 } from './feature.js';
+import { isCreatableQuestDraft, titleForRejection } from './domain.js';
 import type { NewStoredQuest, QuestFilter, QuestRepository, StoredQuest } from './repository.js';
 
 const NOW = '2026-09-24T12:00:00.000Z';
@@ -97,6 +98,60 @@ describe('rejecting a quest that should not exist', () => {
   it('refuses a negative reward, which would propagate into progression', () => {
     expect(whyQuestIsRejected({ ...good, xpReward: -1 })).toEqual({ reason: 'xp-negative' });
   });
+
+  // The validator used to take `{ title: string; ... }`, which made
+  // `draft.title.trim()` typecheck and read as a guarantee. It was not one:
+  // `act()` takes its input as a generic, so `act('quest.create', {})` compiled
+  // clean and every one of these died on `undefined.trim()` instead of being
+  // rejected. A type annotation is a claim; these are the cases where the claim
+  // was previously unverified.
+  it('refuses a draft that is not an object at all', () => {
+    for (const draft of [null, undefined, 'a string', 42, true]) {
+      expect(whyQuestIsRejected(draft)).toEqual({ reason: 'not-an-object' });
+    }
+  });
+
+  it('refuses a draft with no title, rather than reading one that is not there', () => {
+    expect(whyQuestIsRejected({})).toEqual({ reason: 'title-not-a-string' });
+    expect(whyQuestIsRejected({ difficulty: 1, xpReward: 1 })).toEqual({ reason: 'title-not-a-string' });
+  });
+
+  it('refuses a title that is not a string, rather than calling trim on it', () => {
+    for (const title of [42, null, undefined, {}, ['a']]) {
+      expect(whyQuestIsRejected({ ...good, title })).toEqual({ reason: 'title-not-a-string' });
+    }
+  });
+
+  it('refuses a difficulty or reward of the wrong type, rather than comparing it', () => {
+    for (const difficulty of ['2', null, undefined, NaN]) {
+      expect(whyQuestIsRejected({ ...good, difficulty })).toEqual({
+        reason: 'difficulty-out-of-range',
+      });
+    }
+    for (const xpReward of ['100', null, undefined, NaN]) {
+      expect(whyQuestIsRejected({ ...good, xpReward })).toEqual({ reason: 'xp-negative' });
+    }
+  });
+
+  it('narrows to the creatable shape, so the caller stops asserting one', () => {
+    // The guard and the validator must not drift: the guard is defined in
+    // terms of the validator, and a draft that passes the validator is one the
+    // action can read without a cast.
+    const draft: unknown = { ...good, projectId: null, body: 'details' };
+    if (isCreatableQuestDraft(draft)) {
+      expect(draft.title.trim()).toBe('Fix the build');
+      expect(draft.difficulty).toBe(1);
+    } else {
+      throw new Error('expected the draft to be creatable');
+    }
+    expect(isCreatableQuestDraft({})).toBe(false);
+  });
+
+  it('names a title in a rejection only when there is one to name', () => {
+    expect(titleForRejection({ title: 'Fix the build' })).toBe('Fix the build');
+    expect(titleForRejection({})).toBe('(no title)');
+    expect(titleForRejection(null)).toBe('(no draft)');
+  });
 });
 
 /** A store in memory, so the feature is tested without a database. */
@@ -162,6 +217,25 @@ function harness() {
 }
 
 describe('a quest driven entirely through the protocol', () => {
+  it('rejects a malformed create as a rejection, not a crash', async () => {
+    // The end-to-end half of the guard. Unit-testing the validator would pass
+    // while the action still died: the rejection path read `input.title` to
+    // build its error message, so the one caller guaranteed to be handed the
+    // answer was the one that threw. `act` is the boundary a real caller comes
+    // through, so the assertion belongs here.
+    const { runtime, repository, seen } = harness();
+
+    for (const input of [{}, null, 'not a draft', { title: 42, difficulty: 1, xpReward: 1 }]) {
+      await expect(runtime.runAction('quest.create', input)).rejects.toThrow(
+        /quest not created/,
+      );
+    }
+
+    expect(repository.rows).toHaveLength(0);
+    // Every attempt announced itself rather than vanishing into a stack trace.
+    expect(seen.filter((each) => each.type === 'quest.rejected')).toHaveLength(4);
+  });
+
   it('is created, discovered, claimed and completed with no web clicks', async () => {
     const { runtime, repository, seen } = harness();
 

@@ -2,10 +2,14 @@ import { defineAction } from '@battle-agents/core';
 import type { GameEvent, GameFeature, RuntimeContext } from '@battle-agents/core';
 
 import {
+  isCreatableQuestDraft,
   isTerminalQuest,
+  MAX_QUEST_TITLE_LENGTH,
   nextQuestStatus,
   QUEST_STATUSES,
+  titleForRejection,
   whyQuestIsRejected,
+  type CreatableQuestDraft,
   type Quest,
   type QuestStatus,
   type QuestSummary,
@@ -35,13 +39,15 @@ export const QUEST_SUBMIT = 'quest.submit';
 // register. An admin revoking a quest is a real operation, so the id is real too.
 export const QUEST_ADMIN_REVOKE = 'quest.admin.revoke';
 
-export interface CreateQuestInput {
-  readonly projectId?: string | null;
-  readonly title: string;
-  readonly body?: string;
-  readonly difficulty: number;
-  readonly xpReward: number;
-}
+/**
+ * The shape a create is documented to take.
+ *
+ * An alias, not a second interface. The guard in `createQuest` narrows to
+ * `CreatableQuestDraft`; a parallel declaration here that happens to look the
+ * same is a third thing to keep in step, and a caller who satisfies one has not
+ * necessarily satisfied the other.
+ */
+export type CreateQuestInput = CreatableQuestDraft;
 
 export interface ClaimQuestInput {
   readonly questId: string;
@@ -116,24 +122,32 @@ export function questFeature(dependencies: { readonly repository: QuestRepositor
 
 async function createQuest(
   repository: QuestRepository,
-  input: CreateQuestInput,
+  input: unknown,
   context: RuntimeContext,
 ): Promise<QuestSummary> {
-  const rejection = whyQuestIsRejected(input);
-  if (rejection !== undefined) {
+  // Narrowed by a guard, not by an annotation. `act()` takes its input as a
+  // generic, so nothing upstream proved the shape, and the previous signature
+  // (`input: CreateQuestInput`) was a claim the code never checked: a malformed
+  // call reached `input.title.trim()` and died on a TypeError instead of being
+  // rejected. After the guard, every read below is a string or a number.
+  if (!isCreatableQuestDraft(input)) {
+    const rejection = whyQuestIsRejected(input) ?? { reason: 'not-an-object' as const };
     // A rejection is an event, not a throw: the caller asked for something
     // well-formed in shape and it was not, and that is a normal outcome of an
     // API rather than a fault in it.
     await context.runtime.emit(
       event(context, QUEST_REJECTED, {
-        title: input.title,
+        // Read defensively: the title is frequently the thing that is missing,
+        // and this is the one caller guaranteed to be handed the answer.
+        title: titleForRejection(input),
         reason: rejection.reason,
       }),
     );
     throw new Error(
       `quest not created: ${rejection.reason}. ` +
-        `Titles are 1-${input.title.trim().length} characters and non-empty, ` +
-        'difficulty is a whole number of at least 1, and the XP reward is not negative.',
+        'A title is a non-empty string of at most ' +
+        `${MAX_QUEST_TITLE_LENGTH} characters, difficulty is a whole number of at least 1, ` +
+        'and the XP reward is a whole number that is not negative.',
     );
   }
 

@@ -58,12 +58,29 @@ export const MIN_XP_REWARD = 0;
 
 /** Why a proposed quest cannot be created, or undefined when it can. */
 export type QuestRejection =
+  | { readonly reason: 'not-an-object' }
+  | { readonly reason: 'title-not-a-string' }
   | { readonly reason: 'title-empty' }
   | { readonly reason: 'title-too-long'; readonly max: number }
   | { readonly reason: 'difficulty-out-of-range' }
   | { readonly reason: 'xp-negative' };
 
 export const MAX_QUEST_TITLE_LENGTH = 200;
+
+/**
+ * A draft that has been proven creatable.
+ *
+ * Declared here rather than in `feature.ts` so the validator and the code it
+ * guards narrow to the same type. Two interfaces that look alike and are not is
+ * how a caller ends up satisfying the validator and not the action.
+ */
+export interface CreatableQuestDraft {
+  readonly title: string;
+  readonly difficulty: number;
+  readonly xpReward: number;
+  readonly projectId?: string | null;
+  readonly body?: string;
+}
 
 /**
  * The one place a quest is judged creatable.
@@ -73,25 +90,71 @@ export const MAX_QUEST_TITLE_LENGTH = 200;
  * zero-difficulty quest would make a difficulty tier mean nothing. Rejecting at
  * the boundary is cheaper than defending the number everywhere it is used.
  */
-export function whyQuestIsRejected(draft: {
-  readonly title: string;
-  readonly difficulty: number;
-  readonly xpReward: number;
-}): QuestRejection | undefined {
-  const title = draft.title.trim();
-  if (title.length === 0) {
+export function whyQuestIsRejected(draft: unknown): QuestRejection | undefined {
+  // `unknown`, not a shape. The parameter used to be typed `{ title: string; ... }`,
+  // which made `draft.title.trim()` typecheck and read as a guarantee — while
+  // `act()` takes its input as a generic, so `act('quest.create', {})` compiled
+  // clean and arrived here as `{}`. Every malformed call then died on
+  // `undefined.trim()` instead of being rejected, which is the opposite of what
+  // a rejection is for. A type annotation is a claim; this one was never checked.
+  //
+  // Narrowing here rather than at the action is the right place: every path into
+  // createQuest arrives from the same boundary, and a caller that has already
+  // proven the shape should not have to prove it twice.
+  if (typeof draft !== 'object' || draft === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { title, difficulty, xpReward } = draft as {
+    readonly title?: unknown;
+    readonly difficulty?: unknown;
+    readonly xpReward?: unknown;
+  };
+
+  if (typeof title !== 'string') {
+    return { reason: 'title-not-a-string' };
+  }
+  const trimmed = title.trim();
+  if (trimmed.length === 0) {
     return { reason: 'title-empty' };
   }
-  if (title.length > MAX_QUEST_TITLE_LENGTH) {
+  if (trimmed.length > MAX_QUEST_TITLE_LENGTH) {
     return { reason: 'title-too-long', max: MAX_QUEST_TITLE_LENGTH };
   }
-  if (!Number.isInteger(draft.difficulty) || draft.difficulty < MIN_DIFFICULTY) {
+  if (typeof difficulty !== 'number' || !Number.isInteger(difficulty) || difficulty < MIN_DIFFICULTY) {
     return { reason: 'difficulty-out-of-range' };
   }
-  if (!Number.isInteger(draft.xpReward) || draft.xpReward < MIN_XP_REWARD) {
+  if (typeof xpReward !== 'number' || !Number.isInteger(xpReward) || xpReward < MIN_XP_REWARD) {
     return { reason: 'xp-negative' };
   }
   return undefined;
+}
+
+/**
+ * The same judgement, as a type guard.
+ *
+ * Both exist because a caller needs two different things from one pass: the
+ * guard to narrow, and the reason to explain the refusal to whoever made the
+ * call. Validating twice is cheap next to validating wrong, and the pair cannot
+ * drift because the guard is defined in terms of the validator.
+ */
+export function isCreatableQuestDraft(draft: unknown): draft is CreatableQuestDraft {
+  return whyQuestIsRejected(draft) === undefined;
+}
+
+/**
+ * The title to name in a rejection, or a placeholder when there is not one.
+ *
+ * A rejection is most likely BECAUSE the title is missing or is not a string,
+ * so the path that reports the rejection cannot assume it. Reading `input.title`
+ * there is what made every malformed create die on `undefined.trim()` before it
+ * managed to reject — the one caller guaranteed to be given the answer.
+ */
+export function titleForRejection(draft: unknown): string {
+  if (typeof draft !== 'object' || draft === null) {
+    return '(no draft)';
+  }
+  const { title } = draft as { readonly title?: unknown };
+  return typeof title === 'string' ? title : '(no title)';
 }
 
 /** A quest as this feature holds it. Ids are plain: a column is a UUID, not an identity. */
