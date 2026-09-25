@@ -26,28 +26,40 @@ const CONTEXT: ClaudeHookContext = {
 
 const SESSION = 'claude-session-abc';
 
-/** Normalizes and proves the result survives the schema every surface uses. */
+/**
+ * Normalizes and proves every event survives the schema every surface uses.
+ *
+ * A LIST because one payload is more than one fact: a PreToolUse on Edit is a
+ * `tool.started` AND a `file.write`, and a test that only ever looked at the
+ * first would report the adapter passing while the derived file event was
+ * silently absent.
+ */
 function normalize(
   normalizer: ClaudeHookNormalizer,
   payload: Record<string, unknown>,
   context: ClaudeHookContext = CONTEXT,
-): AgentEvent | null {
-  const { event, skipped } = normalizer.normalize(
-    { session_id: SESSION, ...payload },
-    context,
-  );
-  if (event === null) {
+): readonly AgentEvent[] {
+  const { events, skipped } = normalizer.normalize({ session_id: SESSION, ...payload }, context);
+  if (events.length === 0) {
     expect(skipped, 'a payload that produced no event should say why').toBeDefined();
-    return null;
+    return [];
   }
-  const parsed = AgentEventSchema.safeParse(event);
-  expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
-  return event;
+  for (const event of events) {
+    const parsed = AgentEventSchema.safeParse(event);
+    expect(parsed.success, `${event.type}: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
+  }
+  return events;
+}
+
+/** The one event a payload is expected to produce, asserted to be exactly one. */
+function only(events: readonly AgentEvent[]): AgentEvent {
+  expect(events).toHaveLength(1);
+  return events[0] as AgentEvent;
 }
 
 describe('session lifecycle', () => {
-  it('turns SessionStart into session.started with OUR identity, not the payload\'s', () => {
-    const event = normalize(new ClaudeHookNormalizer(), { hook_event_name: 'SessionStart' });
+  it("turns SessionStart into session.started with OUR identity, not the payload's", () => {
+    const event = only(normalize(new ClaudeHookNormalizer(), { hook_event_name: 'SessionStart' }));
 
     expect(event).toMatchObject({
       type: 'session.started',
@@ -60,20 +72,24 @@ describe('session lifecycle', () => {
   });
 
   it('turns Stop into session.ended, completed', () => {
-    const event = normalize(new ClaudeHookNormalizer(), { hook_event_name: 'Stop' });
+    const event = only(normalize(new ClaudeHookNormalizer(), { hook_event_name: 'Stop' }));
 
     expect(event).toMatchObject({ type: 'session.ended', reason: 'completed' });
   });
 
   it('turns UserPromptSubmit into prompt.submitted, and omits an empty prompt rather than inventing one', () => {
-    const withPrompt = normalize(new ClaudeHookNormalizer(), {
-      hook_event_name: 'UserPromptSubmit',
-      prompt: 'fix the build',
-    });
-    const withoutPrompt = normalize(new ClaudeHookNormalizer(), {
-      hook_event_name: 'UserPromptSubmit',
-      prompt: '',
-    });
+    const withPrompt = only(
+      normalize(new ClaudeHookNormalizer(), {
+        hook_event_name: 'UserPromptSubmit',
+        prompt: 'fix the build',
+      }),
+    );
+    const withoutPrompt = only(
+      normalize(new ClaudeHookNormalizer(), {
+        hook_event_name: 'UserPromptSubmit',
+        prompt: '',
+      }),
+    );
 
     expect(withPrompt).toMatchObject({ type: 'prompt.submitted', prompt: 'fix the build' });
     expect(withoutPrompt).toMatchObject({ type: 'prompt.submitted' });
@@ -83,21 +99,23 @@ describe('session lifecycle', () => {
 
 describe('tools', () => {
   it('normalises the tool name, so Read and its aliases are one activity', () => {
-    const event = normalize(new ClaudeHookNormalizer(), {
+    const events = normalize(new ClaudeHookNormalizer(), {
       hook_event_name: 'PreToolUse',
       tool_name: 'Read',
       tool_input: { file_path: 'src/index.ts' },
     });
 
-    expect(event).toMatchObject({
+    expect(events[0]).toMatchObject({
       type: 'tool.started',
       tool: normalizeToolName('Read'),
       input: normalizeToolInput({ file_path: 'src/index.ts' }),
     });
+    // The file event the success criteria names, derived from the same call.
+    expect(events[1]).toMatchObject({ type: 'file.read', path: 'src/index.ts' });
   });
 
   it('normalises input keys to snake_case, because a consumer reads one shape', () => {
-    const event = normalize(new ClaudeHookNormalizer(), {
+    const [event] = normalize(new ClaudeHookNormalizer(), {
       hook_event_name: 'PreToolUse',
       tool_name: 'Edit',
       tool_input: { filePath: 'src/index.ts', oldString: 'a', newString: 'b', replaceAll: false },
@@ -110,11 +128,17 @@ describe('tools', () => {
 
   it('reports a duration by remembering the start, because a completion carries none', () => {
     const normalizer = new ClaudeHookNormalizer();
-    normalize(normalizer, { hook_event_name: 'PreToolUse', tool_name: 'Bash' }, { ...CONTEXT, at: AT });
-    const completed = normalize(
+    normalize(
       normalizer,
-      { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: { stdout: 'ok' } },
-      { ...CONTEXT, at: '2026-09-25T09:00:02.500Z' },
+      { hook_event_name: 'PreToolUse', tool_name: 'Bash' },
+      { ...CONTEXT, at: AT },
+    );
+    const completed = only(
+      normalize(
+        normalizer,
+        { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_response: { stdout: 'ok' } },
+        { ...CONTEXT, at: '2026-09-25T09:00:02.500Z' },
+      ),
     );
 
     expect(completed).toMatchObject({ type: 'tool.completed', ok: true, durationMs: 2500 });
@@ -123,11 +147,13 @@ describe('tools', () => {
   it('reports zero rather than a fabricated duration when the start was not seen', () => {
     // A restart mid-tool loses the start. Inventing an elapsed time is worse
     // than saying zero, because a game reading the number cannot tell them apart.
-    const event = normalize(new ClaudeHookNormalizer(), {
-      hook_event_name: 'PostToolUse',
-      tool_name: 'Bash',
-      tool_response: { stdout: 'ok' },
-    });
+    const event = only(
+      normalize(new ClaudeHookNormalizer(), {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_response: { stdout: 'ok' },
+      }),
+    );
 
     expect(event).toMatchObject({ type: 'tool.completed', durationMs: 0 });
   });
@@ -137,26 +163,32 @@ describe('tools', () => {
     // reason: a reader treats a failure differently from a tool that returned
     // false, and an adapter deciding between them at one exit path is exactly
     // where the distinction is lost.
-    const errored = normalize(new ClaudeHookNormalizer(), {
-      hook_event_name: 'PostToolUse',
-      tool_name: 'Bash',
-      tool_response: { is_error: true, error: 'permission denied' },
-    });
-    const messageOnly = normalize(new ClaudeHookNormalizer(), {
-      hook_event_name: 'PostToolUse',
-      tool_name: 'Bash',
-      tool_response: { error: { message: 'exit 1' } },
-    });
+    const errored = only(
+      normalize(new ClaudeHookNormalizer(), {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_response: { is_error: true, error: 'permission denied' },
+      }),
+    );
+    const messageOnly = only(
+      normalize(new ClaudeHookNormalizer(), {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_response: { error: { message: 'exit 1' } },
+      }),
+    );
 
     expect(errored).toMatchObject({ type: 'tool.failed', reason: 'permission denied' });
     expect(messageOnly).toMatchObject({ type: 'tool.failed', reason: 'exit 1' });
   });
 
   it('reports a permission request as its own event', () => {
-    const event = normalize(new ClaudeHookNormalizer(), {
-      hook_event_name: 'PermissionRequest',
-      tool_name: 'Bash',
-    });
+    const event = only(
+      normalize(new ClaudeHookNormalizer(), {
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'Bash',
+      }),
+    );
 
     expect(event).toMatchObject({ type: 'permission.requested', tool: normalizeToolName('Bash') });
   });
@@ -164,7 +196,7 @@ describe('tools', () => {
   it('emits nothing for a tool payload with no tool name, rather than an empty one', () => {
     const normalizer = new ClaudeHookNormalizer();
 
-    expect(normalize(normalizer, { hook_event_name: 'PreToolUse' })).toBeNull();
+    expect(normalize(normalizer, { hook_event_name: 'PreToolUse' })).toEqual([]);
     expect(normalizer.skippedCount).toBe(1);
   });
 });
@@ -176,15 +208,15 @@ describe('payloads this adapter does not understand', () => {
     // be indistinguishable from a session doing no work.
     const normalizer = new ClaudeHookNormalizer();
 
-    expect(normalize(normalizer, { hook_event_name: 'PreCompact' })).toBeNull();
+    expect(normalize(normalizer, { hook_event_name: 'PreCompact' })).toEqual([]);
     expect(normalizer.skippedCount).toBe(1);
   });
 
   it('drops a payload with no session id, because every event needs one', () => {
     const normalizer = new ClaudeHookNormalizer();
-    const { event, skipped } = normalizer.normalize({ hook_event_name: 'SessionStart' }, CONTEXT);
+    const { events, skipped } = normalizer.normalize({ hook_event_name: 'SessionStart' }, CONTEXT);
 
-    expect(event).toBeNull();
+    expect(events).toEqual([]);
     expect(skipped).toBe('unreadable-payload');
   });
 
@@ -192,7 +224,7 @@ describe('payloads this adapter does not understand', () => {
     const normalizer = new ClaudeHookNormalizer();
 
     for (const payload of [null, undefined, 'a string', 42]) {
-      expect(normalizer.normalize(payload, CONTEXT).event).toBeNull();
+      expect(normalizer.normalize(payload, CONTEXT).events).toEqual([]);
     }
     expect(normalizer.skippedCount).toBe(4);
   });

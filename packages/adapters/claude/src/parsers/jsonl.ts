@@ -1,9 +1,11 @@
-import { readFile, stat } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { normalizeToolInput, normalizeToolName } from '@battle-agents/protocol';
 import type { AgentEvent } from '@battle-agents/protocol';
+
+import { deriveCallEvents } from '../derive.js';
 
 /**
  * The JSONL tail: the safety net under the hook plane.
@@ -28,11 +30,15 @@ import type { AgentEvent } from '@battle-agents/protocol';
  *
  * The two planes do not share an id — a Claude hook payload names the tool, and
  * a transcript line names a uuid, and there is no field in either that appears
- * in both — so the key here is the pair (event kind, tool) within a short
- * window. That is a heuristic and it is named as one: a session that runs the
- * same tool twice inside the window loses the second, and a session that runs
- * two different tools is never affected. The alternative, dropping the tail
- * whenever hooks are healthy, loses a crash's entire record to avoid the
+ * in both — so the key here is the pair (event kind, the tool the event came
+ * FROM) within a short window. "Came from" and not "names" because one tool
+ * call produces several events: an Edit is a `tool.started` and a `file.write`,
+ * and keying the second on its own absent `tool` field would leave it matching
+ * nothing, so the tail would re-report every file write the hooks had already
+ * announced. That is a heuristic and it is named as one: a session that runs
+ * the same tool twice inside the window loses the second, and a session that
+ * runs two different tools is never affected. The alternative, dropping the
+ * tail whenever hooks are healthy, loses a crash's entire record to avoid the
  * problem, which is the worse trade for a net whose job is catching crashes.
  */
 
@@ -51,8 +57,24 @@ const HOOK_SUPPRESSION_MS = 2_000;
 /** How many recent keys to remember, so a busy session cannot grow without bound. */
 const DEDUP_MEMORY = 512;
 
+/**
+ * What one observed tool call became.
+ *
+ * The tool is carried alongside the events because the deduplication key is the
+ * CALL, not the event. An `Edit` yields a `tool.started` that names `Edit` and a
+ * `file.write` that names a path instead, and a ledger keyed on each event's
+ * own fields would match the first and miss the second — so a healthy hook
+ * plane would still leave every file write to be reported twice.
+ */
+export interface Observation {
+  readonly sessionId: string;
+  /** The canonical tool both planes can name. Undefined for a bare prompt. */
+  readonly tool: string | undefined;
+  readonly events: readonly AgentEvent[];
+}
+
 export interface ParsedLine {
-  readonly event: AgentEvent | null;
+  readonly observation: Observation | null;
   /**
    * The line's own uuid, which is the only identifier both planes could ever
    * agree on. Carried so a caller can persist it; not used for cross-plane
@@ -94,12 +116,8 @@ interface LedgerEntry {
 export function createHookLedger(windowMs = HOOK_SUPPRESSION_MS): HookLedger {
   const entries: LedgerEntry[] = [];
 
-  const matches = (
-    entry: LedgerEntry,
-    sessionId: string,
-    kind: string,
-    tool: string | undefined,
-  ) => entry.sessionId === sessionId && entry.kind === kind && entry.tool === tool;
+  const matches = (entry: LedgerEntry, sessionId: string, kind: string, tool: string | undefined) =>
+    entry.sessionId === sessionId && entry.kind === kind && entry.tool === tool;
 
   return {
     seenRecently(sessionId, kind, tool, nowMs) {
@@ -135,19 +153,21 @@ function stringField(source: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * One transcript line into at most one event.
+ * One transcript line into at most one tool call's worth of events.
  *
- * At most one is deliberate. A single assistant turn can contain several tool
- * calls, and this returns the first tool call it recognises rather than an
- * array, because the cursor loop below is what decides how much to read — a
- * parser that could return several events would have to guess at the caller's
- * batching. One line, one event, and a line with nothing recognisable becomes
- * null rather than a guess.
+ * At most one CALL is deliberate. A single assistant turn can contain several
+ * tool calls, and this returns the first one it recognises rather than an
+ * array of calls, because the cursor loop below is what decides how much to
+ * read — a parser that could return several calls would have to guess at the
+ * caller's batching. One call may still produce several events, and they travel
+ * together in one Observation precisely so the ledger can treat them as the one
+ * fact they are. A line with nothing recognisable becomes null rather than a
+ * guess.
  */
 export function parseJsonlLine(line: string): ParsedLine {
   const trimmed = line.trim();
   if (trimmed === '') {
-    return { event: null, sourceUuid: undefined, skipped: 'blank-line' };
+    return { observation: null, sourceUuid: undefined, skipped: 'blank-line' };
   }
 
   let parsed: unknown;
@@ -156,18 +176,18 @@ export function parseJsonlLine(line: string): ParsedLine {
   } catch {
     // A line that is not JSON is not an event, and saying so beats guessing at
     // what the harness meant to write.
-    return { event: null, sourceUuid: undefined, skipped: 'unparseable' };
+    return { observation: null, sourceUuid: undefined, skipped: 'unparseable' };
   }
 
   const record = recordOf(parsed);
   const sourceUuid = stringField(record, 'uuid');
   const sessionId = stringField(record, 'sessionId');
   if (sessionId === undefined) {
-    return { event: null, sourceUuid, skipped: 'no-session' };
+    return { observation: null, sourceUuid, skipped: 'no-session' };
   }
   const at = stringField(record, 'timestamp');
   if (at === undefined) {
-    return { event: null, sourceUuid, skipped: 'no-timestamp' };
+    return { observation: null, sourceUuid, skipped: 'no-timestamp' };
   }
   const base = { sessionId, at };
 
@@ -176,14 +196,23 @@ export function parseJsonlLine(line: string): ParsedLine {
   if (toolUse !== undefined) {
     const name = stringField(toolUse, 'name');
     if (name === undefined) {
-      return { event: null, sourceUuid, skipped: 'tool-without-name' };
+      return { observation: null, sourceUuid, skipped: 'tool-without-name' };
     }
+    const tool = normalizeToolName(name);
+    const input = normalizeToolInput(toolUse.input);
     return {
-      event: {
-        ...base,
-        type: 'tool.started',
-        tool: normalizeToolName(name),
-        input: normalizeToolInput(toolUse.input),
+      observation: {
+        sessionId,
+        tool,
+        events: [
+          { ...base, type: 'tool.started', tool, input },
+          // The same file events the hook plane derives on PreToolUse, so the
+          // two planes produce identical observations and the ledger can
+          // compare them. What the tail cannot derive is any OUTCOME: the
+          // tool_use line and the tool_result that follows it are separate
+          // lines, and pairing them needs state held across both.
+          ...deriveCallEvents(tool, input, base),
+        ],
       },
       sourceUuid,
       skipped: undefined,
@@ -199,22 +228,32 @@ export function parseJsonlLine(line: string): ParsedLine {
         (block) => block.type === 'tool_result',
       );
       if (isToolResult) {
-        return { event: null, sourceUuid, skipped: 'tool-result-without-use' };
+        return { observation: null, sourceUuid, skipped: 'tool-result-without-use' };
       }
     }
     const prompt = typeof message.content === 'string' ? message.content : undefined;
     return {
-      event: {
-        ...base,
-        type: 'prompt.submitted',
-        ...(prompt === undefined || prompt === '' ? {} : { prompt }),
+      observation: {
+        sessionId,
+        tool: undefined,
+        events: [
+          {
+            ...base,
+            type: 'prompt.submitted',
+            ...(prompt === undefined || prompt === '' ? {} : { prompt }),
+          },
+        ],
       },
       sourceUuid,
       skipped: undefined,
     };
   }
 
-  return { event: null, sourceUuid, skipped: `unmapped-type:${String(record.type ?? '<none>')}` };
+  return {
+    observation: null,
+    sourceUuid,
+    skipped: `unmapped-type:${String(record.type ?? '<none>')}`,
+  };
 }
 
 /**
@@ -237,15 +276,37 @@ export async function readNewLines(
     return { lines: [], offset: size };
   }
 
-  const whole = await readFile(path, 'utf8');
-  const fresh = whole.slice(offset);
-  // A trailing newline is what makes the last line complete. Without one the
-  // file is mid-write and the partial line belongs to the next poll.
-  const lastNewline = fresh.lastIndexOf('\n');
+  // Read BYTES and slice BYTES, then decode. Decoding first and slicing the
+  // resulting string by the same offset is equivalent only for ASCII: a
+  // non-ASCII character is one UTF-16 code unit but two or more bytes, so the
+  // two indices drift apart and every poll starts progressively further in,
+  // destroying records silently. It always drops rather than duplicates, because
+  // byte length is never less than the code-unit count, so nothing here ever
+  // looked like the file growing. Codex already reads bytes for this reason;
+  // this file was reading characters.
+  const fresh = Buffer.allocUnsafe(size - offset);
+  let filled = 0;
+  const handle = await open(path, 'r');
+  try {
+    while (filled < fresh.length) {
+      const { bytesRead } = await handle.read(fresh, filled, fresh.length - filled, offset + filled);
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+  } finally {
+    await handle.close();
+  }
+
+  // A short read is not fatal, but the cursor must advance over what was
+  // actually read: a buffer claiming bytes it never received skips events.
+  // A multi-byte character split across the tail is already excluded by the
+  // newline search below, because 0x0A never appears inside a UTF-8 sequence.
+  const text = fresh.toString('utf8', 0, filled);
+  const lastNewline = text.lastIndexOf('\n');
   if (lastNewline === -1) {
     return { lines: [], offset };
   }
-  const complete = fresh.slice(0, lastNewline);
+  const complete = text.slice(0, lastNewline);
   const consumed = offset + Buffer.byteLength(complete, 'utf8') + 1;
   return { lines: complete.split('\n'), offset: consumed };
 }
@@ -253,11 +314,6 @@ export async function readNewLines(
 /** Where a machine keeps its Claude transcripts. Overridable so a test is not a real one. */
 export function transcriptsDirectory(home = homedir()): string {
   return join(home, '.claude', PROJECTS_DIRECTORY);
-}
-
-/** The tool an event is about, or undefined for an event that names none. */
-function toolOf(event: AgentEvent): string | undefined {
-  return 'tool' in event && typeof event.tool === 'string' ? event.tool : undefined;
 }
 
 /**
@@ -269,11 +325,29 @@ function toolOf(event: AgentEvent): string | undefined {
  * whether hooks are healthy. Collapsing the two would make the policy
  * unreachable and untestable.
  */
-export function isAlreadyReported(ledger: HookLedger, event: AgentEvent, nowMs: number): boolean {
-  return ledger.seenRecently(event.sessionId, event.type, toolOf(event), nowMs);
+export function unreported(
+  ledger: HookLedger,
+  observation: Observation,
+  nowMs: number,
+): readonly AgentEvent[] {
+  return observation.events.filter(
+    (event) => !ledger.seenRecently(observation.sessionId, event.type, observation.tool, nowMs),
+  );
 }
 
-/** Records what the hook plane reported, so a later log line defers to it. */
-export function recordReported(ledger: HookLedger, event: AgentEvent, nowMs: number): void {
-  ledger.record(event.sessionId, event.type, toolOf(event), nowMs);
+/**
+ * Records what the hook plane reported, so a later log line defers to it.
+ *
+ * One call to the ledger PER EVENT, keyed on the call's tool. A `file.write`
+ * names a path and no tool at all, so keying it on the event's own fields would
+ * record it under an empty tool and let the identical write through.
+ */
+export function recordObservation(
+  ledger: HookLedger,
+  observation: Observation,
+  nowMs: number,
+): void {
+  for (const event of observation.events) {
+    ledger.record(observation.sessionId, event.type, observation.tool, nowMs);
+  }
 }

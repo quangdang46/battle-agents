@@ -19,21 +19,32 @@ export type { ClaudeHookContext, NormalizedHook } from './hooks/hook-handler.js'
 
 export {
   createHookLedger,
-  isAlreadyReported,
   parseJsonlLine,
   readNewLines,
-  recordReported,
+  recordObservation,
   transcriptsDirectory,
+  unreported,
 } from './parsers/jsonl.js';
-export type { HookLedger, ParsedLine } from './parsers/jsonl.js';
+export type { HookLedger, Observation, ParsedLine } from './parsers/jsonl.js';
+
+export { argv0Of, deriveCallEvents, deriveOutcomeEvents, looksLikeTestCommand } from './derive.js';
+export type { EventBase } from './derive.js';
+
+export { discoverTranscripts, SessionCursors } from './transcript.js';
+export type { DiscoveredTranscript } from './transcript.js';
 
 export { ClaudeWatcher } from './watcher.js';
 export type { BatchSender, ClaudeWatcherOptions } from './watcher.js';
 
 export {
+  consentDisclosure,
   defaultSettingsPath,
   installClaudeHooks,
   uninstallClaudeHooks,
   withoutOurHooks,
 } from './installer/install-claude.js';
-export type { InstallOptions, InstallOutcome } from './installer/install-claude.js';
+export type {
+  ConsentDisclosure,
+  InstallOptions,
+  InstallOutcome,
+} from './installer/install-claude.js';

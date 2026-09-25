@@ -1,6 +1,8 @@
 import { normalizeToolInput, normalizeToolName } from '@battle-agents/protocol';
 import type { AgentEvent } from '@battle-agents/protocol';
 
+import { deriveCallEvents, deriveOutcomeEvents, type EventBase } from '../derive.js';
+
 /**
  * The hook plane: the primary way this adapter learns what an agent is doing.
  *
@@ -86,22 +88,37 @@ export interface ClaudeHookContext {
 }
 
 export interface NormalizedHook {
-  readonly event: AgentEvent | null;
-  /** Why an event was not produced, when one was not. Counted, not thrown. */
+  /**
+   * The events one payload produced, in the order they should be reported.
+   *
+   * A list rather than a single event because one tool call is more than one
+   * fact: a PreToolUse on Edit is a `tool.started` AND a `file.write`, and a
+   * PostToolUse on Bash is a `tool.completed` AND a `command.run` AND, when the
+   * command was a test run, a `test.passed`. Collapsing them to one would mean
+   * dropping the ones the game actually shows.
+   */
+  readonly events: readonly AgentEvent[];
+  /** Why no event was produced, when none was. Counted, not thrown. */
   readonly skipped: string | undefined;
+}
+
+/** The half of a tool call this adapter has to remember between payloads. */
+interface PendingTool {
+  readonly startedAt: number;
+  readonly input: Record<string, unknown>;
 }
 
 /**
  * Stateful, because two of the payloads are halves of one fact.
  *
  * A `tool.started` and its `tool.completed` carry no shared id, so the only way
- * to report a duration is to remember when the start was emitted. That also
- * makes this the natural place for the deduplication the JSONL tail needs later:
- * a tool the hooks already reported does not need reporting twice, and the
- * memory of what was already sent is what makes that check possible at all.
+ * to report a duration is to remember when the start was emitted. The input is
+ * remembered for the same reason: it is what a `command.run` is read out of, and
+ * an adapter that lost it would report a tool completing and say nothing about
+ * the command it ran.
  */
 export class ClaudeHookNormalizer {
-  readonly #startedAt = new Map<string, number>();
+  readonly #pending = new Map<string, PendingTool>();
   #skipped = 0;
 
   /** How many payloads produced no event. A silent adapter and a broken one differ here. */
@@ -114,80 +131,93 @@ export class ClaudeHookNormalizer {
     if (input === null) {
       return this.#skip('unreadable-payload');
     }
-    const event = this.#toEvent(input, context);
-    if (event === null) {
+    const events = this.#toEvents(input, context);
+    if (events.length === 0) {
       return this.#skip(`no-mapping:${input.hookEventName ?? '<unnamed>'}`);
     }
-    return { event, skipped: undefined };
+    return { events, skipped: undefined };
   }
 
   #skip(reason: string): NormalizedHook {
     this.#skipped += 1;
-    return { event: null, skipped: reason };
+    return { events: [], skipped: reason };
   }
 
-  #toEvent(input: HookPayload, context: ClaudeHookContext): AgentEvent | null {
-    const base = { sessionId: input.sessionId, at: context.at };
+  #toEvents(input: HookPayload, context: ClaudeHookContext): readonly AgentEvent[] {
+    const base: EventBase = { sessionId: input.sessionId, at: context.at };
     switch (input.hookEventName) {
       case 'SessionStart':
-        return {
-          ...base,
-          type: 'session.started',
-          agentId: context.agentId,
-          installationId: context.installationId,
-          projectId: context.projectId,
-          harness: CLAUDE_HARNESS,
-        };
+        return [
+          {
+            ...base,
+            type: 'session.started',
+            agentId: context.agentId,
+            installationId: context.installationId,
+            projectId: context.projectId,
+            harness: CLAUDE_HARNESS,
+          },
+        ];
       case 'UserPromptSubmit':
-        return {
-          ...base,
-          type: 'prompt.submitted',
-          // An empty prompt is still a prompt; dropping the field is honest
-          // where inventing prose is not.
-          ...(input.prompt === undefined || input.prompt === '' ? {} : { prompt: input.prompt }),
-        };
+        return [
+          {
+            ...base,
+            type: 'prompt.submitted',
+            // An empty prompt is still a prompt; dropping the field is honest
+            // where inventing prose is not.
+            ...(input.prompt === undefined || input.prompt === '' ? {} : { prompt: input.prompt }),
+          },
+        ];
       case 'PreToolUse': {
         const tool = this.#toolName(input.toolName);
         if (tool === null) {
-          return null;
+          return [];
         }
-        this.#startedAt.set(this.#key(input.sessionId, tool), Date.parse(context.at));
-        return {
-          ...base,
-          type: 'tool.started',
-          tool,
-          input: normalizeToolInput(input.toolInput),
-        };
+        const normalized = normalizeToolInput(input.toolInput);
+        this.#pending.set(this.#key(input.sessionId, tool), {
+          startedAt: Date.parse(context.at),
+          input: normalized,
+        });
+        // A file action is knowable from the call: the path is in the input and
+        // the intent is the event. Nothing about the outcome is knowable yet.
+        return [
+          { ...base, type: 'tool.started', tool, input: normalized },
+          ...deriveCallEvents(tool, normalized, base),
+        ];
       }
       case 'PostToolUse': {
         const tool = this.#toolName(input.toolName);
         if (tool === null) {
-          return null;
+          return [];
         }
         const key = this.#key(input.sessionId, tool);
-        const startedAt = this.#startedAt.get(key);
+        const pending = this.#pending.get(key);
+        this.#pending.delete(key);
         // A completion with no remembered start means the adapter restarted
         // mid-tool, or the start was dropped. Zero is the honest duration for
         // "we do not know", and the protocol's non-negative integer has no way
         // to say "unknown" — so the alternative would be a fabricated number.
-        const durationMs = startedAt === undefined ? 0 : Math.max(0, Date.parse(context.at) - startedAt);
-        this.#startedAt.delete(key);
-        if (isFailure(input.toolResponse)) {
-          return { ...base, type: 'tool.failed', tool, reason: failureReason(input.toolResponse) };
-        }
-        return { ...base, type: 'tool.completed', tool, ok: true, durationMs };
+        const durationMs =
+          pending === undefined ? 0 : Math.max(0, Date.parse(context.at) - pending.startedAt);
+        // The payload's own input when it carries one, and the remembered one
+        // otherwise, so a PostToolUse whose tool_input is absent still reports
+        // the command rather than silently reporting nothing.
+        const normalized = normalizeToolInput(input.toolInput ?? pending?.input);
+        const completion: AgentEvent = isFailure(input.toolResponse)
+          ? { ...base, type: 'tool.failed', tool, reason: failureReason(input.toolResponse) }
+          : { ...base, type: 'tool.completed', tool, ok: true, durationMs };
+        return [completion, ...deriveOutcomeEvents(tool, normalized, input.toolResponse, base)];
       }
       case 'PermissionRequest': {
         const tool = this.#toolName(input.toolName);
-        return tool === null ? null : { ...base, type: 'permission.requested', tool };
+        return tool === null ? [] : [{ ...base, type: 'permission.requested', tool }];
       }
       case 'Stop':
         // Claude's Stop means the turn ended, not the process. A session that
         // keeps working emits another SessionStart-adjacent turn, and the
         // platform's own lifecycle is what finally reports 'crashed'.
-        return { ...base, type: 'session.ended', reason: 'completed' };
+        return [{ ...base, type: 'session.ended', reason: 'completed' }];
       default:
-        return null;
+        return [];
     }
   }
 

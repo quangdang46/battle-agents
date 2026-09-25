@@ -1,15 +1,16 @@
-import { EventBuffer } from '@battle-agents/protocol';
+import { AgentEventSchema, EventBuffer } from '@battle-agents/protocol';
 import type { AgentEvent } from '@battle-agents/protocol';
 import type { AgentWatcher } from '@battle-agents/core';
 
 import {
   createHookLedger,
-  isAlreadyReported,
   parseJsonlLine,
   readNewLines,
-  recordReported,
+  recordObservation,
+  unreported,
   type HookLedger,
 } from './parsers/jsonl.js';
+import { discoverTranscripts, SessionCursors } from './transcript.js';
 
 /**
  * Both planes, one buffer, one stream.
@@ -30,6 +31,20 @@ import {
  * The tail wins ties in the other direction: when hooks were not running at
  * all, the ledger is empty and every line through it reaches the stream, which
  * is the whole point of keeping a net.
+ *
+ * TWO THINGS THIS WATCHER OWES THE INGEST ENDPOINT, both of which the endpoint
+ * enforces and neither of which it can enforce for us:
+ *
+ * - Every event is validated here, against the protocol's own schema, before it
+ *   reaches the buffer. A single malformed timestamp from a transcript is
+ *   enough to make `AgentEventSchema` reject the event, and the endpoint
+ *   validates a BATCH — so one bad line would take up to 49 good events down
+ *   with it and the 400 would emit nothing.
+ * - Only one session's events are ever buffered at a time. A batch spanning two
+ *   sessionIds is refused for the same reason ownership is per session, and a
+ *   buffer shared across sessions would produce one by accident. Following a
+ *   single current session is what keeps the accident out; the switch flushes
+ *   before it reads.
  */
 
 /** Where a watcher sends a batch. Injected so a test does not need a server. */
@@ -37,8 +52,17 @@ export type BatchSender = (batch: readonly AgentEvent[]) => Promise<void>;
 
 export interface ClaudeWatcherOptions {
   readonly send: BatchSender;
-  /** The transcript this session is appended to. */
-  readonly transcriptPath: string;
+  /**
+   * Exactly one of these two names what to read.
+   *
+   * `transcriptPath` pins one file, which is what a caller that already knows
+   * the session wants. `transcriptsRoot` is the projects directory, and the
+   * watcher discovers which session is live and follows it — the shape the brief
+   * asks for, where a session ends and a new file appears underneath a long
+   * running tail.
+   */
+  readonly transcriptPath?: string;
+  readonly transcriptsRoot?: string;
   /** Shared with the hook plane, so the two defer to each other. */
   readonly ledger?: HookLedger;
   readonly pollIntervalMs?: number;
@@ -54,16 +78,28 @@ export class ClaudeWatcher implements AgentWatcher {
   readonly #pollIntervalMs: number;
   readonly #now: () => number;
   readonly #buffer: EventBuffer;
-  readonly #transcriptPath: string;
+  readonly #pinnedPath: string | undefined;
+  readonly #root: string | undefined;
+  readonly #cursors = new SessionCursors();
   #offset = 0;
+  #session: string | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
+  #rejected = 0;
+  #lastRejection: string | undefined;
 
   constructor(options: ClaudeWatcherOptions) {
+    if (options.transcriptPath === undefined && options.transcriptsRoot === undefined) {
+      throw new Error('a watcher needs a transcriptPath or a transcriptsRoot to read');
+    }
+    if (options.transcriptPath !== undefined && options.transcriptsRoot !== undefined) {
+      throw new Error('a watcher reads a transcriptPath or a transcriptsRoot, not both');
+    }
     this.#send = options.send;
     this.#ledger = options.ledger ?? createHookLedger();
     this.#pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.#now = options.now ?? Date.now;
-    this.#transcriptPath = options.transcriptPath;
+    this.#pinnedPath = options.transcriptPath;
+    this.#root = options.transcriptsRoot;
     this.#buffer = new EventBuffer(
       {
         flushIntervalMs: 250,
@@ -76,6 +112,40 @@ export class ClaudeWatcher implements AgentWatcher {
       // two halves of the watcher would disagree about what "now" means.
       { now: this.#now },
     );
+  }
+
+  /**
+   * How many events the protocol schema refused.
+   *
+   * Counted rather than thrown, for the reason the hook normalizer counts its
+   * skips: an adapter that throws on one bad line stops reporting entirely,
+   * which is indistinguishable from an agent that did nothing. A count is the
+   * difference between a stream that is quiet and a stream that is broken.
+   */
+  get rejectedCount(): number {
+    return this.#rejected;
+  }
+
+  /**
+   * Why the most recent event was refused, as the schema's own message.
+   *
+   * The count says how often; this says what happened the last time, which is
+   * the half that names a Claude format change. One slot rather than a growing
+   * list, because a watcher is meant to be cheap to leave running and nobody
+   * reads a thousand of these.
+   */
+  get lastRejection(): string | undefined {
+    return this.#lastRejection;
+  }
+
+  /**
+   * The session being followed, or undefined before the first poll.
+   *
+   * Meaningful in discovery mode only. A pinned file is named by its caller and
+   * the watcher never had to work out which session it belonged to.
+   */
+  get currentSessionId(): string | undefined {
+    return this.#session;
   }
 
   async start(): Promise<void> {
@@ -103,32 +173,66 @@ export class ClaudeWatcher implements AgentWatcher {
   }
 
   /**
-   * Accepts an event the hook plane produced.
+   * Accepts the events one hook payload produced.
    *
-   * Recorded in the ledger BEFORE it is buffered, so a log line describing the
-   * same tool call is deferred to this one even if the buffer has not flushed
-   * it yet. The alternative is a duplicate that depends on flush timing.
+   * Recorded in the ledger BEFORE they are buffered, so a log line describing
+   * the same tool call is deferred to these even if the buffer has not flushed
+   * them yet. The alternative is a duplicate that depends on flush timing.
    */
-  async recordHookEvent(event: AgentEvent): Promise<void> {
-    recordReported(this.#ledger, event, this.#now());
-    await this.#bufferAndMaybeFlush(event);
+  async recordHookEvent(observation: {
+    readonly sessionId: string;
+    readonly tool: string | undefined;
+    readonly events: readonly AgentEvent[];
+  }): Promise<void> {
+    const accepted = this.#accept(observation.events);
+    if (accepted.length === 0) {
+      return;
+    }
+    recordObservation(this.#ledger, { ...observation, events: accepted }, this.#now());
+    await this.#bufferAndMaybeFlush(accepted);
   }
 
-  /** One poll: read what is new, translate it, drop what the hooks already said. */
+  /** One poll: find the current session, read what is new, drop what the hooks said. */
   async tick(): Promise<void> {
-    const { lines, offset } = await readNewLines(this.#transcriptPath, this.#offset);
-    this.#offset = offset;
+    const target = await this.#currentTarget();
+    if (target === undefined) {
+      return;
+    }
+    if (target.sessionId !== this.#session) {
+      // Flush before switching, not after reading. The buffer is one buffer for
+      // the whole watcher, and a batch carrying two sessionIds is refused at
+      // the door — so the previous session's events have to be on the wire
+      // before the next session's are allowed into the same buffer.
+      await this.#flush();
+      this.#session = target.sessionId;
+    }
+
+    const discovered = target.sessionId !== undefined;
+    const offset = discovered ? this.#cursors.offsetFor(target.sessionId) : this.#offset;
+    const { lines, offset: next } = await readNewLines(target.path, offset);
+    if (discovered) {
+      this.#cursors.advanceTo(target.sessionId, next);
+    } else {
+      this.#offset = next;
+    }
     const nowMs = this.#now();
 
     for (const line of lines) {
-      const { event } = parseJsonlLine(line);
-      if (event === null) {
+      const { observation } = parseJsonlLine(line);
+      if (observation === null) {
         continue;
       }
-      if (isAlreadyReported(this.#ledger, event, nowMs)) {
+      // In discovery mode the filename IS the partition, so a line naming a
+      // different session is a transcript this adapter does not understand and
+      // following it would put another session's events in this session's
+      // batch. A pinned file has no such claim to check: the caller chose it.
+      if (discovered && observation.sessionId !== target.sessionId) {
         continue;
       }
-      await this.#bufferAndMaybeFlush(event);
+      const accepted = this.#accept(unreported(this.#ledger, observation, nowMs));
+      for (const event of accepted) {
+        await this.#bufferAndMaybeFlush([event]);
+      }
     }
 
     const due = this.#buffer.flushIfDue();
@@ -136,11 +240,55 @@ export class ClaudeWatcher implements AgentWatcher {
   }
 
   /**
+   * The transcript to read this poll.
+   *
+   * `sessionId` is undefined for a pinned file: the partition there is the
+   * caller's choice, not something the tail re-derives and can contradict.
+   */
+  async #currentTarget(): Promise<
+    { readonly sessionId: string | undefined; readonly path: string } | undefined
+  > {
+    if (this.#pinnedPath !== undefined) {
+      return { sessionId: undefined, path: this.#pinnedPath };
+    }
+    const [newest] = await discoverTranscripts(this.#root);
+    return newest === undefined ? undefined : { sessionId: newest.sessionId, path: newest.path };
+  }
+
+  /**
+   * The events the protocol's own schema will accept.
+   *
+   * Validated here, in the send path, against `AgentEventSchema` imported from
+   * `protocol` — not a local copy of the contract, which would agree with
+   * itself and disagree with the door.
+   */
+  #accept(events: readonly AgentEvent[]): readonly AgentEvent[] {
+    const accepted: AgentEvent[] = [];
+    for (const event of events) {
+      const result = AgentEventSchema.safeParse(event);
+      if (result.success) {
+        accepted.push(event);
+        continue;
+      }
+      this.#rejected += 1;
+      this.#lastRejection = `${event.type}@${event.sessionId}: ${result.error.message}`;
+    }
+    return accepted;
+  }
+
+  async #flush(): Promise<void> {
+    const remaining = this.#buffer.flush();
+    if (remaining.length > 0) await this.#send(remaining);
+  }
+
+  /**
    * push() hands back a batch by itself the moment the buffer is full, so the
    * size limit does not need its own check here.
    */
-  async #bufferAndMaybeFlush(event: AgentEvent): Promise<void> {
-    const batch = this.#buffer.push(event);
-    if (batch !== undefined) await this.#send(batch);
+  async #bufferAndMaybeFlush(events: readonly AgentEvent[]): Promise<void> {
+    for (const event of events) {
+      const batch = this.#buffer.push(event);
+      if (batch !== undefined) await this.#send(batch);
+    }
   }
 }

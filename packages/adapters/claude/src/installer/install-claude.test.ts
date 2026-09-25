@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  consentDisclosure,
   installClaudeHooks,
   uninstallClaudeHooks,
   withoutOurHooks,
@@ -38,7 +39,11 @@ describe('consent', () => {
   it('writes nothing at all when consent is withheld', async () => {
     const path = settingsPath();
 
-    const outcome = await installClaudeHooks({ command: COMMAND, settingsPath: path, consent: false });
+    const outcome = await installClaudeHooks({
+      command: COMMAND,
+      settingsPath: path,
+      consent: false,
+    });
 
     expect(outcome.status).toBe('declined');
     // Not read and not written: a declined install should leave no trace to
@@ -55,15 +60,84 @@ describe('consent', () => {
   });
 });
 
+/**
+ * The text a person is shown before the gate is passed.
+ *
+ * A bare `consent: boolean` is a gate with no gate in it: the caller invents
+ * the wording, every client invents it differently, and the description of the
+ * change stops matching the change. These assertions pin the three facts a
+ * person needs to decide — what is written where, what will run, and how to undo
+ * it — because a disclosure that omits the undo is a disclosure that cannot be
+ * acted on.
+ */
+describe('what is disclosed before consent', () => {
+  it('names the file, the events, the command, and how to undo it', () => {
+    const path = join(tmpdir(), 'a-real-settings.json');
+    const { headline, disclosure } = consentDisclosure({ settingsPath: path, command: COMMAND });
+
+    expect(headline).toContain(path);
+    for (const event of [
+      'SessionStart',
+      'UserPromptSubmit',
+      'PreToolUse',
+      'PostToolUse',
+      'PermissionRequest',
+      'Stop',
+    ]) {
+      expect(disclosure, event).toContain(event);
+    }
+    expect(disclosure).toContain(COMMAND);
+    expect(disclosure).toMatch(/undo/i);
+  });
+
+  it('reads the file without touching it, because asking comes first', () => {
+    // The order the gate requires and the order a person needs: the promise has
+    // to be makeable before there is any right to open the file.
+    const path = settingsPath();
+
+    consentDisclosure({ settingsPath: path, command: COMMAND });
+
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('comes back on the install outcome, so what was consented to is what was done', async () => {
+    // Without this a caller that installed without showing anything still has the
+    // text afterwards, which is the only thing that makes the outcome auditable.
+    const path = settingsPath();
+
+    const outcome = await installClaudeHooks({
+      command: COMMAND,
+      settingsPath: path,
+      consent: true,
+    });
+
+    expect(outcome.status).toBe('installed');
+    expect(outcome.status === 'installed' && outcome.disclosure).toEqual(
+      consentDisclosure({ settingsPath: path, command: COMMAND }),
+    );
+  });
+});
+
 describe('installing', () => {
   it('writes every hook event into a settings file that did not exist', async () => {
     const path = settingsPath();
 
-    const outcome = await installClaudeHooks({ command: COMMAND, settingsPath: path, consent: true });
+    const outcome = await installClaudeHooks({
+      command: COMMAND,
+      settingsPath: path,
+      consent: true,
+    });
 
     expect(outcome.status).toBe('installed');
     const hooks = read(path).hooks as Record<string, unknown>;
-    for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'Stop']) {
+    for (const event of [
+      'SessionStart',
+      'UserPromptSubmit',
+      'PreToolUse',
+      'PostToolUse',
+      'PermissionRequest',
+      'Stop',
+    ]) {
       expect(hooks[event], event).toBeDefined();
     }
   });
@@ -87,7 +161,7 @@ describe('installing', () => {
     expect(after.hooks).toBeDefined();
   });
 
-  it('keeps somebody else\'s hook on the same event', async () => {
+  it("keeps somebody else's hook on the same event", async () => {
     // Two tools hooking PreToolUse is the normal case, not a conflict. The one
     // that must never be deleted is not ours.
     const original = {
@@ -109,7 +183,11 @@ describe('installing', () => {
     await installClaudeHooks({ command: COMMAND, settingsPath: path, consent: true });
     const first = readFileSync(path, 'utf8');
 
-    const outcome = await installClaudeHooks({ command: COMMAND, settingsPath: path, consent: true });
+    const outcome = await installClaudeHooks({
+      command: COMMAND,
+      settingsPath: path,
+      consent: true,
+    });
 
     expect(outcome.status).toBe('already-present');
     expect(readFileSync(path, 'utf8')).toBe(first);
@@ -123,7 +201,11 @@ describe('a settings file we cannot parse', () => {
     const path = settingsPath('{ this is not json');
     const before = readFileSync(path, 'utf8');
 
-    const outcome = await installClaudeHooks({ command: COMMAND, settingsPath: path, consent: true });
+    const outcome = await installClaudeHooks({
+      command: COMMAND,
+      settingsPath: path,
+      consent: true,
+    });
 
     expect(outcome.status).toBe('refused-unreadable');
     expect(readFileSync(path, 'utf8')).toBe(before);
@@ -140,7 +222,7 @@ describe('a settings file we cannot parse', () => {
 });
 
 describe('uninstalling', () => {
-  it('removes only our entries and leaves the person\'s hook alone', async () => {
+  it("removes only our entries and leaves the person's hook alone", async () => {
     const path = settingsPath();
     await installClaudeHooks({ command: COMMAND, settingsPath: path, consent: true });
     // Somebody adds their own hook after we installed ours.
@@ -175,12 +257,14 @@ describe('withoutOurHooks, on its own', () => {
     expect(withoutOurHooks(settings, COMMAND)).toEqual({ model: 'opus' });
   });
 
-  it('does not treat somebody else\'s command as ours', () => {
+  it("does not treat somebody else's command as ours", () => {
     // A substring search for the word "command" would report our hook as
     // present when it is the person's, and uninstall would be a no-op they
     // would read as success.
     const settings = {
-      hooks: { PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'other-tool' }] }] },
+      hooks: {
+        PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'other-tool' }] }],
+      },
     };
 
     const result = withoutOurHooks(settings, COMMAND);

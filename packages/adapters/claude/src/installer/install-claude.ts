@@ -28,7 +28,14 @@ import { join } from 'node:path';
  * whether the agent is visible at all.
  */
 
-const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'Stop'] as const;
+const HOOK_EVENTS = [
+  'SessionStart',
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PostToolUse',
+  'PermissionRequest',
+  'Stop',
+] as const;
 type HookEvent = (typeof HOOK_EVENTS)[number];
 
 const HOOKS_KEY = 'hooks';
@@ -50,13 +57,81 @@ export interface InstallOptions {
 
 export type InstallOutcome =
   /** The hooks were written. */
-  | { readonly status: 'installed'; readonly settingsPath: string; readonly events: readonly HookEvent[] }
+  | {
+      readonly status: 'installed';
+      readonly settingsPath: string;
+      readonly events: readonly HookEvent[];
+      /** What was consented to, so a caller that installed without asking can still say so. */
+      readonly disclosure: ConsentDisclosure;
+    }
+  /** Our entries were removed. The person's own hooks are still there. */
+  | {
+      readonly status: 'uninstalled';
+      readonly settingsPath: string;
+      readonly events: readonly HookEvent[];
+    }
   /** Consent was withheld. Nothing was read and nothing was written. */
   | { readonly status: 'declined' }
   /** The file exists and is not JSON we can merge into. Nothing was written. */
-  | { readonly status: 'refused-unreadable'; readonly settingsPath: string; readonly reason: string }
+  | {
+      readonly status: 'refused-unreadable';
+      readonly settingsPath: string;
+      readonly reason: string;
+    }
   /** A hook of ours was already there, and the command is the same. */
   | { readonly status: 'already-present'; readonly settingsPath: string };
+
+/**
+ * What the person is agreeing to, in words.
+ *
+ * The same shape as `HookConsentDisclosure` in `core`, so the surface that
+ * eventually implements that seam can return this directly instead of writing a
+ * second copy of the text that drifts from what the installer does.
+ */
+export interface ConsentDisclosure {
+  /** One line naming the ask. */
+  readonly headline: string;
+  /**
+   * The body: what is written where, what moves, and how to undo it.
+   * Paragraphs split on blank lines, which is what the surface renders.
+   */
+  readonly disclosure: string;
+}
+
+/**
+ * The text a person is shown before the first write to their settings file.
+ *
+ * A bare `consent: boolean` is a gate with no gate in it: the caller has to
+ * decide what to tell the person, and every client invents its own wording, so
+ * the description of the change stops matching the change. Shipping the text
+ * here means the promise is made by the code that keeps it.
+ *
+ * It is a pure function of what it is given and does no I/O, so a caller can
+ * render it before it has any right to touch the file — which is the order the
+ * gate requires and the order the first test below proves.
+ */
+export function consentDisclosure(options: {
+  readonly settingsPath: string;
+  readonly command: string;
+}): ConsentDisclosure {
+  return {
+    headline: `Add ${HOOK_EVENTS.length} read-only hooks to ${options.settingsPath}`,
+    disclosure: [
+      'What is written',
+      `Six entries under "hooks" in ${options.settingsPath}, one per event: ${HOOK_EVENTS.join(', ')}.`,
+      'Every other setting in that file is left exactly as it was, including any hooks you already have on these events.',
+      '',
+      'What runs',
+      `Each entry runs: ${options.command}`,
+      'It is handed the event as JSON on stdin and reports the session: what tools ran, which files they touched, which commands they ran, and whether a test run passed.',
+      'Event text stays on the machine it was produced on; the command decides where it is sent next.',
+      '',
+      'How to undo it',
+      'Ask for the same install with the consent withdrawn: the entries whose command matches the line above are removed and everything else stays.',
+      `Or delete the six entries under "hooks" by hand from ${options.settingsPath}.`,
+    ].join('\n'),
+  };
+}
 
 export function defaultSettingsPath(home = homedir()): string {
   return join(home, '.claude', 'settings.json');
@@ -116,7 +191,10 @@ function isAlreadyInstalled(hooks: Record<string, unknown>, command: string): bo
  * because Claude treats an empty list as "something is configured" and a file
  * that keeps growing empty keys is a file nobody trusts.
  */
-export function withoutOurHooks(settings: Record<string, unknown>, command: string): Record<string, unknown> {
+export function withoutOurHooks(
+  settings: Record<string, unknown>,
+  command: string,
+): Record<string, unknown> {
   if (!isRecord(settings[HOOKS_KEY])) {
     return settings;
   }
@@ -187,7 +265,9 @@ export async function installClaudeHooks(options: InstallOptions): Promise<Insta
     };
   }
 
-  const hooks = isRecord(existing[HOOKS_KEY]) ? (existing[HOOKS_KEY] as Record<string, unknown>) : {};
+  const hooks = isRecord(existing[HOOKS_KEY])
+    ? (existing[HOOKS_KEY] as Record<string, unknown>)
+    : {};
   if (isAlreadyInstalled(hooks, options.command)) {
     return { status: 'already-present', settingsPath };
   }
@@ -206,7 +286,12 @@ export async function installClaudeHooks(options: InstallOptions): Promise<Insta
   const merged: Record<string, unknown> = { ...existing, [HOOKS_KEY]: nextHooks };
   await writeFile(settingsPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
 
-  return { status: 'installed', settingsPath, events: HOOK_EVENTS };
+  return {
+    status: 'installed',
+    settingsPath,
+    events: HOOK_EVENTS,
+    disclosure: consentDisclosure({ settingsPath, command: options.command }),
+  };
 }
 
 /** Removes our entries. Consent is not asked for: removing is the safe direction. */
@@ -230,5 +315,8 @@ export async function uninstallClaudeHooks(
     `${JSON.stringify(withoutOurHooks(existing, options.command), null, 2)}\n`,
     'utf8',
   );
-  return { status: 'installed', settingsPath, events: HOOK_EVENTS };
+  // Its own status, not 'installed'. A caller that checks the status after an
+  // uninstall was told the hooks were INSTALLED, which is the one thing they
+  // had just proved was false.
+  return { status: 'uninstalled', settingsPath, events: HOOK_EVENTS };
 }
