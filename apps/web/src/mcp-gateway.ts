@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { authenticate, closeDatabasePool, createDatabase, createDatabasePool, DrizzleCredentialStore } from '@battle-agents/db';
+import { authenticate, DrizzleCredentialStore } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
-import { createMcpServer } from '@battle-agents/mcp-server';
-import type { McpServer } from '@battle-agents/mcp-server';
 
 import { createMcpRoutes } from './mcp-routes.js';
+import { createMcpSessionStore, serverFactoryFor } from './mcp-sessions.js';
 import type { HttpRequest, HttpResponse } from './routes.js';
 import { sharedApi } from './routes.js';
+import { sharedRuntime } from './shared-runtime.js';
 
 /**
  * The MCP surface's wiring, mirroring the event gateway next door.
@@ -50,6 +50,7 @@ export interface McpGateway {
 const MCP_REQUIRED_SCOPE = 'mcp';
 
 export function createMcpGateway(database: Database): McpGateway {
+  const sessions = createMcpSessionStore({ createServer: serverFactoryFor(sharedApi()) });
   const handle = createMcpRoutes({
     // The same authenticator the telemetry plane uses, supplied rather than
     // imported for the reason event-gateway.ts gives: it is the one collaborator
@@ -66,7 +67,7 @@ export function createMcpGateway(database: Database): McpGateway {
         },
         request as never,
       ),
-    createServer: (): McpServer => createMcpServer({ api: sharedApi() }),
+    sessions,
     newSessionId: randomUUID,
   });
   return { handle, close: () => Promise.resolve() };
@@ -77,25 +78,22 @@ let cached: { gateway: McpGateway; close: () => Promise<void> } | undefined;
 /**
  * The process-wide gateway, built on first use.
  *
- * Module scope for the same reason `sharedApi` and `sharedEventGateway` are: a
- * database pool is fine once and fatal per request. This is the third pool in
- * the app; consolidating the three is a separate change, and making MCP the
- * first to share one would mean editing two working gateways to land a bead
- * whose subject is the MCP transport.
+ * Module scope for the same reason `sharedApi` and `sharedEventGateway` are: the
+ * database pool is fine once and fatal per request. The credential store shares
+ * the shared runtime's pool rather than opening a third one.
  */
 export function sharedMcpGateway(): McpGateway {
   if (cached !== undefined) {
     return cached.gateway;
   }
-  const pool = createDatabasePool();
-  const database = createDatabase(pool);
+  const { database } = sharedRuntime();
   const gateway = createMcpGateway(database);
-  cached = { gateway, close: () => closeDatabasePool(pool) };
+  cached = { gateway, close: () => Promise.resolve() };
   return cached.gateway;
 }
 
-/** Releases the pool, for a graceful shutdown rather than per-request cleanup. */
+/** Drops the gateway's cache. The pool belongs to `sharedRuntime`. */
 export async function closeSharedMcpGateway(): Promise<void> {
-  await cached?.close();
+  cached?.close();
   cached = undefined;
 }
