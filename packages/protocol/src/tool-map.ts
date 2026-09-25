@@ -28,7 +28,7 @@
  *    (bounty-board, battle-arena, guild-hall), because the game client maps
  *    tools onto our world and upstream's zones describe a different world.
  *
- * The entry counts are smaller than the plan implies — 38 name mappings and 29
+ * The entry counts are smaller than the plan implies — 41 name mappings and 29
  * zone mappings, not the ~50 quoted upstream. Both grow as harnesses ship new
  * tools, so the counts are not a contract. What is a contract is the behaviour
  * for an unknown tool: `getZoneForTool` returns a zone rather than dropping the
@@ -143,6 +143,11 @@ export const TOOL_NAME_MAP: Readonly<Record<string, string>> = {
   find: 'Glob',
   ls: 'Bash',
   truncate: 'Write',
+  // `find_block` searches file CONTENT for a block, where `find` above globs a
+  // path, so the two are different activities and land in different zones.
+  find_block: 'Grep',
+  rename_file: 'Edit',
+  remove_file: 'Edit',
 
   // Codex CLI
   shell_command: 'Bash',
