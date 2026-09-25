@@ -13,6 +13,13 @@
 # next.config.mjs or webpack's extension mapping. A check nobody runs is the
 # same defect as a gate that checks nothing.
 build
+# `codegen-drift` is here for the same reason. The action-id union that makes
+# `act('typo.id')` a compile error is generated from each feature's manifest and
+# committed, so a feature can add an id, run nothing, and ship — and the
+# type-level guarantee silently stops covering that feature while every other
+# stage still reports green. It runs right after `build` because everything
+# downstream (unit, integration, typecheck) reads the union it verifies.
+codegen-drift
 compose
 migrations
 seed

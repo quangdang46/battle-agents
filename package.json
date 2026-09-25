@@ -12,6 +12,7 @@
     "architecture": "tsx scripts/check-architecture.ts",
     "build": "tsc -b tsconfig.build.json",
     "codegen": "tsx scripts/generate-action-ids.ts",
+    "codegen:check": "bash scripts/check-codegen-fresh.sh",
     "db:generate": "drizzle-kit generate --config=packages/db/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=packages/db/drizzle.config.ts",
     "db:seed": "tsx scripts/seed.ts",

@@ -43,6 +43,7 @@ readonly RUN_ID
 # Order is the contract. Do not reorder without amending plan section 40.
 readonly CANONICAL_STAGES=(
   build
+  codegen-drift
   compose
   migrations
   seed
@@ -521,6 +522,35 @@ run_stage_build() {
   fi
 }
 
+run_stage_codegen_drift() {
+  # The action-id union is generated from each feature's manifest and committed,
+  # so it can go stale the same way a migration artifact does: a feature adds an
+  # id to its manifest, runs nothing, and ships. The union `act()` is checked
+  # against is then a list that was correct the day it was written, and the
+  # guarantee it exists to provide — that `act('typo.id')` will not compile —
+  # stops covering the new feature. Nothing else here notices. The feature's own
+  # tests pass, typecheck passes against the stale union, architecture passes,
+  # and the gate reports green while checking nothing about the id just added.
+  #
+  # It is the same shape as schema-drift, and for the same reason: the committed
+  # artifact is the thing under test, and a check that regenerates and repairs
+  # would pass on its own repair next time. The script restores the tree either
+  # way, so running the gate does not quietly fix what it is meant to catch.
+  #
+  # ba-risk-gates-e74 RISK 3. It runs immediately after `build` because unit,
+  # integration and typecheck all read the union this verifies.
+  local drift_status=0
+  ( cd "$REPO_ROOT" && bash scripts/check-codegen-fresh.sh ) || drift_status=$?
+
+  if [ "$drift_status" -ne 0 ]; then
+    STAGE_STATUS="$STATUS_FAIL"
+    printf '  the committed action-id union is stale (exit %s).\n' "$drift_status"
+    printf '  Run `pnpm codegen` and commit the result. The diff the check would\n'
+    printf '  have produced is above; the tree has been left as it was found.\n'
+    return 1
+  fi
+}
+
 run_stage_schema_drift() {
   # A green integration suite can describe a schema the code no longer matches.
   # The integration test reads the DATABASE, which drizzle builds from the
@@ -631,6 +661,7 @@ run_stage() {
     architecture) run_stage_architecture ;;
     schema-hygiene) run_stage_schema_hygiene ;;
     build) run_stage_build ;;
+    codegen-drift) run_stage_codegen_drift ;;
     schema-drift) run_stage_schema_drift ;;
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;
