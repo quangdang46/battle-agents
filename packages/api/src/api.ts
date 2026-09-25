@@ -217,6 +217,26 @@ export function createApplicationApi(runtime: Runtime, bus?: EventBus): Applicat
       if (!isRegisteredActionId(action) || !runtime.actions().includes(action)) {
         throw new UnknownActionError(action, runtime.domains());
       }
+      // Every registered action in this build takes an object, and `I` is
+      // inferred from the CALL SITE rather than checked against the action, so
+      // `act('progression.read')` and `act('progression.read', 'agent-1')` both
+      // compile. Dispatching those reached a feature reading a field off a
+      // string, and the resulting error named a field rather than the mistake.
+      //
+      // This is the shape of a command payload, which is the API's business,
+      // not a game rule — it is why it belongs here rather than in each feature.
+      // Which FIELDS an action needs is still each feature's to check, and
+      // quest.create had to be taught to reject a draft rather than read
+      // `title.trim()` off one. This guard is the floor under every action, not
+      // a replacement for the per-feature one.
+      if (typeof input !== 'object' || input === null) {
+        throw Object.assign(
+          new Error(
+            `${action} takes an object; received ${input === null ? 'null' : typeof input}.`,
+          ),
+          { code: 'malformed-input' },
+        );
+      }
       return runtime.runAction<I, unknown>(action, input);
     },
 

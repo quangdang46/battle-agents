@@ -261,3 +261,27 @@ describe('parity across surfaces', () => {
     expect(result.found).toBe(false);
   });
 });
+
+describe('act refuses a payload that is not an object', () => {
+  // `act<I>` infers I from the call site, so nothing upstream ties the input to
+  // the action. Every registered action in this build takes an object, and
+  // dispatching anything else reached a feature reading a field off whatever
+  // arrived — the error then named a field instead of the mistake.
+  const { api } = harness();
+
+  it('names the action and what it received', async () => {
+    for (const input of [null, undefined, 'agent-1', 42, true]) {
+      await expect(api.act('quest.claim', input as never)).rejects.toMatchObject({
+        code: 'malformed-input',
+        message: expect.stringContaining('quest.claim takes an object'),
+      });
+    }
+  });
+
+  it('still dispatches a well-formed payload', async () => {
+    // A guard that refused everything would pass the test above.
+    await expect(harness().api.act('quest.claim', { id: 'quest-1' })).resolves.toMatchObject({
+      claimed: 'quest-1',
+    });
+  });
+});
