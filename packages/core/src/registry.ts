@@ -12,6 +12,16 @@ import type { ActionDef, Capability, EventHandler, GameFeature } from './contrac
 export interface ActionSummary {
   readonly id: string;
   readonly permissions: readonly string[];
+  /**
+   * What the action does, in a sentence a caller can act on.
+   *
+   * Optional because this is the frozen contract and adding a required field
+   * would break every action declaration already written. It is here because a
+   * surface asked to describe an operation with nothing to describe is either
+   * useless or dishonest, and an action that omits it is saying so rather than
+   * having a description invented for it.
+   */
+  readonly description?: string;
 }
 
 /** The domain an id belongs to, which is everything before its first dot. */
@@ -168,7 +178,14 @@ export class FeatureRegistry {
   actionsIn(domain: string): ActionSummary[] {
     return [...this.#actions.values()]
       .filter((action) => idOf(action.id).domain === domain)
-      .map((action) => ({ id: action.id, permissions: [...action.permissions] }))
+      .map((action) => ({
+        id: action.id,
+        permissions: [...action.permissions],
+        // Spreading rather than a bare undefined: the field is optional, and
+        // `exactOptionalPropertyTypes` is on, so an explicit undefined would
+        // not type.
+        ...(action.description === undefined ? {} : { description: action.description }),
+      }))
       .sort((left, right) => left.id.localeCompare(right.id));
   }
 

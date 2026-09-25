@@ -169,12 +169,30 @@ export function createApplicationApi(runtime: Runtime): ApplicationApi {
         .map((action) => ({ id: action.id, name: action.id.split('.')[1] ?? action.id }));
     },
 
-    inspect(query: InspectQuery): Promise<unknown> {
-      // `type` is a domain; `id` is an action within it. The action's own
-      // permissions decide whether the caller may run it, and that check belongs
-      // where the action is defined rather than in a shared helper that three
-      // surfaces would each have to remember to call.
-      return runtime.runAction(`${query.type}.${query.id}`, {});
+    async inspect(query: InspectQuery): Promise<unknown> {
+      // This describes. It does not run. The earlier implementation called
+      // runAction, which meant a surface advertised as "describe one
+      // operation" could mutate durable state: an audit drove a counter action
+      // from 1 to 2 through two inspect calls, and inspecting quest.create
+      // entered the create path and threw inside it. A read that writes is not
+      // a read, whatever the tool description says.
+      //
+      // So the answer comes from the registry's own catalogue. An action that
+      // declares no description is reported as undescribed, which is honest;
+      // inventing prose here would be a description nobody wrote.
+      const actionId = `${query.type}.${query.id}`;
+      const summary = runtime
+        .describeDomain(query.type)
+        .actions.find((action) => action.id === actionId);
+      if (summary === undefined) {
+        return { action: actionId, found: false };
+      }
+      return {
+        action: actionId,
+        found: true,
+        description: summary.description ?? null,
+        permissions: summary.permissions,
+      };
     },
 
     async act<I>(action: string, input: I): Promise<unknown> {

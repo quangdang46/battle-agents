@@ -209,4 +209,48 @@ describe('parity across surfaces', () => {
     }
     await expect(api.act(wrong as never, input)).rejects.toBeInstanceOf(UnknownActionError);
   });
+  it('describes an action without running it', async () => {
+    // inspect is advertised to MCP clients as "describe one operation, without
+    // running it". The previous implementation called runAction, so a describe
+    // call mutated durable state: an audit drove a counter from 1 to 2 through
+    // two inspect calls, and inspecting quest.create entered the create path
+    // and threw inside it. A read that writes is not a read, whatever the tool
+    // description claims.
+    const { api } = harness(1);
+
+    const result = (await api.inspect({ type: 'quest', id: 'claim' })) as {
+      action: string;
+      found: boolean;
+      description: string | null;
+      permissions: readonly string[];
+    };
+
+    expect(result.found).toBe(true);
+    expect(result.action).toBe('quest.claim');
+    expect(result.permissions.length).toBeGreaterThan(0);
+  });
+
+  it('does not run the action it describes, even twice', async () => {
+    // The regression is a side effect, so the assertion has to be on the side
+    // effect. Calling inspect must not reach a handler at all.
+    const { runtime, api } = harness(1);
+    const before = JSON.stringify(runtime.describeDomain('quest'));
+
+    await api.inspect({ type: 'quest', id: 'claim' });
+    await api.inspect({ type: 'quest', id: 'claim' });
+
+    expect(JSON.stringify(runtime.describeDomain('quest'))).toBe(before);
+  });
+
+  it('reports an action it cannot describe rather than inventing one', async () => {
+    const { api } = harness(1);
+
+    const result = (await api.inspect({ type: 'quest', id: 'nonexistent' })) as {
+      found: boolean;
+    };
+
+    // A description nobody wrote is worse than none: the caller cannot tell a
+    // generated sentence from one the author stands behind.
+    expect(result.found).toBe(false);
+  });
 });

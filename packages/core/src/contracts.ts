@@ -97,6 +97,15 @@ export interface ActionDef<I = unknown, O = unknown> {
   readonly id: string;
   /** What a caller must hold to run this. Never empty. */
   readonly permissions: readonly string[];
+  /**
+   * What this action does, in a sentence a caller can act on.
+   *
+   * Optional so that the frozen contract does not break declarations already
+   * written, and load-bearing because `inspect` has to describe an operation
+   * without running it. An action without one is reported as undescribed
+   * rather than given a description invented on the way out.
+   */
+  readonly description?: string;
   run(input: I, context: RuntimeContext): Promise<O>;
 }
 
