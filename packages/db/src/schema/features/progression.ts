@@ -5,6 +5,13 @@ import { agents } from '../platform.js';
 
 export type AgentSkills = Record<string, number>;
 
+/** One recorded award, kept so a reclassification is a re-read. */
+export interface ProgressionSignal {
+  readonly kind: string;
+  readonly weight: number;
+  readonly at: string;
+}
+
 export const agentStats = pgTable(
   'agent_stats',
   {
@@ -20,6 +27,11 @@ export const agentStats = pgTable(
     battlesWon: integer('battles_won').notNull().default(0),
     battlesLost: integer('battles_lost').notNull().default(0),
     skillsJson: jsonb('skills_json').$type<AgentSkills>().notNull().default({}),
+    // The award history is a list, so it cannot live in skills_json: that column
+    // is Record<string, number>, and a list is not a number. Without its own
+    // column the feature's promise that a reclassification is a re-read rather
+    // than a guess cannot be kept once the process restarts.
+    historyJson: jsonb('history_json').$type<ProgressionSignal[]>().notNull().default([]),
   },
   (table) => [
     check('agent_stats_prs_opened_non_negative', sql`${table.prsOpened} >= 0`),

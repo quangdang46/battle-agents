@@ -1,0 +1,1 @@
+ALTER TABLE "agent_stats" ADD COLUMN "history_json" jsonb DEFAULT '[]'::jsonb NOT NULL;
