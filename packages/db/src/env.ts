@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const ENV_FILE_NAME = '.env';
@@ -13,8 +14,15 @@ const ENV_FILE_NAME = '.env';
  * and moving the directory without moving this line left every path resolving
  * one level short — which surfaced as "can't find meta/_journal.json" three
  * stages later rather than as a wrong REPO_ROOT.
+ *
+ * The directory comes from `import.meta.url` rather than `import.meta.dirname`
+ * because a bundler rewrites `import.meta` to an object that has no `dirname`,
+ * and the result is `resolve(undefined, ...)` — which fails as a TypeError
+ * inside a webpack chunk during `next build`, with nothing in this file's name
+ * to point at the cause. tsc, vitest and the build disagreed about the same
+ * code, and only the build could see it.
  */
-export const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
+export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 export class MissingDatabaseUrlError extends Error {
   constructor() {

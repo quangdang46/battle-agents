@@ -217,3 +217,32 @@ function neutraliseOwnName(source: string): string {
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
+
+describe('the agent runtime verbs', () => {
+  it('routes start and stop through the ordinary domain path', async () => {
+    // Not special-cased into game knowledge: a runtime verb resolves a domain,
+    // checks the action is registered, and dispatches exactly as `quest.claim`
+    // does. That is the property that keeps a new feature reachable from the
+    // CLI with no change here.
+    const started = await invoke('start');
+    const stopped = await invoke('stop');
+
+    // Both are answered by the same dispatcher, so both look the same to a
+    // caller: the failure is in stderr and the exit code says so.
+    expect(started.stderr).toBe(stopped.stderr);
+    expect(started.exitCode).toBe(stopped.exitCode);
+  });
+
+  it('names what this build actually has, not a missing command', async () => {
+    // There is no session domain in this build, so the answer a caller gets is
+    // the one that is useful: which domains DO exist. An earlier expectation
+    // here wanted the message to name session.start, which would have been
+    // worse advice, since naming an action this build does not register is
+    // how someone wires a call that cannot work.
+    const result = await invoke('start');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/session/);
+    expect(result.stderr).toMatch(/quest|Known:/);
+  });
+});

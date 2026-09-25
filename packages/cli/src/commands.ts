@@ -58,6 +58,27 @@ interface Resolved {
 const PLATFORM_COMMANDS = new Set(['status', 'doctor', 'help', 'discover']);
 
 /**
+ * The agent runtime verbs.
+ *
+ * `start` and `stop` are NOT special-cased into game knowledge. They are
+ * resolved as ordinary domain actions the same way `quest.claim` is, so if a
+ * future build has no `session.start` the CLI says so and names what it does
+ * offer, rather than failing on an action that was never wired.
+ *
+ * `login` and `init` are the two that touch local state, and they do it through
+ * session.ts rather than here. Neither knows what a game concept is.
+ */
+interface RuntimeVerb {
+  readonly domain: string;
+  readonly action: string;
+}
+
+const RUNTIME_VERBS: Readonly<Record<string, RuntimeVerb>> = {
+  start: { domain: 'session', action: 'session.start' },
+  stop: { domain: 'session', action: 'session.end' },
+};
+
+/**
  * Runs one invocation against the application API.
  *
  * The shape is fixed so the dispatcher stays small: `<domain> [<verb>] [args…]`.
@@ -87,6 +108,18 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
   if (first === 'discover') {
     const domain = rest[0];
     return emit(domain === undefined ? await api.discover() : await api.discover(domain));
+  }
+
+  const runtime = first === undefined ? undefined : RUNTIME_VERBS[first];
+  if (runtime !== undefined) {
+    const resolved = await resolve(api, runtime.domain);
+    if (!resolved.offers(runtime.action)) {
+      throw new UsageError(
+        `"${first}" needs ${runtime.action}, which this build does not register. ` +
+          `The ${runtime.domain} domain offers: ${describeActions(resolved.detail).join(', ')}`,
+      );
+    }
+    return await actOn(api, emit, runtime.action, rest);
   }
 
   if (first === 'status') {
@@ -133,16 +166,37 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
     return emit(results);
   }
 
-  const args = rest.slice(1);
+  return await actOn(api, emit, actionId, rest.slice(1), describeActions(resolved.detail));
+}
+
+/**
+ * Runs one action and reports the failure in terms a caller can act on.
+ *
+ * Shared by the domain path and the runtime verbs, because both do the same
+ * three things: refuse an id this build does not register, hand the arguments
+ * to the action, and turn a rejection into a message naming the action. Two
+ * copies of that is two places for the error text to drift.
+ *
+ * The action's input shape belongs to the feature, so the arguments arrive as
+ * the single string the dispatcher has always passed. The CLI does not parse
+ * them, and doing so is how a surface ends up behaving differently from the
+ * others.
+ */
+async function actOn(
+  api: ApplicationApi,
+  emit: (value: unknown) => CommandResult,
+  actionId: string,
+  args: readonly string[],
+  offered?: readonly string[],
+): Promise<CommandResult> {
   try {
     if (!isRegisteredActionId(actionId)) {
-      throw new UsageError(
-        `no action "${actionId}" in this build. This domain offers: ${describeActions(resolved.detail).join(', ')}`,
-      );
+      const suffix = offered === undefined ? '' : ` This domain offers: ${offered.join(', ')}`;
+      throw new UsageError(`no action "${actionId}" in this build.${suffix}`);
     }
-    const output = await api.act(actionId, { args: args.join(' ') });
-    return emit(output);
+    return emit(await api.act(actionId, { args: args.join(' ') }));
   } catch (error) {
+    if (error instanceof UsageError) throw error;
     throw new CommandFailedError(
       `${actionId} failed: ${error instanceof Error ? error.message : String(error)}`,
     );
