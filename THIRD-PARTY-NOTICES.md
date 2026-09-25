@@ -44,22 +44,22 @@ from, and the license it carries. Keep it updated in the same commit that adds t
 
 ## Vendored files
 
-| This repo                                  | Source                                                              | Commit         | License    |
-| ------------------------------------------ | ------------------------------------------------------------------- | -------------- | ---------- |
-| `apps/web/public/assets/tiny-swords-cc0/`  | `agent-quest/client/public/assets/themes/tiny-swords-cc0/`          | `010c791207c9` | CC0-1.0    |
-| `packages/protocol/src/tool-map.ts`        | `agent-move/packages/shared/src/constants/tools.ts`                 | `85d377110721` | MIT        |
+| This repo                                          | Source                                                                                                 | Commit         | License    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------- | ---------- |
+| `apps/web/public/assets/tiny-swords-cc0/`          | `agent-quest/client/public/assets/themes/tiny-swords-cc0/`                                             | `010c791207c9` | CC0-1.0    |
+| `packages/protocol/src/tool-map.ts`                | `agent-move/packages/shared/src/constants/tools.ts`                                                    | `85d377110721` | MIT        |
 | `packages/adapters/opencode/src/parsers/sqlite.ts` | `agent-move/packages/server/src/watcher/opencode/{opencode-watcher,opencode-parser,opencode-paths}.ts` | `85d377110721` | MIT        |
-| `packages/adapters/opencode/src/watcher.ts` | `agent-move/packages/server/src/watcher/{agent-watcher,opencode/opencode-watcher}.ts` | `85d377110721` | MIT        |
-| `packages/core/src/` provider seam         | `pixel-agents/core/src/provider.ts`, `teamProvider.ts`              | `3537e140c209` | MIT        |
-| `packages/features/battle/` gates          | `agent-dashboard/adapters/claude-code/hooks/`                       | `b3c04cf7f0aa` | MIT        |
-| `packages/features/agent/` presence        | `arcane-agents/src/server/status/decide.ts`                         | `edcaf4018ab4` | MIT        |
-| `packages/game-client/src/` skeleton       | `age-of-agents/packages/client/src/game/`                           | `a6f22316e36b` | MIT        |
-| `packages/mcp-server/src/tools/`           | `agent-world-smallville/mcp_server/tools.py`                        | `13d62dbdeeca` | Apache-2.0 |
-| `packages/mcp-server/src/` messaging       | `cross-agent-teams-mcp/src/mcp/`                                    | `ab35f916b2e9` | MIT        |
-| `packages/mcp-server/src/` zod tool layout | `tmux-agents/packages/mcp/src/{tools,server}.ts`                    | `b7e71384f4ee` | MIT        |
-| `apps/web/src/` extension registry         | `paperclip` adapter registries                                      | `f55759942b8c` | MIT        |
-| `apps/web/public/` protocol docs           | `moltbook` skill/heartbeat/messaging docs                           | `dd452e852de3` | MIT        |
-| `apps/web/src/` SSE delta protocol         | `agent-world-codemoo/server/{stateDiffBroadcast,eventsPipeline}.js` | `851ceee1d3f6` | MIT        |
+| `packages/adapters/opencode/src/watcher.ts`        | `agent-move/packages/server/src/watcher/{agent-watcher,opencode/opencode-watcher}.ts`                  | `85d377110721` | MIT        |
+| `packages/core/src/` provider seam                 | `pixel-agents/core/src/provider.ts`, `teamProvider.ts`                                                 | `3537e140c209` | MIT        |
+| `packages/features/battle/` gates                  | `agent-dashboard/adapters/claude-code/hooks/`                                                          | `b3c04cf7f0aa` | MIT        |
+| `packages/features/agent/` presence                | `arcane-agents/src/server/status/decide.ts`                                                            | `edcaf4018ab4` | MIT        |
+| `packages/game-client/src/` skeleton               | `age-of-agents/packages/client/src/game/`                                                              | `a6f22316e36b` | MIT        |
+| `packages/mcp-server/src/tools/`                   | `agent-world-smallville/mcp_server/tools.py`                                                           | `13d62dbdeeca` | Apache-2.0 |
+| `packages/mcp-server/src/` messaging               | `cross-agent-teams-mcp/src/mcp/`                                                                       | `ab35f916b2e9` | MIT        |
+| `packages/mcp-server/src/` zod tool layout         | `tmux-agents/packages/mcp/src/{tools,server}.ts`                                                       | `b7e71384f4ee` | MIT        |
+| `apps/web/src/` extension registry                 | `paperclip` adapter registries                                                                         | `f55759942b8c` | MIT        |
+| `apps/web/public/` protocol docs                   | `moltbook` skill/heartbeat/messaging docs                                                              | `dd452e852de3` | MIT        |
+| `apps/web/src/` SSE delta protocol                 | `agent-world-codemoo/server/{stateDiffBroadcast,eventsPipeline}.js`                                    | `851ceee1d3f6` | MIT        |
 
 ## Asset licenses
 

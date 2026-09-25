@@ -12,7 +12,8 @@ const WORKSPACE_SCOPE = '@battle-agents/';
 const CORE_DIR = 'packages/core';
 const ADAPTERS_DIR = 'packages/adapters';
 const FEATURES_DIR = 'packages/features';
-const PACKAGE_CONTAINER_DIRS: readonly string[] = [ADAPTERS_DIR, FEATURES_DIR];
+const INFRASTRUCTURE_DIR = 'packages/infrastructure';
+const PACKAGE_CONTAINER_DIRS: readonly string[] = [ADAPTERS_DIR, FEATURES_DIR, INFRASTRUCTURE_DIR];
 const TYPESCRIPT_EXTENSION = '.ts';
 const IGNORED_DIRECTORIES: readonly string[] = ['dist', 'node_modules'];
 const LAYER_ALLOWED_PACKAGES: readonly string[] = ['core', 'protocol'];
@@ -128,7 +129,7 @@ function listTypeScriptFiles(absoluteDir: string): string[] {
 
 function discoverPackageDirs(): string[] {
   const discovered: string[] = [];
-  const parents = ['apps', 'packages', ADAPTERS_DIR, FEATURES_DIR].map((dir) =>
+  const parents = ['apps', 'packages', ADAPTERS_DIR, FEATURES_DIR, INFRASTRUCTURE_DIR].map((dir) =>
     join(REPO_ROOT, dir),
   );
   for (const parent of parents) {

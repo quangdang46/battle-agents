@@ -6,7 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { workspaceSourceAliases } from '../../vitest.shared.js';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
-const WORKSPACE_PARENTS = ['packages', 'packages/features', 'packages/adapters', 'apps'];
+const WORKSPACE_PARENTS = [
+  'packages',
+  'packages/features',
+  'packages/adapters',
+  'packages/infrastructure',
+  'apps',
+];
 
 function packagesWithSource(): { name: string; dir: string }[] {
   const found: { name: string; dir: string }[] = [];

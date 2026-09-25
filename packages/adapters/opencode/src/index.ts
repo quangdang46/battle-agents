@@ -16,11 +16,7 @@
  * union, the union is a contract over harnesses rather than over file formats.
  */
 
-export {
-  OPEN_CODE_HARNESS,
-  OpenCodeStore,
-  openCodeDatabasePath,
-} from './parsers/sqlite.js';
+export { OPEN_CODE_HARNESS, OpenCodeStore, openCodeDatabasePath } from './parsers/sqlite.js';
 export type { OpenCodePollResult, OpenCodeSchema, OpenCodeStoreOptions } from './parsers/sqlite.js';
 
 export { OpenCodeWatcher } from './watcher.js';

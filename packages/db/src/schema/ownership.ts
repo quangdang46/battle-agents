@@ -23,6 +23,14 @@ export const PLATFORM_TABLES = [
   'event_log',
   'installations',
   'projects',
+  // The GitHub delivery ledger, added by ba-github-infrastructure-56v. It sits
+  // on the platform side because neither list is really about ownership in the
+  // abstract: FEATURE_TABLES is "a feature may migrate this", and this table
+  // belongs to no feature — it records what an integration observed, and the
+  // bounty feature reads the published facts rather than owning them. Leaving
+  // it out of both lists is not a neutral choice: the verifier reports a table
+  // in neither as belonging to no boundary, and nothing may then migrate it.
+  'github_delivery_claims',
 ] as const;
 
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];

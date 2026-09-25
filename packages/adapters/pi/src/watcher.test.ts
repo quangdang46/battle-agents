@@ -1,4 +1,11 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -160,7 +167,7 @@ describe('the real capture, end to end', () => {
     ]);
   });
 
-  it('reads a user turn as a prompt and the assistant\'s prose as neither', () => {
+  it("reads a user turn as a prompt and the assistant's prose as neither", () => {
     const { events } = eventsOf(lines);
     const prompts = events.filter((event) => event.type === 'prompt.submitted');
 
@@ -183,7 +190,7 @@ describe('the real capture, end to end', () => {
     );
   });
 
-  it('measures a tool\'s duration from its own call, not as zero', () => {
+  it("measures a tool's duration from its own call, not as zero", () => {
     const completed = eventsOf(lines).events.filter((event) => event.type === 'tool.completed');
     const durations = completed.map((event) => (event as { durationMs: number }).durationMs);
 
@@ -205,7 +212,7 @@ describe('the real capture, end to end', () => {
     expect(events.filter((event) => event.type === 'tool.started')).toHaveLength(18);
   });
 
-  it('counts Pi\'s own bookkeeping records as skips rather than guessing an event', () => {
+  it("counts Pi's own bookkeeping records as skips rather than guessing an event", () => {
     const { skipped } = eventsOf(lines);
 
     // The capture has a model_change and a thinking_level_change. The protocol
@@ -258,9 +265,11 @@ describe('the tool-map is on the path', () => {
     // The seven names below are every one observed in the capture and in every
     // other session on the machine. The last three had no mapping at all and
     // were landing in the `thinking` zone despite being file operations.
-    expect(['bash', 'read', 'write', 'edit', 'find_block', 'rename_file', 'remove_file'].map(
-      (name) => (startedFor(name) as { tool: string }).tool,
-    )).toEqual(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Edit', 'Edit']);
+    expect(
+      ['bash', 'read', 'write', 'edit', 'find_block', 'rename_file', 'remove_file'].map(
+        (name) => (startedFor(name) as { tool: string }).tool,
+      ),
+    ).toEqual(['Bash', 'Read', 'Write', 'Edit', 'Grep', 'Edit', 'Edit']);
   });
 
   it('puts the three newly-mapped names in a zone that is not the fallback', () => {
@@ -269,7 +278,9 @@ describe('the tool-map is on the path', () => {
     // the agent thinking. `thinking` IS the fallback, so this separates "mapped
     // to something" from "fell through".
     for (const name of ['find_block', 'rename_file', 'remove_file']) {
-      expect(getZoneForTool((startedFor(name) as { tool: string }).tool), name).not.toBe('thinking');
+      expect(getZoneForTool((startedFor(name) as { tool: string }).tool), name).not.toBe(
+        'thinking',
+      );
     }
   });
 
@@ -286,11 +297,17 @@ describe('the tool-map is on the path', () => {
     // `path`, `command`, `edits`, `anchor`, `pos`, `to` — so the capture cannot
     // prove this. What it CAN prove is that the call is on the path: delete
     // `normalizeToolInput` from the parser and this fails.
-    expect(startedFor('edit', { filePath: '/repo/a.ts', oldString: 'a', newString: 'b', replaceAll: true }))
-      .toMatchObject({
-        type: 'tool.started',
-        input: { file_path: '/repo/a.ts', old_string: 'a', new_string: 'b', replace_all: true },
-      });
+    expect(
+      startedFor('edit', {
+        filePath: '/repo/a.ts',
+        oldString: 'a',
+        newString: 'b',
+        replaceAll: true,
+      }),
+    ).toMatchObject({
+      type: 'tool.started',
+      input: { file_path: '/repo/a.ts', old_string: 'a', new_string: 'b', replace_all: true },
+    });
   });
 
   it('passes a real Pi argument object through unchanged', () => {
@@ -303,14 +320,19 @@ describe('the tool-map is on the path', () => {
 
     expect(inputs).toHaveLength(18);
     expect(inputs.every((input) => typeof input === 'object' && input !== null)).toBe(true);
-    expect(inputs.flatMap((input) => Object.keys(input)).some((key) => /[A-Z]/.test(key))).toBe(false);
+    expect(inputs.flatMap((input) => Object.keys(input)).some((key) => /[A-Z]/.test(key))).toBe(
+      false,
+    );
   });
 });
 
 describe('the instant on an event', () => {
   function promptAt(timestamp: unknown, messageTimestamp?: number): AgentEvent {
     const state = seededState();
-    const message: Record<string, unknown> = { role: 'user', content: [{ type: 'text', text: 'hi' }] };
+    const message: Record<string, unknown> = {
+      role: 'user',
+      content: [{ type: 'text', text: 'hi' }],
+    };
     if (messageTimestamp !== undefined) message.timestamp = messageTimestamp;
     const { events } = parseSessionLine(
       JSON.stringify({ type: 'message', timestamp, message }),
@@ -319,7 +341,7 @@ describe('the instant on an event', () => {
     return events[0] as AgentEvent;
   }
 
-  it('takes the record\'s own timestamp, not the message\'s epoch-millisecond one', () => {
+  it("takes the record's own timestamp, not the message's epoch-millisecond one", () => {
     // Both forms are in the capture and they disagree by being different forms.
     // The record's is an ISO string with an offset; the message's is epoch
     // milliseconds and is absent from almost every record.
@@ -377,7 +399,10 @@ describe('a tool the harness reported as failed', () => {
       JSON.stringify({
         type: 'message',
         timestamp: '2026-01-01T00:01:00.000+00:00',
-        message: { role: 'assistant', content: [{ type: 'toolCall', id: 'call-9', name, arguments: { command: 'false' } }] },
+        message: {
+          role: 'assistant',
+          content: [{ type: 'toolCall', id: 'call-9', name, arguments: { command: 'false' } }],
+        },
       }),
       state,
     );
@@ -386,7 +411,13 @@ describe('a tool the harness reported as failed', () => {
       JSON.stringify({
         type: 'message',
         timestamp: `2026-01-01T00:01:0${Math.floor(gapMs / 1000)}.${String(gapMs % 1000).padStart(3, '0')}+00:00`,
-        message: { role: 'toolResult', toolCallId: 'call-9', toolName: name, isError, content: [{ type: 'text', text: 'exit 1' }] },
+        message: {
+          role: 'toolResult',
+          toolCallId: 'call-9',
+          toolName: name,
+          isError,
+          content: [{ type: 'text', text: 'exit 1' }],
+        },
       }),
       state,
     ).events;
@@ -417,7 +448,13 @@ describe('a tool the harness reported as failed', () => {
       JSON.stringify({
         type: 'message',
         timestamp: '2026-01-01T00:01:00.000+00:00',
-        message: { role: 'toolResult', toolCallId: 'call-unknown', toolName: 'bash', isError: false, content: [] },
+        message: {
+          role: 'toolResult',
+          toolCallId: 'call-unknown',
+          toolName: 'bash',
+          isError: false,
+          content: [],
+        },
       }),
       state,
     );
@@ -430,7 +467,7 @@ describe('a tool the harness reported as failed', () => {
 });
 
 describe('finding the sessions', () => {
-  it('points at Pi\'s own directory under the home directory', () => {
+  it("points at Pi's own directory under the home directory", () => {
     expect(piSessionsDirectory('/home/agent')).toBe('/home/agent/.pi/agent/sessions');
   });
 
@@ -614,12 +651,10 @@ describe('the watcher', () => {
     for (const batch of h.batches) {
       expect(new Set(batch.map((event) => event.sessionId)).size).toBe(1);
     }
-    expect(new Set(h.sent.map((event) => event.sessionId))).toEqual(
-      new Set(['sess-a', 'sess-b']),
-    );
+    expect(new Set(h.sent.map((event) => event.sessionId))).toEqual(new Set(['sess-a', 'sess-b']));
   });
 
-  it('keeps two sessions\' leftovers apart on stop', async () => {
+  it("keeps two sessions' leftovers apart on stop", async () => {
     const h = harness();
     sessionFile(h.dir, 'sess_x.jsonl', promptSession('sess-x', 0));
     sessionFile(h.dir, 'sess_y.jsonl', promptSession('sess-y', 0));
@@ -695,7 +730,7 @@ describe('the watcher', () => {
     expect(h.watcher.skippedCount).toBe(1);
   });
 
-  it('keeps a vanished session\'s buffered events rather than dropping them with the file', async () => {
+  it("keeps a vanished session's buffered events rather than dropping them with the file", async () => {
     // The one place the watcher can lose an event it has already read: a file
     // that disappears while its buffer holds a partial batch. Dropping the
     // bookkeeping drops the batch with it, and the session is gone so no later

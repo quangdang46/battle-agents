@@ -68,6 +68,9 @@ importers:
       '@battle-agents/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@battle-agents/github':
+        specifier: workspace:*
+        version: link:../../packages/infrastructure/github
       '@battle-agents/mcp-server':
         specifier: workspace:*
         version: link:../../packages/mcp-server
@@ -312,6 +315,8 @@ importers:
       '@battle-agents/protocol':
         specifier: workspace:*
         version: link:../protocol
+
+  packages/infrastructure/github: {}
 
   packages/mcp-server:
     dependencies:

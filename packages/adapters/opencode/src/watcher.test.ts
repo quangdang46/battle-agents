@@ -80,10 +80,16 @@ function harness(
     // `cancel` is left at its default, which invokes the canceller the scheduler
     // returned — so the count below is the real one, not a test-side fiction.
     now: () => clock,
-    ...(options.minPollIntervalMs === undefined ? {} : { minPollIntervalMs: options.minPollIntervalMs }),
-    ...(options.maxPollIntervalMs === undefined ? {} : { maxPollIntervalMs: options.maxPollIntervalMs }),
+    ...(options.minPollIntervalMs === undefined
+      ? {}
+      : { minPollIntervalMs: options.minPollIntervalMs }),
+    ...(options.maxPollIntervalMs === undefined
+      ? {}
+      : { maxPollIntervalMs: options.maxPollIntervalMs }),
     ...(options.backoffFactor === undefined ? {} : { backoffFactor: options.backoffFactor }),
-    ...(options.sessionEndIdleMs === undefined ? {} : { sessionEndIdleMs: options.sessionEndIdleMs }),
+    ...(options.sessionEndIdleMs === undefined
+      ? {}
+      : { sessionEndIdleMs: options.sessionEndIdleMs }),
   });
 
   return {
@@ -407,8 +413,8 @@ describe('a database that is not there', () => {
   it('fails at construction with a message naming where it looked', () => {
     // Loud rather than silent. A watcher that quietly watched nothing is the
     // failure the research doc records four times over in the port it came from.
-    expect(() => new OpenCodeWatcher({ send: async () => {}, databasePath: '/nonexistent/db.sqlite' })).toThrow(
-      /unable to open database file|no such file/i,
-    );
+    expect(
+      () => new OpenCodeWatcher({ send: async () => {}, databasePath: '/nonexistent/db.sqlite' }),
+    ).toThrow(/unable to open database file|no such file/i);
   });
 });

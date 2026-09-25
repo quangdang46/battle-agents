@@ -247,17 +247,13 @@ export class OpenCodeStore {
             WHERE time_updated > ? OR (time_updated = ? AND id > ?)
             ORDER BY time_updated, id`,
         ),
-        sessionById: this.#db.prepare(
-          `SELECT ${sessionColumns} FROM ${sessionTable} WHERE id = ?`,
-        ),
+        sessionById: this.#db.prepare(`SELECT ${sessionColumns} FROM ${sessionTable} WHERE id = ?`),
         messages: this.#db.prepare(
           `SELECT ${turnColumns} FROM ${messageTable}
             WHERE time_updated > ? OR (time_updated = ? AND id > ?)
             ORDER BY time_updated, id`,
         ),
-        messageById: this.#db.prepare(
-          `SELECT ${turnColumns} FROM ${messageTable} WHERE id = ?`,
-        ),
+        messageById: this.#db.prepare(`SELECT ${turnColumns} FROM ${messageTable} WHERE id = ?`),
         // v1 only. v2 has no part table, and preparing a statement nobody runs
         // against a schema it was not written for is a prepare-time failure
         // waiting for the next column OpenCode renames.
@@ -451,7 +447,11 @@ export class OpenCodeStore {
       if (identity.archivedAt !== undefined) this.#endSession(events, identity, 'completed');
       return;
     }
-    this.#announce(events, identity, numberAt(row, 'time_created') ?? numberAt(row, 'time_updated'));
+    this.#announce(
+      events,
+      identity,
+      numberAt(row, 'time_created') ?? numberAt(row, 'time_updated'),
+    );
   }
 
   /**
@@ -506,7 +506,12 @@ export class OpenCodeStore {
     if (this.#endedSessions.has(identity.id)) return;
     this.#endedSessions.add(identity.id);
     const at = identity.archivedAt ?? Date.now();
-    events.push({ type: 'session.ended', sessionId: identity.id, at: new Date(at).toISOString(), reason });
+    events.push({
+      type: 'session.ended',
+      sessionId: identity.id,
+      at: new Date(at).toISOString(),
+      reason,
+    });
   }
 
   /**
@@ -556,7 +561,13 @@ export class OpenCodeStore {
     this.#skip('unknown-session');
     this.#announce(
       events,
-      { id: sessionId, directory: '', parentId: undefined, projectId: sessionId, archivedAt: undefined },
+      {
+        id: sessionId,
+        directory: '',
+        parentId: undefined,
+        projectId: sessionId,
+        archivedAt: undefined,
+      },
       undefined,
     );
   }

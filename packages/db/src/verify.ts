@@ -43,6 +43,11 @@ const EXPECTED_PLATFORM_TABLES: readonly string[] = [
   'achievements',
   'messages',
   'event_log',
+  // Checked here for the same reason as the rest: drizzle keeps its ledger in a
+  // separate schema, so `db:migrate` reporting success is not evidence this
+  // table exists. AGENTS.md calls that out, and this list is where the
+  // migrations stage finds out it was wrong.
+  'github_delivery_claims',
 ];
 
 export class SchemaVerificationError extends Error {

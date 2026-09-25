@@ -656,7 +656,7 @@ describe('a batch the server refuses for a reason waiting cannot fix', () => {
     expect(requests).toHaveLength(1);
   });
 
-  it('names the status and the server\'s own words, because the fix differs per status', async () => {
+  it("names the status and the server's own words, because the fix differs per status", async () => {
     // A 401 and a 404 are a credential problem and a registration problem. An
     // error that said only "request failed" would send somebody to the wrong one.
     const send = createIngestSender({

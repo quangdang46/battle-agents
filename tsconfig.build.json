@@ -77,6 +77,9 @@
       "path": "packages/adapters/pi"
     },
     {
+      "path": "packages/infrastructure/github"
+    },
+    {
       "path": "apps/web"
     }
   ]

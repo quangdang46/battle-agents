@@ -96,9 +96,7 @@ export class OpenCodeFixture {
     const names = Object.keys(columns);
     const placeholders = names.map(() => '?').join(', ');
     this.#db
-      .prepare(
-        `INSERT OR REPLACE INTO ${table} (${names.join(', ')}) VALUES (${placeholders})`,
-      )
+      .prepare(`INSERT OR REPLACE INTO ${table} (${names.join(', ')}) VALUES (${placeholders})`)
       .run(...names.map((name) => normaliseColumn(columns[name])));
   }
 
@@ -207,9 +205,7 @@ export function createOpenCodeFixture(options: OpenCodeFixtureOptions = {}): Ope
     fixture.write(generation === 'v2' ? 'session_message' : 'message', {
       id: message.id,
       session_id: message.sessionId,
-      ...(generation === 'v2'
-        ? { type: payload.type ?? 'assistant', seq: index }
-        : {}),
+      ...(generation === 'v2' ? { type: payload.type ?? 'assistant', seq: index } : {}),
       time_created: message.createdAt ?? FIXTURE_EPOCH_MS,
       time_updated: message.updatedAt ?? message.createdAt ?? FIXTURE_EPOCH_MS,
       data: JSON.stringify(message.data),
@@ -250,7 +246,11 @@ export function assistantTurn(options: {
 }): Record<string, unknown> {
   const content: Record<string, unknown>[] = [];
   if (options.reasoning === true) {
-    content.push({ type: 'reasoning', text: '', time: { created: options.createdAt ?? FIXTURE_EPOCH_MS } });
+    content.push({
+      type: 'reasoning',
+      text: '',
+      time: { created: options.createdAt ?? FIXTURE_EPOCH_MS },
+    });
   }
   for (const tool of options.tools ?? []) {
     content.push({
@@ -279,7 +279,9 @@ export function assistantTurn(options: {
       created: options.createdAt ?? FIXTURE_EPOCH_MS,
       completed: options.completedAt ?? FIXTURE_EPOCH_MS,
     },
-    ...(options.error === undefined ? {} : { error: { name: 'ProviderError', message: options.error } }),
+    ...(options.error === undefined
+      ? {}
+      : { error: { name: 'ProviderError', message: options.error } }),
   };
 }
 

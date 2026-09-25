@@ -147,11 +147,7 @@ export function parseSessionLine(line: string, state: PiLogState): ParsedPiLine 
   return skipped(`unmapped-type:${type ?? '<none>'}`);
 }
 
-function parseHeader(
-  record: Record<string, unknown>,
-  at: string,
-  state: PiLogState,
-): ParsedPiLine {
+function parseHeader(record: Record<string, unknown>, at: string, state: PiLogState): ParsedPiLine {
   const sessionId = stringAt(record, 'id');
   if (sessionId === undefined) return skipped('no-session');
 
@@ -199,7 +195,9 @@ function parseMessage(
     case 'user': {
       const prompt = textOf(blocksOf(message));
       return {
-        events: [{ ...base, type: 'prompt.submitted', ...(prompt === undefined ? {} : { prompt }) }],
+        events: [
+          { ...base, type: 'prompt.submitted', ...(prompt === undefined ? {} : { prompt }) },
+        ],
         skipped: undefined,
       };
     }

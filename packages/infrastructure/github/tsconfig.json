@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  // No project references, and that is the claim this package makes about
+  // itself: it imports nothing from the workspace. The delivery store is a port
+  // declared here and implemented in packages/db, so the boundary is enforced by
+  // the dependency graph being empty rather than by a rule somebody has to
+  // remember to run.
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

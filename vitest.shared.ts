@@ -20,7 +20,13 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)));
 
-const WORKSPACE_PARENTS = ['packages', 'packages/features', 'packages/adapters', 'apps'];
+const WORKSPACE_PARENTS = [
+  'packages',
+  'packages/features',
+  'packages/adapters',
+  'packages/infrastructure',
+  'apps',
+];
 
 type PackageAlias = { find: string; replacement: string };
 

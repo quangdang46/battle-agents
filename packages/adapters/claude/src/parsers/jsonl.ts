@@ -289,7 +289,12 @@ export async function readNewLines(
   const handle = await open(path, 'r');
   try {
     while (filled < fresh.length) {
-      const { bytesRead } = await handle.read(fresh, filled, fresh.length - filled, offset + filled);
+      const { bytesRead } = await handle.read(
+        fresh,
+        filled,
+        fresh.length - filled,
+        offset + filled,
+      );
       if (bytesRead === 0) break;
       filled += bytesRead;
     }

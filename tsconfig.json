@@ -43,6 +43,7 @@
       "@battle-agents/db": ["./packages/db/src/index.ts"],
       "@battle-agents/game-client": ["./packages/game-client/src/index.ts"],
       "@battle-agents/gemini": ["./packages/adapters/gemini/src/index.ts"],
+      "@battle-agents/github": ["./packages/infrastructure/github/src/index.ts"],
       "@battle-agents/guild": ["./packages/features/guild/src/index.ts"],
       "@battle-agents/inventory": ["./packages/features/inventory/src/index.ts"],
       "@battle-agents/mcp-server": ["./packages/mcp-server/src/index.ts"],
@@ -72,6 +73,7 @@
     "packages/*/src/**/*.test.ts",
     "packages/features/*/src/**/*.test.ts",
     "packages/adapters/*/src/**/*.test.ts",
+    "packages/infrastructure/*/src/**/*.test.ts",
     "vitest.*.config.ts",
     "vitest.shared.ts"
   ]

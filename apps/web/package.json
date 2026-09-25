@@ -22,6 +22,7 @@
     "@battle-agents/api": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",
+    "@battle-agents/github": "workspace:*",
     "@battle-agents/mcp-server": "workspace:*",
     "@battle-agents/progression": "workspace:*",
     "@battle-agents/quest": "workspace:*",

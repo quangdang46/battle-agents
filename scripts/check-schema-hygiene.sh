@@ -45,6 +45,15 @@ readonly GUARDED_TABLES=(
   "session"
   "account"
   "verification"
+  # The GitHub delivery ledger. It holds no credential today — the columns are
+  # a delivery id, a repository, a pull request number and two timestamps — and
+  # that is exactly why it belongs on this list rather than being left off it.
+  # The temptation this table creates is real and local: it is where somebody
+  # debugging an auth failure would add the installation token, and a token
+  # stored in a table full of GitHub delivery ids gets shipped in every backup
+  # of the application database. The token is read from the environment by
+  # packages/infrastructure/github and never persisted.
+  "github_delivery_claims"
 )
 
 # A column is credential-shaped if its name smells like a secret. Matching on
@@ -114,8 +123,17 @@ list_guard_declarations() {
   # The regexes below are the ones that were there. The fix is where the work
   # happens, not what is matched: a scanner that got faster by matching less
   # would be this gate's own history repeating.
-  for file in "${SCHEMA_SOURCE_DIR}"/*.ts; do
-    [ -e "${file}" ] || continue
+  #
+  # RECURSIVE, and that is the fix rather than a detail. This used to be a glob
+  # of the top level only, so it never opened packages/db/src/schema/features/*
+  # — which is where every feature's tables live. A credential column added to
+  # a feature schema was therefore invisible here, and the gate printed its pass
+  # line having checked nothing about it. Adding github_delivery_claims to
+  # GUARDED_TABLES would have been a false claim, and a comment in this file
+  # asserting the table is guarded is exactly the kind that has been wrong here
+  # before. Found by planting an `installation_token` column in that directory
+  # and watching the gate stay green.
+  while IFS= read -r -d '' file; do
     GUARD_TABLES="$(printf '%s\n' "${GUARDED_TABLES[@]}")" GUARD_FILE="${file}" perl -0 -ne '
       my $file = $ENV{GUARD_FILE};
       my @want = split /\n/, $ENV{GUARD_TABLES};
@@ -135,7 +153,7 @@ list_guard_declarations() {
         }
       }
     ' "$file" 2>/dev/null || true
-  done
+  done < <(find "${SCHEMA_SOURCE_DIR}" -type f -name '*.ts' -not -path '*/node_modules/*' -print0)
 }
 
 # Committed SQL is the artefact that reaches a database, so it is scanned as a

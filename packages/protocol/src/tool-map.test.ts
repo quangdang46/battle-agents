@@ -151,6 +151,9 @@ describe('normalizeToolInput on an input that is not an object', () => {
   });
 
   it('still normalises a real object', () => {
-    expect(normalizeToolInput({ filePath: 'a.ts', other: 1 })).toEqual({ file_path: 'a.ts', other: 1 });
+    expect(normalizeToolInput({ filePath: 'a.ts', other: 1 })).toEqual({
+      file_path: 'a.ts',
+      other: 1,
+    });
   });
 });

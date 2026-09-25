@@ -53,7 +53,10 @@ afterEach(() => {
 /** Opens the reader and takes its first poll, asserting every event validates. */
 function read(options: { readonly schema?: 'v1' | 'v2' } = {}) {
   if (fixture === undefined) throw new Error('no fixture: call make() first');
-  store = new OpenCodeStore(fixture.path, options.schema === undefined ? {} : { schema: options.schema });
+  store = new OpenCodeStore(
+    fixture.path,
+    options.schema === undefined ? {} : { schema: options.schema },
+  );
   return poll();
 }
 
@@ -80,7 +83,10 @@ function build(options: Parameters<typeof createOpenCodeFixture>[0]): OpenCodeFi
  * which is why the tests below write their rows after `open()`.
  */
 function openOn(sessionId = SESSION): OpenCodeFixture {
-  const db = build({ generation: 'v2', sessions: [{ id: sessionId, createdAt: FIXTURE_EPOCH_MS }] });
+  const db = build({
+    generation: 'v2',
+    sessions: [{ id: sessionId, createdAt: FIXTURE_EPOCH_MS }],
+  });
   const first = read();
   expect(typesOf(first.events), 'the first poll announces the session it can see').toEqual([
     'session.started',
@@ -157,22 +163,32 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
 
   it('submits a prompt and reports a tool call once, on the rows written after it opened', () => {
     const db = openOn();
-    db.write('session_message', userTurn('msg_user', SESSION, FIXTURE_EPOCH_MS + 1, 'fix the build'));
+    db.write(
+      'session_message',
+      userTurn('msg_user', SESSION, FIXTURE_EPOCH_MS + 1, 'fix the build'),
+    );
     expect(typesOf(poll().events)).toEqual(['prompt.submitted']);
 
     db.write(
       'session_message',
-      turnColumns(SESSION, FIXTURE_EPOCH_MS + 2, assistantTurn({
-        reasoning: true,
-        answer: 'done',
-        tools: [{ callId: 'call_1', name: 'read', input: { path: 'a.ts' } }],
-      })),
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 2,
+        assistantTurn({
+          reasoning: true,
+          answer: 'done',
+          tools: [{ callId: 'call_1', name: 'read', input: { path: 'a.ts' } }],
+        }),
+      ),
     );
     expect(typesOf(poll().events)).toEqual(['thinking', 'tool.started', 'tool.completed']);
   });
 
   it('stamps session.started from the row rather than from the wall clock', () => {
-    const db = build({ generation: 'v2', sessions: [{ id: SESSION, createdAt: FIXTURE_EPOCH_MS }] });
+    const db = build({
+      generation: 'v2',
+      sessions: [{ id: SESSION, createdAt: FIXTURE_EPOCH_MS }],
+    });
     const first = read();
     expect(one(first.events, 'session.started')).toMatchObject({
       sessionId: SESSION,
@@ -189,13 +205,20 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
     // camelCase keys no other adapter produces, and it is invisible without a
     // test because the event still validates.
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [
-        { callId: 'c1', name: 'read', input: { filePath: 'src/a.ts' } },
-        { callId: 'c2', name: 'edit', input: { path: 'b.ts', oldString: 'x', newString: 'y' } },
-        { callId: 'c3', name: 'shell', input: { command: 'ls' } },
-      ],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [
+            { callId: 'c1', name: 'read', input: { filePath: 'src/a.ts' } },
+            { callId: 'c2', name: 'edit', input: { path: 'b.ts', oldString: 'x', newString: 'y' } },
+            { callId: 'c3', name: 'shell', input: { command: 'ls' } },
+          ],
+        }),
+      ),
+    );
 
     const started = poll().events.filter((event) => event.type === 'tool.started');
     expect(started.map((event) => event.tool)).toEqual(['Read', 'Edit', 'Bash']);
@@ -209,9 +232,16 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
     // indistinguishable from a mapped one; the documented behaviour is that it
     // keeps its own name and lands in a zone.
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [{ callId: 'c1', name: 'tools.hashline_read', input: {} }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [{ callId: 'c1', name: 'tools.hashline_read', input: {} }],
+        }),
+      ),
+    );
 
     expect(one(poll().events, 'tool.started').tool).toBe('tools.hashline_read');
   });
@@ -221,9 +251,16 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
     // game reads it differently. One exit path that cannot tell them apart is
     // exactly where that distinction gets lost.
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [{ callId: 'c1', name: 'shell', status: 'error', error: 'command not found' }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [{ callId: 'c1', name: 'shell', status: 'error', error: 'command not found' }],
+        }),
+      ),
+    );
 
     const events = poll().events;
     expect(countOf(events, 'tool.failed')).toBe(1);
@@ -233,14 +270,23 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
 
   it('measures the duration from the two stamps the row carries', () => {
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [{
-        callId: 'c1',
-        name: 'shell',
-        createdAt: FIXTURE_EPOCH_MS,
-        completedAt: FIXTURE_EPOCH_MS + 1_500,
-      }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [
+            {
+              callId: 'c1',
+              name: 'shell',
+              createdAt: FIXTURE_EPOCH_MS,
+              completedAt: FIXTURE_EPOCH_MS + 1_500,
+            },
+          ],
+        }),
+      ),
+    );
 
     expect(one(poll().events, 'tool.completed').durationMs).toBe(1_500);
   });
@@ -252,28 +298,47 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
     // each one — and every duplicate validates, so nothing downstream complains.
     const db = openOn();
     for (const offset of [1, 2, 3]) {
-      db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + offset, {
-        type: 'assistant',
-        content: [],
-        time: { created: FIXTURE_EPOCH_MS },
-      }));
+      db.write(
+        'session_message',
+        turnColumns(SESSION, FIXTURE_EPOCH_MS + offset, {
+          type: 'assistant',
+          content: [],
+          time: { created: FIXTURE_EPOCH_MS },
+        }),
+      );
       expect(poll().events, `poll at +${offset}`).toEqual([]);
     }
 
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 4, assistantTurn({
-      tools: [{
-        callId: 'call_slow',
-        name: 'shell',
-        createdAt: FIXTURE_EPOCH_MS,
-        completedAt: FIXTURE_EPOCH_MS + 40,
-      }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 4,
+        assistantTurn({
+          tools: [
+            {
+              callId: 'call_slow',
+              name: 'shell',
+              createdAt: FIXTURE_EPOCH_MS,
+              completedAt: FIXTURE_EPOCH_MS + 40,
+            },
+          ],
+        }),
+      ),
+    );
     expect(typesOf(poll().events)).toEqual(['tool.started', 'tool.completed']);
 
     // A fifth re-write of the same row, still carrying the same call, adds nothing.
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 5, assistantTurn({
-      tools: [{ callId: 'call_slow', name: 'shell' }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 5,
+        assistantTurn({
+          tools: [{ callId: 'call_slow', name: 'shell' }],
+        }),
+      ),
+    );
     expect(poll().events).toEqual([]);
   });
 
@@ -284,18 +349,32 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
     // id is what survives that; deduplicating on the position puts a second start
     // and a second completion for `call_a` in the log, and both validate.
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [{ callId: 'call_a', name: 'read', input: { path: 'a.ts' } }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [{ callId: 'call_a', name: 'read', input: { path: 'a.ts' } }],
+        }),
+      ),
+    );
     expect(countOf(poll().events, 'tool.started')).toBe(1);
 
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 2, assistantTurn({
-      reasoning: true,
-      tools: [
-        { callId: 'call_a', name: 'read', input: { path: 'a.ts' } },
-        { callId: 'call_b', name: 'read', input: { path: 'b.ts' } },
-      ],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        SESSION,
+        FIXTURE_EPOCH_MS + 2,
+        assistantTurn({
+          reasoning: true,
+          tools: [
+            { callId: 'call_a', name: 'read', input: { path: 'a.ts' } },
+            { callId: 'call_b', name: 'read', input: { path: 'b.ts' } },
+          ],
+        }),
+      ),
+    );
     const after = poll().events;
     // One start, and it is the call that is genuinely new. The shifted `call_a`
     // is not re-announced.
@@ -321,7 +400,10 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
 
   it('counts the assistant prose it drops, so the loss is a number', () => {
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({ answer: 'here is what I found' })));
+    db.write(
+      'session_message',
+      turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, assistantTurn({ answer: 'here is what I found' })),
+    );
 
     const result = poll();
     expect(result.skips).toEqual({ 'assistant-text': 1 });
@@ -337,10 +419,13 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
       (element) => element.type === 'reasoning',
     );
     const db = openOn();
-    db.write('session_message', turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, {
-      ...turn,
-      content: [...blocks, ...blocks, ...blocks, ...blocks],
-    }));
+    db.write(
+      'session_message',
+      turnColumns(SESSION, FIXTURE_EPOCH_MS + 1, {
+        ...turn,
+        content: [...blocks, ...blocks, ...blocks, ...blocks],
+      }),
+    );
 
     expect(countOf(poll().events, 'thinking')).toBe(1);
   });
@@ -353,9 +438,16 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
     // it is recoverable; a tool call with nowhere to attach is not.
     const db = build({ generation: 'v2' });
     read();
-    db.write('session_message', turnColumns('ses_ghost', FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [{ callId: 'c1', name: 'read', input: { path: 'a.ts' } }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        'ses_ghost',
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [{ callId: 'c1', name: 'read', input: { path: 'a.ts' } }],
+        }),
+      ),
+    );
 
     const events = poll().events;
     expect(typesOf(events)).toEqual(['session.started', 'tool.started', 'tool.completed']);
@@ -370,9 +462,16 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
   it('counts a session it had to invent, so the hole is visible', () => {
     const db = build({ generation: 'v2' });
     read();
-    db.write('session_message', turnColumns('ses_ghost', FIXTURE_EPOCH_MS + 1, assistantTurn({
-      tools: [{ callId: 'c1', name: 'read' }],
-    })));
+    db.write(
+      'session_message',
+      turnColumns(
+        'ses_ghost',
+        FIXTURE_EPOCH_MS + 1,
+        assistantTurn({
+          tools: [{ callId: 'c1', name: 'read' }],
+        }),
+      ),
+    );
     poll();
 
     expect(store?.skipReasons).toEqual({ 'unknown-session': 1 });
@@ -411,7 +510,11 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
       generation: 'v2',
       sessions: [{ id: SESSION }],
       messages: [
-        { id: 'msg_old', sessionId: SESSION, data: { type: 'user', text: 'from last week', time: { created: FIXTURE_EPOCH_MS } } },
+        {
+          id: 'msg_old',
+          sessionId: SESSION,
+          data: { type: 'user', text: 'from last week', time: { created: FIXTURE_EPOCH_MS } },
+        },
       ],
     });
 
@@ -422,7 +525,10 @@ describe('a v2 database, which is the generation the installed OpenCode writes',
 describe('a v1 database, which is the generation the port reads', () => {
   /** The same shape as openOn: a session and nothing else, on the v1 tables. */
   function openOnV1(): OpenCodeFixture {
-    const db = build({ generation: 'v1', sessions: [{ id: SESSION, createdAt: FIXTURE_EPOCH_MS }] });
+    const db = build({
+      generation: 'v1',
+      sessions: [{ id: SESSION, createdAt: FIXTURE_EPOCH_MS }],
+    });
     expect(typesOf(read().events)).toEqual(['session.started']);
     return db;
   }
@@ -463,7 +569,10 @@ describe('a v1 database, which is the generation the port reads', () => {
       'tool.started',
       'tool.completed',
     ]);
-    expect(one(result.events, 'tool.started')).toMatchObject({ tool: 'Grep', input: { pattern: 'x' } });
+    expect(one(result.events, 'tool.started')).toMatchObject({
+      tool: 'Grep',
+      input: { pattern: 'x' },
+    });
   });
 
   it('reads a user turn as a prompt by asking which message the text hangs off', () => {
@@ -479,7 +588,10 @@ describe('a v1 database, which is the generation the port reads', () => {
       time_updated: FIXTURE_EPOCH_MS,
       data: JSON.stringify({ role: 'user' }),
     });
-    db.write('part', partRow('pr_1', FIXTURE_EPOCH_MS + 1, { type: 'text', text: 'go' }, 'msg_user'));
+    db.write(
+      'part',
+      partRow('pr_1', FIXTURE_EPOCH_MS + 1, { type: 'text', text: 'go' }, 'msg_user'),
+    );
 
     expect(one(poll().events, 'prompt.submitted')).toMatchObject({ prompt: 'go' });
   });
@@ -493,7 +605,10 @@ describe('a v1 database, which is the generation the port reads', () => {
       time_updated: FIXTURE_EPOCH_MS,
       data: JSON.stringify({ role: 'assistant' }),
     });
-    db.write('part', partRow('pr_1', FIXTURE_EPOCH_MS + 1, { type: 'patch', files: [], hash: 'h' }));
+    db.write(
+      'part',
+      partRow('pr_1', FIXTURE_EPOCH_MS + 1, { type: 'patch', files: [], hash: 'h' }),
+    );
 
     expect(poll().skips).toEqual({ 'unmapped-part': 1 });
   });
@@ -679,7 +794,11 @@ describe('read-only', () => {
       generation: 'v2',
       sessions: [{ id: SESSION }],
       messages: [
-        { id: 'msg_1', sessionId: SESSION, data: assistantTurn({ tools: [{ callId: 'c1', name: 'read' }] }) },
+        {
+          id: 'msg_1',
+          sessionId: SESSION,
+          data: assistantTurn({ tools: [{ callId: 'c1', name: 'read' }] }),
+        },
       ],
     });
     const before = readFileSync(db.path);
@@ -719,7 +838,11 @@ describe('read-only', () => {
       seq: 1,
       time_created: FIXTURE_EPOCH_MS,
       time_updated: FIXTURE_EPOCH_MS,
-      data: JSON.stringify({ type: 'user', text: 'uncommitted', time: { created: FIXTURE_EPOCH_MS } }),
+      data: JSON.stringify({
+        type: 'user',
+        text: 'uncommitted',
+        time: { created: FIXTURE_EPOCH_MS },
+      }),
     });
 
     // Not blocked: a read-write handle here would throw SQLITE_BUSY on the first

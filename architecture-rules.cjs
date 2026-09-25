@@ -64,7 +64,14 @@ const SOURCE_ROOTS = ['apps', 'packages', 'drizzle'];
 // behaviour that makes this safe to extend.
 const FEATURES_DIR = 'packages/features';
 const ADAPTERS_DIR = 'packages/adapters';
-const PACKAGE_CONTAINERS = [...SOURCE_ROOTS, ADAPTERS_DIR, FEATURES_DIR];
+// A fourth container, and the reason the infrastructure LAYER entry below
+// matches a nested path (`packages/infrastructure/<name>`) rather than a flat
+// one. Infrastructure packages nest the way features do, so the discovery walk
+// has to descend one level here too — otherwise it finds a container with no
+// manifest, registers nothing below it, and every `@battle-agents/<name>` import
+// from one is reported as unresolved.
+const INFRASTRUCTURE_DIR = 'packages/infrastructure';
+const PACKAGE_CONTAINERS = [...SOURCE_ROOTS, ADAPTERS_DIR, FEATURES_DIR, INFRASTRUCTURE_DIR];
 const IGNORED_DIRECTORY_NAMES = ['dist', 'node_modules', '.git', '.tmp', '.beads'];
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 // A NUL cannot occur in a rule name, path or specifier, so it joins the dedupe key
@@ -183,7 +190,8 @@ const FORBIDDEN = [
   {
     name: 'no-infrastructure-import-of-upper-layers',
     from: { layer: 'infrastructure' },
-    to: { layers: ['feature', 'adapter', 'interface', 'presentation'] },    reason:
+    to: { layers: ['feature', 'adapter', 'interface', 'presentation'] },
+    reason:
       'Infrastructure implements the core persistence boundary, so it must not depend on the layers that consume it (plan section 19).',
   },
 ];
@@ -197,7 +205,11 @@ function toPosixRelative(repoRoot, absolutePath) {
 }
 
 function isContainerDir(repoRelativeDir) {
-  return repoRelativeDir === FEATURES_DIR || repoRelativeDir === ADAPTERS_DIR;
+  return (
+    repoRelativeDir === FEATURES_DIR ||
+    repoRelativeDir === ADAPTERS_DIR ||
+    repoRelativeDir === INFRASTRUCTURE_DIR
+  );
 }
 
 function listDirectoryNames(absoluteDir) {

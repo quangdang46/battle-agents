@@ -64,6 +64,20 @@
       "when": 1790306633366,
       "tag": "0008_big_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790364183964,
+      "tag": "0009_github_delivery_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790368931102,
+      "tag": "0010_jazzy_synch",
+      "breakpoints": true
     }
   ]
 }

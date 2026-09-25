@@ -31,6 +31,7 @@ export default defineConfig({
       'packages/*/src/**/*.test.ts',
       'packages/features/*/src/**/*.test.ts',
       'packages/adapters/*/src/**/*.test.ts',
+      'packages/infrastructure/*/src/**/*.test.ts',
       'apps/*/src/**/*.test.ts',
     ],
   },

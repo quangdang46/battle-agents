@@ -25,6 +25,14 @@ export {
 } from './repositories/agents.js';
 export type { AgentRow, StoredInstallationRow } from './repositories/agents.js';
 export { DrizzleProgressionRepository } from './repositories/progression.js';
+export { DrizzleGithubDeliveryStore } from './repositories/github-deliveries.js';
+export type {
+  ClaimRow,
+  ClaimStatus,
+  DeliveryClaimStoreShape,
+  DeliveryFactShape,
+  PublishedFactShape,
+} from './repositories/github-deliveries.js';
 export { DrizzleReputationRepository } from './repositories/reputation.js';
 export type { ReputationRow, ReputationStore } from './repositories/reputation.js';
 export type {

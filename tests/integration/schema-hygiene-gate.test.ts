@@ -150,6 +150,41 @@ describe('the credential-hygiene gate', () => {
     }
   });
 
+  it('catches a credential in a schema file one directory down', () => {
+    // The source scanner walked packages/db/src/schema/*.ts and stopped. Every
+    // feature's tables live in schema/features/, so a credential column planted
+    // there was invisible and the gate printed its pass line having checked
+    // nothing about it. This test is the difference between the recursive scan
+    // and the flat one: it fails against the flat scan and passes against the
+    // recursive one, which is the only kind of test that pins the fix.
+    const root = scratchTree();
+    try {
+      const featuresDir = join(root, SCHEMA_RELATIVE, 'features');
+      mkdirSync(featuresDir, { recursive: true });
+      writeFileSync(
+        join(featuresDir, 'github.ts'),
+        [
+          'export const githubDeliveryClaims = pgTable(',
+          "  'github_delivery_claims',",
+          '  {',
+          "    id: uuid('id').primaryKey(),",
+          "    deliveryId: text('delivery_id').notNull(),",
+          "    installationToken: text('installation_token'),",
+          '  },',
+          ');',
+          '',
+        ].join('\n'),
+      );
+
+      const result = runGate(root);
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain('installation_token');
+      expect(result.output).toContain("'github_delivery_claims'");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('still refuses the exempted columns themselves, in a table that earns them', () => {
     // The mirror of the previous test, and the one that stops the exemptions
     // rotting into a general allowlist: access_token is exempt in `account` and
