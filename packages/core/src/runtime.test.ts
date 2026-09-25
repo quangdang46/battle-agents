@@ -297,6 +297,44 @@ describe('capability requirements', () => {
 });
 
 describe('dispatch and emit', () => {
+  it('publishes to the bus only after handlers have run', async () => {
+    // The order is a contract, not an implementation detail. It was stated in
+    // the comment above emit() while nothing enforced it, and an uncommitted
+    // edit later moved the publish ahead of the handlers.
+    //
+    // Publishing first is the wrong way round: a live subscriber receives
+    // deltas over SSE, so it could take a delta and then read a full_state that
+    // does not yet include it. The reverse cost is smaller — a handler that
+    // throws means the bus never sees the event — and a throwing handler is a
+    // bug the caller still gets to act on.
+    const order: string[] = [];
+    const bus = createInMemoryEventBus();
+    bus.subscribe(() => order.push('published'));
+
+    const runtime = createRuntime({
+      extensions: [
+        feature({
+          id: 'observer',
+          eventHandlers: [
+            {
+              on: 'demo.order',
+              handle: async () => {
+                order.push('handler');
+              },
+            },
+          ],
+        }),
+      ],
+      store: new InMemoryStateStore(),
+      bus,
+      now: () => AT,
+    });
+
+    await runtime.emit(event('demo.order'));
+
+    expect(order).toEqual(['handler', 'published']);
+  });
+
   it('emits what a command returns, in order, and returns it', async () => {
     const { runtime, seen } = harness([
       feature({
