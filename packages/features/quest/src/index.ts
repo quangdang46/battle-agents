@@ -17,14 +17,11 @@ export {
   QUEST_REJECTED,
   QUEST_SUBMIT,
 } from './feature.js';
-export type {
-  ClaimQuestInput,
-  CreateQuestInput,
-  ListQuestsInput,
-  SubmitQuestInput,
-} from './feature.js';
+export type { ClaimQuestInput, CreateQuestInput, SubmitQuestInput } from './feature.js';
 
 export {
+  isListQuestsInput,
+  isQuestTransitionInput,
   isTerminalQuest,
   MAX_QUEST_TITLE_LENGTH,
   MIN_DIFFICULTY,
@@ -32,9 +29,19 @@ export {
   nextQuestStatus,
   QUEST_STATUSES,
   QUEST_TRANSITIONS,
+  questInputRejected,
   whyQuestIsRejected,
+  whyQuestListIsRejected,
+  whyQuestTransitionIsRejected,
 } from './domain.js';
-export type { QuestRejection, QuestStatus, QuestTransition } from './domain.js';
+export type {
+  CreatableQuestDraft,
+  ListQuestsInput,
+  QuestRejection,
+  QuestStatus,
+  QuestTransition,
+  QuestTransitionInput,
+} from './domain.js';
 
 export { isQuestStorageFailure, QUEST_ALREADY_CLAIMED, QUEST_NOT_FOUND } from './repository.js';
 export type {

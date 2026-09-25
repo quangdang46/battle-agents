@@ -4,6 +4,8 @@ export {
   AGENT_REGISTERED,
   AGENT_REGISTRATION_REJECTED,
   agentFeature,
+  SESSION_END,
+  SESSION_HEARTBEAT,
 } from './feature.js';
 export type {
   AgentRegisteredPayload,
@@ -36,22 +38,36 @@ export type {
   SweepResult,
 } from './hello.js';
 export {
+  agentInputRejected,
   describeRejection,
+  isDescribeAgentsInput,
+  isEndSessionInput,
+  isHeartbeatSessionInput,
+  isReadAgentInput,
   MAX_AGENT_NAME_LENGTH,
   MIN_AGENT_NAME_LENGTH,
   RESERVED_AGENT_NAMES,
   whyAgentNameIsRejected,
+  whyDescribeAgentsIsRejected,
+  whyEndSessionIsRejected,
+  whyHeartbeatSessionIsRejected,
+  whyReadAgentIsRejected,
 } from './domain.js';
 export type {
   AgentId,
+  AgentInputRejection,
   AgentNameRejection,
   AgentIdentity,
   AgentPresence,
+  DescribeAgentsInput,
+  EndSessionInput,
   Harness,
+  HeartbeatSessionInput,
   Installation,
   InstallationId,
   NewAgent,
   ProjectId,
+  ReadAgentInput,
   SessionId,
   UserId,
 } from './domain.js';

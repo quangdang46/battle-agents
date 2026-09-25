@@ -2,7 +2,16 @@ import { createInMemoryEventBus, createRuntime, InMemoryStateStore } from '@batt
 import type { GameEvent, Runtime } from '@battle-agents/core';
 import { describe, expect, it } from 'vitest';
 
-import { AGENT_LEVEL_UP, type AgentProgress } from './domain.js';
+import {
+  AGENT_LEVEL_UP,
+  isProgressionAwardsInput,
+  isProgressionGateInput,
+  isProgressionReadInput,
+  whyProgressionAwardsIsRejected,
+  whyProgressionGateIsRejected,
+  whyProgressionReadIsRejected,
+  type AgentProgress,
+} from './domain.js';
 import { isNoSuchProgress, type ProgressionRepository } from './repository.js';
 import { apply, progressionFeature, type GateDecision, type LevelGateView } from './feature.js';
 import {
@@ -22,8 +31,15 @@ const AGENT = 'agent-1';
 class InMemoryProgressionRepository implements ProgressionRepository {
   readonly rows = new Map<string, AgentProgress>();
   saves = 0;
+  /**
+   * Counts the reads, so a test can assert a malformed call was refused BEFORE
+   * the store was asked. Nothing about an empty map would show that: a lookup
+   * for `undefined` misses and returns nothing.
+   */
+  reads = 0;
 
   async find(agentId: string): Promise<AgentProgress | undefined> {
+    this.reads += 1;
     return this.rows.get(agentId);
   }
 
@@ -287,6 +303,94 @@ describe('reading progress', () => {
         { eventType: 'battle.finished' },
       ),
     ).resolves.toMatchObject({ requires: { field: 'won', equals: true } });
+  });
+});
+
+describe('a payload nobody checked', () => {
+  // These three actions read their payload off an annotation. `act()` takes its
+  // input as a generic, so `act('progression.read', {})` compiled clean and went
+  // to the store asking for `agentId = undefined`; `act('progression.gate', {})`
+  // asked the same question about everybody. The suite had no malformed case at
+  // all, which is why a guard that cannot fail looked like a working one.
+  it('refuses a read that names no character, before the store is asked', async () => {
+    const { runtime, repository } = harness();
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    for (const input of [{}, null, 'agent-1', { agentId: 7 }, { agentId: '' }]) {
+      await expect(runtime.runAction('progression.read', input)).rejects.toThrow(
+        /progression\.read rejected/,
+      );
+    }
+
+    expect(repository.reads).toBe(0);
+    // The well-formed call still works, so this is not a blanket refusal.
+    await expect(
+      runtime.runAction<{ agentId: string }, { xp: number }>('progression.read', {
+        agentId: AGENT,
+      }),
+    ).resolves.toMatchObject({ xp: 1000 });
+    expect(repository.reads).toBe(1);
+  });
+
+  it('names which half of a gate was refused', async () => {
+    const { runtime, repository } = harness();
+
+    await expect(runtime.runAction('progression.gate', {})).rejects.toThrow(
+      /progression\.gate rejected: agent-id-not-a-string/,
+    );
+    await expect(
+      runtime.runAction('progression.gate', { agentId: AGENT, requiredLevel: 'five' }),
+    ).rejects.toThrow(/progression\.gate rejected: required-level-not-a-number/);
+    await expect(
+      runtime.runAction('progression.gate', { agentId: AGENT, requiredLevel: 5.5 }),
+    ).rejects.toThrow(/progression\.gate rejected: required-level-not-a-whole-number/);
+    // A level below the ladder would be answered `allowed: true`, because every
+    // character is at least level 1. A gate that opens on a nonsense level is
+    // the failure this refuses.
+    await expect(
+      runtime.runAction('progression.gate', { agentId: AGENT, requiredLevel: 0 }),
+    ).rejects.toThrow(/progression\.gate rejected: required-level-below-one/);
+
+    expect(repository.reads).toBe(0);
+  });
+
+  it('refuses an awards question with no event type in it', async () => {
+    const { runtime } = harness();
+
+    for (const input of [{}, null, { eventType: 42 }, { eventType: '' }]) {
+      await expect(runtime.runAction('progression.awards', input)).rejects.toThrow(
+        /progression\.awards rejected/,
+      );
+    }
+    // An event type this build has never heard of is an ANSWER, not a
+    // malformed call, and refusing it would leave a caller on a newer adapter
+    // with no way to ask. This is the distinction the guard has to keep.
+    await expect(
+      runtime.runAction<{ eventType: string }, { recognised: boolean }>('progression.awards', {
+        eventType: 'battle.won.by.atmospheric.events',
+      }),
+    ).resolves.toMatchObject({ recognised: false });
+  });
+
+  it('agrees with the guard it is built from, on every verdict', () => {
+    // The guard is defined in terms of the validator, so a payload it accepts
+    // is one the action can read with no cast under it.
+    for (const [validator, guard] of [
+      [whyProgressionReadIsRejected, isProgressionReadInput],
+      [whyProgressionGateIsRejected, isProgressionGateInput],
+      [whyProgressionAwardsIsRejected, isProgressionAwardsInput],
+    ] as const) {
+      for (const input of [
+        null,
+        {},
+        'nonsense',
+        { agentId: 1 },
+        { eventType: 1 },
+        { agentId: '' },
+      ]) {
+        expect(guard(input), String(input)).toBe(validator(input) === undefined);
+      }
+    }
   });
 });
 

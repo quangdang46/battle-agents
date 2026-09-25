@@ -1,5 +1,21 @@
-export { MAX_REVIEW_SCORE, TIER_NAMES } from './domain.js';
-export type { BountyTier, ReputationRecord, ReputationSummary, TierName } from './domain.js';
+export {
+  isReputationGateInput,
+  isReputationReadInput,
+  MAX_REVIEW_SCORE,
+  reputationInputRejected,
+  TIER_NAMES,
+  whyReputationGateIsRejected,
+  whyReputationReadIsRejected,
+} from './domain.js';
+export type {
+  BountyTier,
+  ReputationGateInput,
+  ReputationReadInput,
+  ReputationRecord,
+  ReputationRejection,
+  ReputationSummary,
+  TierName,
+} from './domain.js';
 export {
   BATTLE_FINISHED,
   BOUNTY_COMPLETED,

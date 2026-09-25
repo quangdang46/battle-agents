@@ -56,14 +56,27 @@ export function isTerminalQuest(status: QuestStatus): boolean {
 export const MIN_DIFFICULTY = 1;
 export const MIN_XP_REWARD = 0;
 
-/** Why a proposed quest cannot be created, or undefined when it can. */
+/**
+ * Every way this feature refuses a payload, or undefined when it accepts one.
+ *
+ * One union for all five actions rather than one per action. A rejection is
+ * turned into a sentence naming what the action wanted, and a caller that
+ * switched on the reason to work out WHICH action it was would be switching on
+ * the id it just called, which it already knows.
+ */
 export type QuestRejection =
   | { readonly reason: 'not-an-object' }
   | { readonly reason: 'title-not-a-string' }
   | { readonly reason: 'title-empty' }
   | { readonly reason: 'title-too-long'; readonly max: number }
   | { readonly reason: 'difficulty-out-of-range' }
-  | { readonly reason: 'xp-negative' };
+  | { readonly reason: 'xp-negative' }
+  | { readonly reason: 'quest-id-not-a-string' }
+  | { readonly reason: 'quest-id-empty' }
+  | { readonly reason: 'agent-id-not-a-string' }
+  | { readonly reason: 'agent-id-empty' }
+  | { readonly reason: 'status-not-a-known-status' }
+  | { readonly reason: 'project-id-not-a-string' };
 
 export const MAX_QUEST_TITLE_LENGTH = 200;
 
@@ -120,7 +133,11 @@ export function whyQuestIsRejected(draft: unknown): QuestRejection | undefined {
   if (trimmed.length > MAX_QUEST_TITLE_LENGTH) {
     return { reason: 'title-too-long', max: MAX_QUEST_TITLE_LENGTH };
   }
-  if (typeof difficulty !== 'number' || !Number.isInteger(difficulty) || difficulty < MIN_DIFFICULTY) {
+  if (
+    typeof difficulty !== 'number' ||
+    !Number.isInteger(difficulty) ||
+    difficulty < MIN_DIFFICULTY
+  ) {
     return { reason: 'difficulty-out-of-range' };
   }
   if (typeof xpReward !== 'number' || !Number.isInteger(xpReward) || xpReward < MIN_XP_REWARD) {
@@ -155,6 +172,130 @@ export function titleForRejection(draft: unknown): string {
   }
   const { title } = draft as { readonly title?: unknown };
   return typeof title === 'string' ? title : '(no title)';
+}
+
+/* ───────────────────────────── the other four actions ───────────────────────────── */
+
+/**
+ * A claim, a hand-in and an admin revoke, as one shape.
+ *
+ * Three actions and one payload: they differ in which step they ask for and in
+ * nothing else. Declaring the fields three times is three chances for a
+ * validator and the action it guards to disagree about what a quest id is, which
+ * is the failure `CreateQuestInput` being an alias exists to prevent.
+ */
+export interface QuestTransitionInput {
+  readonly questId: string;
+  readonly agentId: string;
+}
+
+/** What a listing may be narrowed by. Both halves are optional; neither may be junk. */
+export interface ListQuestsInput {
+  readonly status?: QuestStatus;
+  readonly projectId?: string | null;
+}
+
+/**
+ * Why a transition cannot be asked for, or undefined when it can.
+ *
+ * `unknown` for the same reason `whyQuestIsRejected` takes one: the two ids went
+ * straight into `repository.findById` off a payload `act()` never checked, so
+ * `act('quest.claim', {})` was a query for a quest whose id was `undefined`. The
+ * store answering "no quest undefined" is a true answer to a question nobody
+ * asked.
+ */
+export function whyQuestTransitionIsRejected(input: unknown): QuestRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { questId, agentId } = input as {
+    readonly questId?: unknown;
+    readonly agentId?: unknown;
+  };
+
+  if (typeof questId !== 'string') {
+    return { reason: 'quest-id-not-a-string' };
+  }
+  if (questId.length === 0) {
+    return { reason: 'quest-id-empty' };
+  }
+  if (typeof agentId !== 'string') {
+    return { reason: 'agent-id-not-a-string' };
+  }
+  if (agentId.length === 0) {
+    return { reason: 'agent-id-empty' };
+  }
+  return undefined;
+}
+
+/**
+ * Why a listing cannot be asked for, or undefined when it can.
+ *
+ * The status is the field that mattered: it went into the store's filter as
+ * whatever arrived, so `act('quest.list', { status: 'nonsense' })` handed an
+ * uninterpreted string to a query and got back an empty list, which reads as
+ * "there are no quests" rather than as "that status does not exist". The
+ * defensive narrowing on the way OUT (`toHarnessFreeStatus`) only ever saw
+ * statuses a store had already accepted.
+ */
+export function whyQuestListIsRejected(input: unknown): QuestRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { status, projectId } = input as {
+    readonly status?: unknown;
+    readonly projectId?: unknown;
+  };
+
+  if (status !== undefined && !QUEST_STATUSES.includes(status as QuestStatus)) {
+    return { reason: 'status-not-a-known-status' };
+  }
+  // null is a real answer here — it is how a caller asks for quests attached to
+  // no repository — so only a value that is neither null nor a string is junk.
+  if (projectId !== undefined && projectId !== null && typeof projectId !== 'string') {
+    return { reason: 'project-id-not-a-string' };
+  }
+  return undefined;
+}
+
+/** The same two judgements, as guards, so no read below them needs a cast. */
+export function isQuestTransitionInput(input: unknown): input is QuestTransitionInput {
+  return whyQuestTransitionIsRejected(input) === undefined;
+}
+
+export function isListQuestsInput(input: unknown): input is ListQuestsInput {
+  return whyQuestListIsRejected(input) === undefined;
+}
+
+/** What a transition wanted, as a sentence the caller can act on. */
+export const QUEST_TRANSITION_SHAPE =
+  'A claim, a hand-in and a revoke all take a non-empty questId and a non-empty agentId, both strings.';
+
+/** What a listing wanted. Built from the statuses so the two cannot disagree. */
+export const QUEST_LIST_SHAPE = `A listing takes an optional status, which must be one of ${QUEST_STATUSES.join(', ')}, and an optional projectId, which must be a string or null.`;
+
+/**
+ * The error a refused payload becomes, on every action but the create.
+ *
+ * Built from the validator's verdict and never from the payload. That is the
+ * rule `titleForRejection` exists to carve out: the one caller guaranteed to be
+ * handed the answer is the one that must not be reading the input, because
+ * reading it there is what made every malformed create die before it could
+ * reject. `titleForRejection` reads a title because the rejection EVENT records
+ * what was attempted; a message only has to say what was wanted.
+ *
+ * The code matches the one `act()` throws for a non-object payload, so a caller
+ * can branch on "this call was malformed" without caring which door it came
+ * through.
+ */
+export function questInputRejected(
+  action: string,
+  rejection: QuestRejection,
+  expected: string,
+): Error {
+  return Object.assign(new Error(`${action} rejected: ${rejection.reason}. ${expected}`), {
+    code: 'malformed-input',
+  });
 }
 
 /** A quest as this feature holds it. Ids are plain: a column is a UUID, not an identity. */

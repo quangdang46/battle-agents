@@ -3,17 +3,25 @@ import type { GameEvent, GameFeature, RuntimeContext } from '@battle-agents/core
 
 import {
   isCreatableQuestDraft,
+  isListQuestsInput,
+  isQuestTransitionInput,
   isTerminalQuest,
   MAX_QUEST_TITLE_LENGTH,
   nextQuestStatus,
+  QUEST_LIST_SHAPE,
   QUEST_STATUSES,
+  QUEST_TRANSITION_SHAPE,
+  questInputRejected,
   titleForRejection,
   whyQuestIsRejected,
+  whyQuestListIsRejected,
+  whyQuestTransitionIsRejected,
   type CreatableQuestDraft,
   type Quest,
   type QuestStatus,
   type QuestSummary,
   type QuestTransition,
+  type QuestTransitionInput,
 } from './domain.js';
 import type { QuestRepository, StoredQuest } from './repository.js';
 
@@ -49,20 +57,29 @@ export const QUEST_ADMIN_REVOKE = 'quest.admin.revoke';
  */
 export type CreateQuestInput = CreatableQuestDraft;
 
-export interface ClaimQuestInput {
-  readonly questId: string;
-  readonly agentId: string;
-}
+/**
+ * Aliases of the one shape the three transition actions take.
+ *
+ * The same reasoning as `CreateQuestInput`, and the reason the three actions
+ * are wired to one validator: a second interface that happens to look the same
+ * is a third thing to keep in step with `whyQuestTransitionIsRejected`.
+ */
+export type ClaimQuestInput = QuestTransitionInput;
+export type SubmitQuestInput = QuestTransitionInput;
 
-export interface SubmitQuestInput {
-  readonly questId: string;
-  readonly agentId: string;
-}
-
-export interface ListQuestsInput {
-  readonly status?: QuestStatus;
-  readonly projectId?: string | null;
-}
+/**
+ * The action each transition is reached through, with the event it emits.
+ *
+ * One table for both, because the rejection message has to name the action and
+ * the domain event does not: `cancel` is `quest.admin.revoke` on one side and
+ * `quest.cancelled` on the other, and two switches over the same three steps is
+ * two places for those to stop agreeing.
+ */
+const TRANSITION_ACTIONS = {
+  claim: { action: QUEST_CLAIM, event: QUEST_CLAIMED },
+  submit: { action: QUEST_SUBMIT, event: QUEST_COMPLETED },
+  cancel: { action: QUEST_ADMIN_REVOKE, event: QUEST_CANCELLED },
+} as const satisfies Record<QuestTransition, { readonly action: string; readonly event: string }>;
 
 /**
  * The quest feature.
@@ -91,30 +108,34 @@ export function questFeature(dependencies: { readonly repository: QuestRepositor
       { name: QUEST_SUBMIT, description: 'Hand a quest in, completing it.' },
     ],
     actionDefs: [
+      // Every `run` takes `unknown`. Not shorthand: `act()` hands the payload
+      // through as a generic, so a narrower parameter here is an annotation the
+      // registry never checks, which is the defect this feature is being taught
+      // to refuse. The guard below each one is what makes the shape true.
       defineAction({
         id: QUEST_CREATE,
         permissions: [QUEST_CREATE],
-        run: (input: CreateQuestInput, context) => createQuest(repository, input, context),
+        run: (input: unknown, context) => createQuest(repository, input, context),
       }),
       defineAction({
         id: QUEST_LIST,
         permissions: [QUEST_LIST],
-        run: (input: ListQuestsInput) => listQuests(repository, input),
+        run: (input: unknown) => listQuests(repository, input),
       }),
       defineAction({
         id: QUEST_CLAIM,
         permissions: [QUEST_CLAIM],
-        run: (input: ClaimQuestInput, context) => transition(repository, input, 'claim', context),
+        run: (input: unknown, context) => transition(repository, input, 'claim', context),
       }),
       defineAction({
         id: QUEST_ADMIN_REVOKE,
         permissions: [QUEST_ADMIN_REVOKE],
-        run: (input: SubmitQuestInput, context) => transition(repository, input, 'cancel', context),
+        run: (input: unknown, context) => transition(repository, input, 'cancel', context),
       }),
       defineAction({
         id: QUEST_SUBMIT,
         permissions: [QUEST_SUBMIT],
-        run: (input: SubmitQuestInput, context) => transition(repository, input, 'submit', context),
+        run: (input: unknown, context) => transition(repository, input, 'submit', context),
       }),
     ],
   };
@@ -143,11 +164,17 @@ async function createQuest(
         reason: rejection.reason,
       }),
     );
-    throw new Error(
-      `quest not created: ${rejection.reason}. ` +
-        'A title is a non-empty string of at most ' +
-        `${MAX_QUEST_TITLE_LENGTH} characters, difficulty is a whole number of at least 1, ` +
-        'and the XP reward is a whole number that is not negative.',
+    // The code is the one every other refusal in this feature carries, and the
+    // one `act()` throws for a non-object payload, so a caller can branch on
+    // "this call was malformed" without caring which of the five it called.
+    throw Object.assign(
+      new Error(
+        `quest not created: ${rejection.reason}. ` +
+          'A title is a non-empty string of at most ' +
+          `${MAX_QUEST_TITLE_LENGTH} characters, difficulty is a whole number of at least 1, ` +
+          'and the XP reward is a whole number that is not negative.',
+      ),
+      { code: 'malformed-input' },
     );
   }
 
@@ -173,8 +200,12 @@ async function createQuest(
 
 async function listQuests(
   repository: QuestRepository,
-  input: ListQuestsInput,
+  input: unknown,
 ): Promise<readonly QuestSummary[]> {
+  if (!isListQuestsInput(input)) {
+    const rejection = whyQuestListIsRejected(input) ?? { reason: 'not-an-object' as const };
+    throw questInputRejected(QUEST_LIST, rejection, QUEST_LIST_SHAPE);
+  }
   const stored = await repository.list({
     ...(input.status === undefined ? {} : { status: input.status }),
     ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
@@ -191,10 +222,14 @@ async function listQuests(
  */
 async function transition(
   repository: QuestRepository,
-  input: { questId: string; agentId: string },
+  input: unknown,
   step: QuestTransition,
   context: RuntimeContext,
 ): Promise<QuestSummary> {
+  if (!isQuestTransitionInput(input)) {
+    const rejection = whyQuestTransitionIsRejected(input) ?? { reason: 'not-an-object' as const };
+    throw questInputRejected(TRANSITION_ACTIONS[step].action, rejection, QUEST_TRANSITION_SHAPE);
+  }
   const current = await repository.findById(input.questId);
   if (current === undefined) {
     throw new Error(`no quest ${input.questId}`);
@@ -222,24 +257,13 @@ async function transition(
 
   const summary = toSummary(toQuest(moved));
   await context.runtime.emit(
-    event(context, eventTypeFor(step), {
+    event(context, TRANSITION_ACTIONS[step].event, {
       questId: summary.id,
       agentId: input.agentId,
       xpReward: summary.xpReward,
     }),
   );
   return summary;
-}
-
-function eventTypeFor(step: QuestTransition): string {
-  switch (step) {
-    case 'claim':
-      return QUEST_CLAIMED;
-    case 'submit':
-      return QUEST_COMPLETED;
-    case 'cancel':
-      return QUEST_CANCELLED;
-  }
 }
 
 /**

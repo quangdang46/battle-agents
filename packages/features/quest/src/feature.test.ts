@@ -2,11 +2,18 @@ import { createInMemoryEventBus, createRuntime, type GameEvent } from '@battle-a
 import { describe, expect, it } from 'vitest';
 
 import {
+  isCreatableQuestDraft,
+  isListQuestsInput,
+  isQuestTransitionInput,
   isTerminalQuest,
   nextQuestStatus,
   QUEST_STATUSES,
   QUEST_TRANSITIONS,
+  titleForRejection,
   whyQuestIsRejected,
+  whyQuestListIsRejected,
+  whyQuestTransitionIsRejected,
+  type ListQuestsInput,
   type QuestStatus,
   type QuestSummary,
   type QuestTransition,
@@ -18,10 +25,8 @@ import {
   questFeature,
   type ClaimQuestInput,
   type CreateQuestInput,
-  type ListQuestsInput,
   type SubmitQuestInput,
 } from './feature.js';
-import { isCreatableQuestDraft, titleForRejection } from './domain.js';
 import type { NewStoredQuest, QuestFilter, QuestRepository, StoredQuest } from './repository.js';
 
 const NOW = '2026-09-24T12:00:00.000Z';
@@ -113,7 +118,9 @@ describe('rejecting a quest that should not exist', () => {
 
   it('refuses a draft with no title, rather than reading one that is not there', () => {
     expect(whyQuestIsRejected({})).toEqual({ reason: 'title-not-a-string' });
-    expect(whyQuestIsRejected({ difficulty: 1, xpReward: 1 })).toEqual({ reason: 'title-not-a-string' });
+    expect(whyQuestIsRejected({ difficulty: 1, xpReward: 1 })).toEqual({
+      reason: 'title-not-a-string',
+    });
   });
 
   it('refuses a title that is not a string, rather than calling trim on it', () => {
@@ -152,12 +159,76 @@ describe('rejecting a quest that should not exist', () => {
     expect(titleForRejection({})).toBe('(no title)');
     expect(titleForRejection(null)).toBe('(no draft)');
   });
+
+  // The three transition actions and the listing read fields off an annotation
+  // exactly as `quest.create` used to, so the same malformed calls that died on
+  // `undefined.trim()` were reaching the store instead: a claim for `{}` became
+  // `findById(undefined)`, and a listing for `{ status: 'nonsense' }` handed an
+  // uninterpreted string to the filter. Both answered truthfully about a
+  // question nobody had asked.
+  it('refuses a transition that names no quest, rather than looking one up', () => {
+    for (const input of [{}, { questId: 42, agentId: AGENT }]) {
+      expect(whyQuestTransitionIsRejected(input)).toEqual({ reason: 'quest-id-not-a-string' });
+    }
+    expect(whyQuestTransitionIsRejected({ questId: '', agentId: AGENT })).toEqual({
+      reason: 'quest-id-empty',
+    });
+    for (const input of [{ questId: 'q1' }, { questId: 'q1', agentId: 7 }]) {
+      expect(whyQuestTransitionIsRejected(input)).toEqual({ reason: 'agent-id-not-a-string' });
+    }
+    expect(whyQuestTransitionIsRejected({ questId: 'q1', agentId: '' })).toEqual({
+      reason: 'agent-id-empty',
+    });
+    for (const input of [null, 'claim', 42]) {
+      expect(whyQuestTransitionIsRejected(input)).toEqual({ reason: 'not-an-object' });
+    }
+    expect(whyQuestTransitionIsRejected({ questId: 'q1', agentId: AGENT })).toBeUndefined();
+  });
+
+  it('refuses a status the domain has never heard of, rather than filtering on it', () => {
+    expect(whyQuestListIsRejected({ status: 'nonsense' })).toEqual({
+      reason: 'status-not-a-known-status',
+    });
+    // Absent, null and every real status are all answers, not junk.
+    expect(whyQuestListIsRejected({})).toBeUndefined();
+    expect(whyQuestListIsRejected({ projectId: null })).toBeUndefined();
+    for (const status of QUEST_STATUSES) {
+      expect(whyQuestListIsRejected({ status })).toBeUndefined();
+    }
+    expect(whyQuestListIsRejected({ projectId: 12 })).toEqual({
+      reason: 'project-id-not-a-string',
+    });
+  });
+
+  it('narrows both shapes, so the action stops asserting them', () => {
+    // Same reason as `isCreatableQuestDraft`: the guard is defined in terms of
+    // the validator, so a payload that passes is one the action can read.
+    const claim: unknown = { questId: 'q1', agentId: AGENT };
+    if (!isQuestTransitionInput(claim)) {
+      throw new Error('expected the transition to be well-formed');
+    }
+    expect(claim.questId).toBe('q1');
+    expect(isQuestTransitionInput({})).toBe(false);
+
+    const listing: unknown = { status: 'open', projectId: null };
+    if (!isListQuestsInput(listing)) {
+      throw new Error('expected the listing to be well-formed');
+    }
+    expect(listing.status).toBe('open');
+    expect(isListQuestsInput({ status: 'nonsense' })).toBe(false);
+  });
 });
 
 /** A store in memory, so the feature is tested without a database. */
 class InMemoryQuestRepository implements QuestRepository {
   readonly rows: StoredQuest[] = [];
   #nextId = 1;
+  /**
+   * Counts the reads, so a test can assert a malformed call was refused BEFORE
+   * the store was asked. `rows` being empty would not show that: a query for
+   * `findById(undefined)` returns nothing and changes nothing.
+   */
+  reads = 0;
 
   async create(quest: NewStoredQuest): Promise<StoredQuest> {
     const created: StoredQuest = {
@@ -175,6 +246,7 @@ class InMemoryQuestRepository implements QuestRepository {
   }
 
   async list(filter: QuestFilter): Promise<readonly StoredQuest[]> {
+    this.reads += 1;
     return this.rows.filter(
       (row) =>
         (filter.status === undefined || row.status === filter.status) &&
@@ -183,6 +255,7 @@ class InMemoryQuestRepository implements QuestRepository {
   }
 
   async findById(questId: string): Promise<StoredQuest | undefined> {
+    this.reads += 1;
     return this.rows.find((row) => row.id === questId);
   }
 
@@ -226,14 +299,67 @@ describe('a quest driven entirely through the protocol', () => {
     const { runtime, repository, seen } = harness();
 
     for (const input of [{}, null, 'not a draft', { title: 42, difficulty: 1, xpReward: 1 }]) {
-      await expect(runtime.runAction('quest.create', input)).rejects.toThrow(
-        /quest not created/,
-      );
+      await expect(runtime.runAction('quest.create', input)).rejects.toMatchObject({
+        code: 'malformed-input',
+        message: expect.stringContaining('quest not created'),
+      });
     }
 
     expect(repository.rows).toHaveLength(0);
     // Every attempt announced itself rather than vanishing into a stack trace.
     expect(seen.filter((each) => each.type === 'quest.rejected')).toHaveLength(4);
+  });
+
+  it('refuses a malformed transition as a rejection, before the store is asked', async () => {
+    // The end-to-end half, and the assertion that matters is the counter rather
+    // than the throw: `findById(undefined)` throws nothing and returns nothing,
+    // so a test that only checked the outcome would pass with the guard removed.
+    const { runtime, repository } = harness();
+
+    for (const input of [{}, { questId: 42, agentId: AGENT }]) {
+      await expect(runtime.runAction('quest.claim', input)).rejects.toThrow(
+        /quest\.claim rejected: quest-id-not-a-string/,
+      );
+    }
+    // `act()` refuses a non-object before dispatch, so this one is only
+    // reachable through the registry directly — which is exactly why the guard
+    // cannot rely on `act()` being the only door.
+    await expect(runtime.runAction('quest.claim', null)).rejects.toThrow(
+      /quest\.claim rejected: not-an-object/,
+    );
+    await expect(
+      runtime.runAction('quest.submit', { questId: '', agentId: AGENT }),
+    ).rejects.toThrow(/quest\.submit rejected: quest-id-empty/);
+    await expect(
+      runtime.runAction('quest.admin.revoke', { questId: 'q1', agentId: 7 }),
+    ).rejects.toThrow(/quest\.admin\.revoke rejected: agent-id-not-a-string/);
+
+    expect(repository.reads).toBe(0);
+  });
+
+  it('refuses a listing filtered by a status that does not exist', async () => {
+    // The store's filter is a `QuestStatus`, so an invented one used to be a
+    // query that matched nothing — an empty list, which reads as "there are no
+    // quests" rather than as "that status is not a status".
+    const { runtime, repository } = harness();
+    await runtime.runAction<CreateQuestInput, QuestSummary>('quest.create', {
+      title: 'Real',
+      difficulty: 1,
+      xpReward: 1,
+    });
+
+    await expect(runtime.runAction('quest.list', { status: 'nonsense' })).rejects.toThrow(
+      /quest\.list rejected: status-not-a-known-status/,
+    );
+    await expect(runtime.runAction('quest.list', { projectId: 12 })).rejects.toThrow(
+      /quest\.list rejected: project-id-not-a-string/,
+    );
+
+    expect(repository.reads).toBe(0);
+    // A well-formed listing still works, so the guard is not a blanket refusal.
+    expect(
+      await runtime.runAction<ListQuestsInput, readonly QuestSummary[]>('quest.list', {}),
+    ).toHaveLength(1);
   });
 
   it('is created, discovered, claimed and completed with no web clicks', async () => {

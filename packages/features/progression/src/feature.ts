@@ -1,7 +1,21 @@
 import { defineAction } from '@battle-agents/core';
 import type { EventHandler, GameEvent, GameFeature, RuntimeContext } from '@battle-agents/core';
 
-import { AGENT_LEVEL_UP, type AgentLevelUpPayload, type AgentProgress } from './domain.js';
+import {
+  AGENT_LEVEL_UP,
+  isProgressionAwardsInput,
+  isProgressionGateInput,
+  isProgressionReadInput,
+  PROGRESSION_AWARDS_SHAPE,
+  PROGRESSION_GATE_SHAPE,
+  PROGRESSION_READ_SHAPE,
+  progressionInputRejected,
+  whyProgressionAwardsIsRejected,
+  whyProgressionGateIsRejected,
+  whyProgressionReadIsRejected,
+  type AgentLevelUpPayload,
+  type AgentProgress,
+} from './domain.js';
 import type { ProgressionRepository } from './repository.js';
 import {
   classifyBuild,
@@ -132,15 +146,36 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
       { name: PROGRESSION_TIERS, description: 'List the levels and what each one unlocks.' },
     ],
     actionDefs: [
+      // Every `run` that reads its payload takes `unknown` and is guarded. The
+      // annotation these used to carry was never checked: `act()` hands the
+      // payload through as a generic, so `act('progression.read', {})` compiled
+      // clean and queried `agentId = undefined`. `progression.tiers` is the one
+      // action with no payload, and it has nothing to guard.
       defineAction({
-        id: 'progression.read',
+        id: PROGRESSION_READ,
         permissions: [PROGRESSION_READ],
-        run: (input: { agentId: string }) => summarize(repository, input.agentId, weights),
+        run: async (input: unknown) => {
+          if (!isProgressionReadInput(input)) {
+            throw progressionInputRejected(
+              PROGRESSION_READ,
+              whyProgressionReadIsRejected(input) ?? { reason: 'not-an-object' },
+              PROGRESSION_READ_SHAPE,
+            );
+          }
+          return summarize(repository, input.agentId, weights);
+        },
       }),
       defineAction({
-        id: 'progression.awards',
+        id: PROGRESSION_AWARDS,
         permissions: [PROGRESSION_AWARDS],
-        run: async (input: { eventType: string }) => {
+        run: async (input: unknown) => {
+          if (!isProgressionAwardsInput(input)) {
+            throw progressionInputRejected(
+              PROGRESSION_AWARDS,
+              whyProgressionAwardsIsRejected(input) ?? { reason: 'not-an-object' },
+              PROGRESSION_AWARDS_SHAPE,
+            );
+          }
           const outcome = outcomeFor(input.eventType);
           return outcome === undefined
             ? { eventType: input.eventType, xp: 0, recognised: false }
@@ -148,13 +183,21 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
         },
       }),
       defineAction({
-        id: 'progression.gate',
+        id: PROGRESSION_GATE,
         permissions: [PROGRESSION_GATE],
-        run: async (input: { agentId: string; requiredLevel: number }) =>
-          decideGate(repository, input.agentId, input.requiredLevel),
+        run: async (input: unknown) => {
+          if (!isProgressionGateInput(input)) {
+            throw progressionInputRejected(
+              PROGRESSION_GATE,
+              whyProgressionGateIsRejected(input) ?? { reason: 'not-an-object' },
+              PROGRESSION_GATE_SHAPE,
+            );
+          }
+          return decideGate(repository, input.agentId, input.requiredLevel);
+        },
       }),
       defineAction({
-        id: 'progression.tiers',
+        id: PROGRESSION_TIERS,
         permissions: [PROGRESSION_TIERS],
         run: async () => LEVEL_GATES.map<LevelGateView>((gate) => ({ ...gate })),
       }),

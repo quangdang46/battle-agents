@@ -2,7 +2,21 @@ import { createRuntime, InMemoryStateStore, createInMemoryEventBus } from '@batt
 import type { GameEvent, Runtime } from '@battle-agents/core';
 import { describe, expect, it } from 'vitest';
 
-import type { AgentId, AgentIdentity, Installation, NewAgent, UserId } from './domain.js';
+import {
+  isDescribeAgentsInput,
+  isEndSessionInput,
+  isHeartbeatSessionInput,
+  isReadAgentInput,
+  whyDescribeAgentsIsRejected,
+  whyEndSessionIsRejected,
+  whyHeartbeatSessionIsRejected,
+  whyReadAgentIsRejected,
+  type AgentId,
+  type AgentIdentity,
+  type Installation,
+  type NewAgent,
+  type UserId,
+} from './domain.js';
 import {
   agentFeature,
   AGENT_REGISTERED,
@@ -34,8 +48,15 @@ class InMemoryAgentRepository implements AgentRepository {
   #nextId = 1;
   /** Set to make `create` fail with something other than a name conflict. */
   failNextCreateWith: unknown = null;
+  /**
+   * Counts the reads, so a test can assert a malformed call was refused BEFORE
+   * the store was asked. Nothing about an empty list would show that: a lookup
+   * for `undefined` matches nothing and answers with nothing.
+   */
+  reads = 0;
 
   async findOwned(owner: UserId, agent: AgentId): Promise<AgentIdentity | undefined> {
+    this.reads += 1;
     return this.records.find((row) => row.id === agent && row.ownerId === owner);
   }
 
@@ -50,6 +71,7 @@ class InMemoryAgentRepository implements AgentRepository {
   }
 
   async listForOwner(owner: UserId): Promise<readonly AgentIdentity[]> {
+    this.reads += 1;
     return this.records.filter((row) => row.ownerId === owner);
   }
 
@@ -92,6 +114,8 @@ class InMemoryAgentRepository implements AgentRepository {
 class InMemorySessionRepository {
   readonly rows: { id: string; status: SessionStatus; reason: SessionEndReason | null }[] = [];
   #next = 1;
+  /** Counts the reads, for the same reason as the agent repository's. */
+  reads = 0;
 
   async findOrCreateInstallation(_input?: {
     ownerId: string;
@@ -131,6 +155,7 @@ class InMemorySessionRepository {
     this.set(id, (row) => ({ ...row, status: 'active' }));
   }
   async heartbeat(id: string, _now?: string): Promise<SessionStatus | undefined> {
+    this.reads += 1;
     const row = this.rows.find((each) => each.id === id);
     return row?.status === 'active' ? row.status : undefined;
   }
@@ -139,6 +164,7 @@ class InMemorySessionRepository {
     reason: SessionEndReason,
     _now?: string,
   ): Promise<SessionStatus | undefined> {
+    this.reads += 1;
     const row = this.rows.find((each) => each.id === id);
     if (row?.status !== 'active') {
       return undefined;
@@ -432,5 +458,117 @@ describe('driving a running session', () => {
     expect(runtime.actions()).not.toContain('session.heartbeat');
     expect(runtime.actions()).not.toContain('session.end');
     expect(runtime.actions()).toContain('agent.describe');
+  });
+});
+
+describe('a payload nobody checked', () => {
+  // These four read their payload off an annotation. `act()` takes its input as
+  // a generic, so every one of these compiled clean. `agent.read` is the one
+  // that mattered: it exists so a character is only ever read by its owner, and
+  // `act('agent.read', { agentId })` asked for a character with no owner at all.
+  //
+  // The inputs are branded ids, and a brand is a phantom symbol, so what these
+  // refuse is the STRING check underneath. The assertion that matters is the
+  // counter: an unbranded string satisfies the declared type today, and only a
+  // runtime check can refuse one.
+  it('refuses a read that names no owner, before the store is asked', async () => {
+    const repository = new InMemoryAgentRepository();
+    const { runtime } = harness(repository);
+    await register(runtime, { ownerId: OTHER_OWNER, name: 'Theirs', harness: 'codex' });
+
+    for (const input of [{}, null, { ownerId: 7 }, { ownerId: '' }]) {
+      await expect(runtime.runAction('agent.describe', input)).rejects.toThrow(
+        /agent\.describe rejected/,
+      );
+    }
+    expect(repository.reads).toBe(0);
+  });
+
+  it('refuses a read with no owner even when it names a character', async () => {
+    const repository = new InMemoryAgentRepository();
+    const { runtime } = harness(repository);
+    await register(runtime, { ownerId: OTHER_OWNER, name: 'Theirs', harness: 'codex' });
+
+    // The shape that turns "look up one of the caller's own characters" into
+    // "look up this character". A store that keyed on agent id alone would
+    // answer it.
+    for (const input of [
+      { agentId: 'agent-1' },
+      { ownerId: OWNER },
+      { ownerId: OWNER, agentId: 1 },
+    ]) {
+      await expect(runtime.runAction('agent.read', input)).rejects.toThrow(/agent\.read rejected/);
+    }
+    expect(repository.reads).toBe(0);
+
+    // The well-formed call still reads, and only for its owner.
+    await expect(
+      runtime.runAction<unknown, readonly AgentSummary[]>('agent.read', {
+        ownerId: OWNER,
+        agentId: 'agent-1' as AgentId,
+      }),
+    ).rejects.toMatchObject({ code: AGENT_NOT_OWNED });
+    expect(repository.reads).toBe(1);
+  });
+
+  it('refuses a session action that names no session', async () => {
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+
+    for (const input of [{}, null, { sessionId: 7 }, { sessionId: '' }]) {
+      await expect(runtime.runAction('session.heartbeat', input)).rejects.toThrow(
+        /session\.heartbeat rejected/,
+      );
+    }
+    // A reason that is not a string is a different mistake from a reason this
+    // feature has never heard of: the second is absorbed as 'crashed' on
+    // purpose, and refusing it here would move that choice onto every caller.
+    await expect(
+      runtime.runAction('session.end', { sessionId: 'session-1', reason: 42 }),
+    ).rejects.toThrow(/session\.end rejected: reason-not-a-string/);
+    await expect(runtime.runAction('session.end', { reason: 'completed' })).rejects.toThrow(
+      /session\.end rejected: session-id-not-a-string/,
+    );
+
+    expect(store.reads).toBe(0);
+  });
+
+  it('agrees with the guard it is built from, on every verdict', () => {
+    for (const [validator, guard] of [
+      [whyDescribeAgentsIsRejected, isDescribeAgentsInput],
+      [whyReadAgentIsRejected, isReadAgentInput],
+      [whyHeartbeatSessionIsRejected, isHeartbeatSessionInput],
+      [whyEndSessionIsRejected, isEndSessionInput],
+    ] as const) {
+      for (const input of [
+        null,
+        'a string',
+        {},
+        { ownerId: 1 },
+        { ownerId: '' },
+        { agentId: 1 },
+        { sessionId: 1 },
+        { reason: 1 },
+      ]) {
+        expect(guard(input), String(input)).toBe(validator(input) === undefined);
+      }
+    }
+  });
+
+  it('narrows to the branded ids, so the action below reads the type it declares', () => {
+    // Not a cast: the guard is what produces the branded shape, and a payload
+    // it rejects is one where the declared type would have been a lie.
+    const input: unknown = { ownerId: OWNER, agentId: 'agent-1' as AgentId };
+    if (!isReadAgentInput(input)) {
+      throw new Error('expected the read to be well-formed');
+    }
+    const owner: UserId = input.ownerId;
+    const agent: AgentId = input.agentId;
+    expect(owner).toBe(OWNER);
+    expect(agent).toBe('agent-1');
+    expect(isReadAgentInput({ ownerId: OWNER })).toBe(false);
   });
 });

@@ -76,3 +76,117 @@ export interface ReputationSummary {
   readonly failed: number;
   readonly earnedCents: number;
 }
+
+/* ───────────────────────────── the two actions that read a payload ───────────────────────────── */
+
+/**
+ * Every way this feature refuses a payload, or undefined when it accepts one.
+ *
+ * One union across both reading actions: the reason exists to be written into a
+ * sentence, and a caller that wanted to know WHICH action it was had just named
+ * it.
+ */
+export type ReputationRejection =
+  | { readonly reason: 'not-an-object' }
+  | { readonly reason: 'agent-id-not-a-string' }
+  | { readonly reason: 'agent-id-empty' }
+  | { readonly reason: 'reward-cents-not-a-number' }
+  | { readonly reason: 'reward-cents-not-finite' }
+  | { readonly reason: 'reward-cents-negative' };
+
+/** The character a read or a gate is about. */
+export interface ReputationReadInput {
+  readonly agentId: string;
+}
+
+/** A gate is a read plus the bounty being asked about. */
+export interface ReputationGateInput extends ReputationReadInput {
+  readonly rewardCents: number;
+}
+
+/** Why a read cannot be asked for, or undefined when it can. */
+export function whyReputationReadIsRejected(input: unknown): ReputationRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  return whyAgentIdIsMissing((input as { readonly agentId?: unknown }).agentId);
+}
+
+/**
+ * Why a gate cannot be asked for, or undefined when it can.
+ *
+ * This is the payload that mattered most. `rewardCents` went into
+ * `tierForReward`, which is a `Math.max` and a `<=` — so a missing reward
+ * arrived as `NaN`, compared false against every band, fell through to the top
+ * one, and reported a legendary bounty to a character with no history. A gate
+ * that denies for the wrong reason still gets wrapped in a try/catch by the
+ * caller, and a reward of `'500'` coerced through it to the same band as the
+ * number 500, which is an answer about a string nobody meant to send.
+ */
+export function whyReputationGateIsRejected(input: unknown): ReputationRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { agentId, rewardCents } = input as {
+    readonly agentId?: unknown;
+    readonly rewardCents?: unknown;
+  };
+
+  const missing = whyAgentIdIsMissing(agentId);
+  if (missing !== undefined) {
+    return missing;
+  }
+  if (typeof rewardCents !== 'number') {
+    return { reason: 'reward-cents-not-a-number' };
+  }
+  // NaN is the failure that matters: it survives `typeof` and reaches the tier
+  // lookup, where every comparison against it is false.
+  if (!Number.isFinite(rewardCents)) {
+    return { reason: 'reward-cents-not-finite' };
+  }
+  if (rewardCents < 0) {
+    return { reason: 'reward-cents-negative' };
+  }
+  return undefined;
+}
+
+/** The same two judgements, as guards, so no read below them needs a cast. */
+export function isReputationReadInput(input: unknown): input is ReputationReadInput {
+  return whyReputationReadIsRejected(input) === undefined;
+}
+
+export function isReputationGateInput(input: unknown): input is ReputationGateInput {
+  return whyReputationGateIsRejected(input) === undefined;
+}
+
+/** What each action wanted, as a sentence the caller can act on. */
+export const REPUTATION_READ_SHAPE = 'A read takes an agentId, which must be a non-empty string.';
+export const REPUTATION_GATE_SHAPE =
+  'A gate takes an agentId, which must be a non-empty string, and a rewardCents, which must be a finite number that is not negative.';
+
+/**
+ * The error a refused payload becomes.
+ *
+ * Built from the verdict, never from the payload: the caller guaranteed to be
+ * handed the answer is the one that must not be reading the input.
+ */
+export function reputationInputRejected(
+  action: string,
+  rejection: ReputationRejection,
+  expected: string,
+): Error {
+  return Object.assign(new Error(`${action} rejected: ${rejection.reason}. ${expected}`), {
+    code: 'malformed-input',
+  });
+}
+
+/** Shared so the two actions that name an agent cannot disagree about one. */
+function whyAgentIdIsMissing(agentId: unknown): ReputationRejection | undefined {
+  if (typeof agentId !== 'string') {
+    return { reason: 'agent-id-not-a-string' };
+  }
+  if (agentId.length === 0) {
+    return { reason: 'agent-id-empty' };
+  }
+  return undefined;
+}

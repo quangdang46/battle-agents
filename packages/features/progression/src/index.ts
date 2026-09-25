@@ -1,5 +1,22 @@
-export { AGENT_LEVEL_UP } from './domain.js';
-export type { AgentLevelUpPayload, AgentProgress, NewProgress } from './domain.js';
+export {
+  AGENT_LEVEL_UP,
+  isProgressionAwardsInput,
+  isProgressionGateInput,
+  isProgressionReadInput,
+  progressionInputRejected,
+  whyProgressionAwardsIsRejected,
+  whyProgressionGateIsRejected,
+  whyProgressionReadIsRejected,
+} from './domain.js';
+export type {
+  AgentLevelUpPayload,
+  AgentProgress,
+  NewProgress,
+  ProgressionAgentInput,
+  ProgressionAwardsInput,
+  ProgressionGateInput,
+  ProgressionRejection,
+} from './domain.js';
 export {
   PROGRESSION_AWARDS,
   PROGRESSION_GATE,
@@ -26,6 +43,7 @@ export {
   LEVEL_GATES,
   levelForXp,
   meetsGate,
+  MIN_LEVEL,
   OUTCOMES,
   OUTCOME_TYPES,
   outcomeFor,

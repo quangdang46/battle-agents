@@ -2,7 +2,13 @@ import { createInMemoryEventBus, createRuntime, InMemoryStateStore } from '@batt
 import type { GameEvent, Runtime } from '@battle-agents/core';
 import { describe, expect, it } from 'vitest';
 
-import type { ReputationRecord } from './domain.js';
+import {
+  isReputationGateInput,
+  isReputationReadInput,
+  whyReputationGateIsRejected,
+  whyReputationReadIsRejected,
+  type ReputationRecord,
+} from './domain.js';
 import { BOUNTY_FAILED, BOUNTY_COMPLETED, reputationFeature } from './feature.js';
 import { freshRecord, type ReputationRepository } from './repository.js';
 
@@ -11,8 +17,15 @@ const AGENT = 'agent-1';
 
 class MapRepository implements ReputationRepository {
   readonly rows = new Map<string, ReputationRecord>();
+  /**
+   * Counts the reads, so a test can assert a malformed call was refused BEFORE
+   * the store was asked. Nothing about the map would show that: a lookup for
+   * `undefined` misses, and the action then answers from a fresh zero record.
+   */
+  reads = 0;
 
   async find(agentId: string): Promise<ReputationRecord | undefined> {
+    this.reads += 1;
     return this.rows.get(agentId);
   }
 
@@ -170,5 +183,86 @@ describe('what other features are given', () => {
     expect(runtime.degraded().get('battle')).toEqual(['reputation.read']);
     // Still there. Degraded is reduced, not switched off.
     expect(runtime.capabilities()).toContain('battle.run');
+  });
+});
+
+describe('a payload nobody checked', () => {
+  // `reputation.gate` is the one place an unchecked payload reached a DECISION.
+  // The tier lookup is a `Math.max` and a `<=`, so a missing reward arrived as
+  // NaN, compared false against every band, fell through to the top one, and
+  // told a character with no history that it could not take a legendary bounty.
+  it('refuses a gate with no reward in it, rather than answering about NaN', async () => {
+    const { runtime, repository } = harness();
+    await repository.save(freshRecord(AGENT, NOW));
+
+    for (const input of [
+      { agentId: AGENT },
+      { agentId: AGENT, rewardCents: '500' },
+      { agentId: AGENT, rewardCents: null },
+      { agentId: AGENT, rewardCents: NaN },
+      { agentId: AGENT, rewardCents: Number.POSITIVE_INFINITY },
+      { agentId: AGENT, rewardCents: -1 },
+    ]) {
+      await expect(runtime.runAction('reputation.gate', input)).rejects.toThrow(
+        /reputation\.gate rejected/,
+      );
+    }
+
+    expect(repository.reads).toBe(0);
+  });
+
+  it('names which half of a gate was refused', async () => {
+    const { runtime } = harness();
+
+    await expect(runtime.runAction('reputation.gate', {})).rejects.toThrow(
+      /reputation\.gate rejected: agent-id-not-a-string/,
+    );
+    await expect(
+      runtime.runAction('reputation.gate', { agentId: AGENT, rewardCents: {} }),
+    ).rejects.toThrow(/reputation\.gate rejected: reward-cents-not-a-number/);
+    await expect(
+      runtime.runAction('reputation.gate', { agentId: AGENT, rewardCents: NaN }),
+    ).rejects.toThrow(/reputation\.gate rejected: reward-cents-not-finite/);
+    await expect(
+      runtime.runAction('reputation.gate', { agentId: AGENT, rewardCents: -1 }),
+    ).rejects.toThrow(/reputation\.gate rejected: reward-cents-negative/);
+  });
+
+  it('refuses a read that names no character, and still answers a real one', async () => {
+    const { runtime, repository } = harness();
+
+    for (const input of [{}, null, { agentId: 7 }, { agentId: '' }]) {
+      await expect(runtime.runAction('reputation.read', input)).rejects.toThrow(
+        /reputation\.read rejected/,
+      );
+    }
+    expect(repository.reads).toBe(0);
+
+    // A zero record is a real answer for an agent nobody has heard of, so the
+    // guard has to leave that path alone: `find` is reached exactly once.
+    await expect(
+      runtime.runAction<{ agentId: string }, { trust: number }>('reputation.read', {
+        agentId: AGENT,
+      }),
+    ).resolves.toMatchObject({ trust: 0 });
+    expect(repository.reads).toBe(1);
+  });
+
+  it('agrees with the guard it is built from, on every verdict', () => {
+    for (const [validator, guard] of [
+      [whyReputationReadIsRejected, isReputationReadInput],
+      [whyReputationGateIsRejected, isReputationGateInput],
+    ] as const) {
+      for (const input of [
+        null,
+        {},
+        'agent-1',
+        { agentId: 1 },
+        { agentId: '' },
+        { rewardCents: NaN },
+      ]) {
+        expect(guard(input), String(input)).toBe(validator(input) === undefined);
+      }
+    }
   });
 });

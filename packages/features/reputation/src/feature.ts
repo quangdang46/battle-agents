@@ -1,7 +1,16 @@
 import { defineAction } from '@battle-agents/core';
 import type { EventHandler, GameFeature } from '@battle-agents/core';
 
-import type { ReputationRecord } from './domain.js';
+import {
+  isReputationGateInput,
+  isReputationReadInput,
+  REPUTATION_GATE_SHAPE,
+  REPUTATION_READ_SHAPE,
+  reputationInputRejected,
+  whyReputationGateIsRejected,
+  whyReputationReadIsRejected,
+  type ReputationRecord,
+} from './domain.js';
 import { freshRecord, type ReputationRepository } from './repository.js';
 import { BOUNTY_TIERS, mayAcceptBounty, summarise, trustScore } from './rules.js';
 
@@ -78,10 +87,22 @@ export function reputationFeature(dependencies: {
       onBattleFinished(repository),
     ],
     actionDefs: [
+      // The two actions that read a payload take `unknown` and are guarded. The
+      // annotation they used to carry was never checked: `act()` hands the
+      // payload through as a generic, so `act('reputation.gate', { agentId })`
+      // reached the tier lookup with `rewardCents` undefined. `reputation.tiers`
+      // has no payload and so nothing to guard.
       defineAction({
-        id: 'reputation.read',
+        id: REPUTATION_READ,
         permissions: [REPUTATION_READ],
-        run: async (input: { agentId: string }) => {
+        run: async (input: unknown) => {
+          if (!isReputationReadInput(input)) {
+            throw reputationInputRejected(
+              REPUTATION_READ,
+              whyReputationReadIsRejected(input) ?? { reason: 'not-an-object' },
+              REPUTATION_READ_SHAPE,
+            );
+          }
           const record = await load(repository, input.agentId);
           const view = summarise(record);
           return {
@@ -95,9 +116,16 @@ export function reputationFeature(dependencies: {
         },
       }),
       defineAction({
-        id: 'reputation.gate',
+        id: REPUTATION_GATE,
         permissions: [REPUTATION_GATE],
-        run: async (input: { agentId: string; rewardCents: number }) => {
+        run: async (input: unknown) => {
+          if (!isReputationGateInput(input)) {
+            throw reputationInputRejected(
+              REPUTATION_GATE,
+              whyReputationGateIsRejected(input) ?? { reason: 'not-an-object' },
+              REPUTATION_GATE_SHAPE,
+            );
+          }
           const record = await load(repository, input.agentId);
           return {
             agentId: input.agentId,

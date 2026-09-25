@@ -161,6 +161,9 @@ export function totalXpToReach(level: number): number {
   return total;
 }
 
+/** The level every character starts at, and the lowest a gate may ask about. */
+export const MIN_LEVEL = 1;
+
 /** The level a given amount of experience has earned. Never below 1. */
 export function levelForXp(xp: number): number {
   if (xp < 0) {

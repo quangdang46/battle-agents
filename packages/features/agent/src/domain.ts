@@ -165,3 +165,196 @@ export function whyAgentNameIsRejected(name: string): AgentNameRejection | undef
 export function describeRejection(rejection: AgentNameRejection): string {
   return rejection.reason === 'name-too-long' ? `name-too-long:${rejection.max}` : rejection.reason;
 }
+
+/* ───────────────────────────── the four actions that read a payload ───────────────────────────── */
+
+/**
+ * Every way this feature refuses a payload, or undefined when it accepts one.
+ *
+ * One union across all four reading actions: the reason exists to be written
+ * into a sentence, and a caller that wanted to know WHICH action it was had
+ * just named it.
+ */
+export type AgentInputRejection =
+  | { readonly reason: 'not-an-object' }
+  | { readonly reason: 'owner-id-not-a-string' }
+  | { readonly reason: 'owner-id-empty' }
+  | { readonly reason: 'agent-id-not-a-string' }
+  | { readonly reason: 'agent-id-empty' }
+  | { readonly reason: 'session-id-not-a-string' }
+  | { readonly reason: 'session-id-empty' }
+  | { readonly reason: 'reason-not-a-string' };
+
+/** Listing a person's characters. */
+export interface DescribeAgentsInput {
+  readonly ownerId: UserId;
+}
+
+/** Reading one of them, which is the only way a character is ever looked up. */
+export interface ReadAgentInput extends DescribeAgentsInput {
+  readonly agentId: AgentId;
+}
+
+/** One run being told it is still alive. */
+export interface HeartbeatSessionInput {
+  readonly sessionId: string;
+}
+
+/** One run being told it is over. `reason` is optional; an absent one is a crash. */
+export interface EndSessionInput {
+  readonly sessionId: string;
+  readonly reason?: string;
+}
+
+/**
+ * Why an `agent.describe` cannot be asked for, or undefined when it can.
+ *
+ * The owner id is what scopes the query, and the store scopes it with an
+ * equality, so an unchecked one matched nothing and answered with an empty
+ * list — the same answer a user who has just signed up gets. The mistake was
+ * invisible from the outside, which is the whole problem with it.
+ */
+export function whyDescribeAgentsIsRejected(input: unknown): AgentInputRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  return whyOwnerIdIsMissing((input as { readonly ownerId?: unknown }).ownerId);
+}
+
+/**
+ * Why an `agent.read` cannot be asked for, or undefined when it can.
+ *
+ * Both ids, because the one this action exists to enforce is that a character
+ * is only ever read by its owner: a missing `ownerId` with a present `agentId`
+ * is the shape that turns "look up one of the caller's own characters" into
+ * "look up this character".
+ */
+export function whyReadAgentIsRejected(input: unknown): AgentInputRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { ownerId, agentId } = input as {
+    readonly ownerId?: unknown;
+    readonly agentId?: unknown;
+  };
+
+  const missingOwner = whyOwnerIdIsMissing(ownerId);
+  if (missingOwner !== undefined) {
+    return missingOwner;
+  }
+  if (typeof agentId !== 'string') {
+    return { reason: 'agent-id-not-a-string' };
+  }
+  if (agentId.length === 0) {
+    return { reason: 'agent-id-empty' };
+  }
+  return undefined;
+}
+
+/** Why a `session.heartbeat` cannot be asked for, or undefined when it can. */
+export function whyHeartbeatSessionIsRejected(input: unknown): AgentInputRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  return whySessionIdIsMissing((input as { readonly sessionId?: unknown }).sessionId);
+}
+
+/**
+ * Why a `session.end` cannot be asked for, or undefined when it can.
+ *
+ * The reason is checked as a string and NOT against `SESSION_END_REASONS`,
+ * because unrecognised input becoming 'crashed' is a decision this feature
+ * makes on purpose (see `toEndReason`): a caller inventing a value is a thing
+ * to absorb, not a thing to refuse, and refusing it would move the choice onto
+ * every caller instead of leaving it in one place. A reason that is not a
+ * string at all is a different mistake, and is the one refused here.
+ */
+export function whyEndSessionIsRejected(input: unknown): AgentInputRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { sessionId, reason } = input as {
+    readonly sessionId?: unknown;
+    readonly reason?: unknown;
+  };
+
+  const missing = whySessionIdIsMissing(sessionId);
+  if (missing !== undefined) {
+    return missing;
+  }
+  if (reason !== undefined && typeof reason !== 'string') {
+    return { reason: 'reason-not-a-string' };
+  }
+  return undefined;
+}
+
+/**
+ * The same four judgements, as guards.
+ *
+ * These narrow to the BRANDED ids rather than to `string`, and that is worth
+ * being precise about: a brand here is a phantom symbol, so no runtime check
+ * could ever have confirmed one. What the guard does is hand the caller the
+ * type the actions are declared in terms of, so a payload that arrives from
+ * `act()` cannot silently be a different id class than the code below it is
+ * written against. The runtime half of the claim is `typeof === 'string'`, and
+ * that is the half this function actually checks.
+ */
+export function isDescribeAgentsInput(input: unknown): input is DescribeAgentsInput {
+  return whyDescribeAgentsIsRejected(input) === undefined;
+}
+
+export function isReadAgentInput(input: unknown): input is ReadAgentInput {
+  return whyReadAgentIsRejected(input) === undefined;
+}
+
+export function isHeartbeatSessionInput(input: unknown): input is HeartbeatSessionInput {
+  return whyHeartbeatSessionIsRejected(input) === undefined;
+}
+
+export function isEndSessionInput(input: unknown): input is EndSessionInput {
+  return whyEndSessionIsRejected(input) === undefined;
+}
+
+/** What each action wanted, as a sentence the caller can act on. */
+export const DESCRIBE_AGENTS_SHAPE =
+  'A listing takes an ownerId, which must be a non-empty string.';
+export const READ_AGENT_SHAPE =
+  'A read takes an ownerId and an agentId, both of which must be non-empty strings.';
+export const SESSION_ACTION_SHAPE =
+  'A session action takes a sessionId, which must be a non-empty string, and for an end an optional reason, which must be a string.';
+
+/**
+ * The error a refused payload becomes.
+ *
+ * Built from the verdict, never from the payload: the caller guaranteed to be
+ * handed the answer is the one that must not be reading the input.
+ */
+export function agentInputRejected(
+  action: string,
+  rejection: AgentInputRejection,
+  expected: string,
+): Error {
+  return Object.assign(new Error(`${action} rejected: ${rejection.reason}. ${expected}`), {
+    code: 'malformed-input',
+  });
+}
+
+function whyOwnerIdIsMissing(ownerId: unknown): AgentInputRejection | undefined {
+  if (typeof ownerId !== 'string') {
+    return { reason: 'owner-id-not-a-string' };
+  }
+  if (ownerId.length === 0) {
+    return { reason: 'owner-id-empty' };
+  }
+  return undefined;
+}
+
+function whySessionIdIsMissing(sessionId: unknown): AgentInputRejection | undefined {
+  if (typeof sessionId !== 'string') {
+    return { reason: 'session-id-not-a-string' };
+  }
+  if (sessionId.length === 0) {
+    return { reason: 'session-id-empty' };
+  }
+  return undefined;
+}
