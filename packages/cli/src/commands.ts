@@ -1,5 +1,7 @@
 import { UnknownDomainError } from '@battle-agents/api';
 import { isRegisteredActionId } from '@battle-agents/protocol';
+
+import { clearSession, readSession, writeSession } from './session.js';
 import type { ApplicationApi, Discovery, DomainDetail } from '@battle-agents/api';
 
 /**
@@ -55,7 +57,15 @@ interface Resolved {
   offers(actionId: string): boolean;
 }
 
-const PLATFORM_COMMANDS = new Set(['status', 'doctor', 'help', 'discover']);
+const PLATFORM_COMMANDS = new Set([
+  'status',
+  'doctor',
+  'help',
+  'discover',
+  'login',
+  'init',
+  'logout',
+]);
 
 /**
  * The agent runtime verbs.
@@ -120,6 +130,19 @@ async function dispatch(api: ApplicationApi, invocation: Invocation): Promise<Co
       );
     }
     return await actOn(api, emit, runtime.action, rest);
+  }
+
+  if (first === 'login') {
+    return login(rest, emit);
+  }
+
+  if (first === 'init') {
+    return init(rest, emit);
+  }
+
+  if (first === 'logout') {
+    clearSession();
+    return emit({ loggedOut: true });
   }
 
   if (first === 'status') {
@@ -201,6 +224,49 @@ async function actOn(
       `${actionId} failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+/**
+ * `login <server-url> <token>` — remember which server and what to present.
+ *
+ * The one command that writes local state, and it writes nothing a game would
+ * recognise: an origin and a bearer credential. That is what keeps the iron
+ * rule intact while still letting the CLI work against a running server.
+ *
+ * The token is taken as an argument rather than fetched, because there is no
+ * device flow to fetch it with yet. That is a real gap and it is stated here
+ * rather than hidden behind a prompt that pretends to do more than it does.
+ */
+function login(args: readonly string[], emit: (value: unknown) => CommandResult): CommandResult {
+  const [baseUrl, token] = args;
+  if (baseUrl === undefined || token === undefined) {
+    throw new UsageError(
+      'login needs a server URL and a token: `agent-battle login <server-url> <token>`',
+    );
+  }
+  writeSession({ baseUrl, token });
+  return emit({ loggedIn: true, serverUrl: baseUrl });
+}
+
+/**
+ * `init` — show what this machine is configured to talk to, or say it is not.
+ *
+ * A read, not a write, and deliberately so. The plan puts `init` in the agent
+ * runtime group, but "initialise" for a machine already means writing an
+ * installation record, and that record belongs to the agent feature rather than
+ * to a file on disk the CLI keeps for itself. Until a registration action is
+ * registered for it, the honest answer is what the configuration is.
+ */
+function init(args: readonly string[], emit: (value: unknown) => CommandResult): CommandResult {
+  if (args.length > 0) {
+    throw new UsageError("init takes no arguments; it reports this machine's configuration");
+  }
+  const session = readSession();
+  return emit(
+    session === undefined
+      ? { configured: false, next: 'agent-battle login <server-url> <token>' }
+      : { configured: true, serverUrl: session.baseUrl, tokenStored: true },
+  );
 }
 
 /**

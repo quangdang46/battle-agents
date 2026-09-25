@@ -246,3 +246,22 @@ describe('the agent runtime verbs', () => {
     expect(result.stderr).toMatch(/quest|Known:/);
   });
 });
+
+describe('the local configuration commands', () => {
+  it('answers rather than failing, and says what to do next', async () => {
+    // The assertion is on the message, not on the presence or absence of a
+    // session: init is a read, and a read that cannot answer is a read the
+    // caller has to guess at. What they need is the next command.
+    const result = await invoke('init').catch((error: unknown) => error);
+
+    expect(JSON.stringify(result)).toMatch(/login/);
+  });
+
+  it('refuses login without both halves, rather than storing half a session', async () => {
+    const result = await invoke('login', 'http://api.test').catch((error: unknown) => error);
+
+    // A session with a base URL and no token fails on the first call, and the
+    // failure would name the API rather than the login that caused it.
+    expect(JSON.stringify(result)).toMatch(/token/i);
+  });
+});
