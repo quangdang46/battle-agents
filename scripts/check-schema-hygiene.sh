@@ -102,28 +102,39 @@ readonly EXEMPT_SECRET_COLUMNS=(
 # reading it back. A comment about a scanner is a claim, and a claim is only
 # evidence once something has tried to break it.
 list_guard_declarations() {
-  local file table
-  for table in "${GUARDED_TABLES[@]}"; do
+  local file
+  # One perl per FILE, not per (table, file).
+  #
+  # The tables used to be the outer loop, which meant GUARDED_TABLES x files
+  # process spawns. Windows spawns are expensive enough that the gate took 104
+  # seconds of wall time for 9 seconds of CPU — and the gate's own tests time
+  # out at 30, so it failed there while the stage itself passed. The table list
+  # moves inside perl and every file is read once.
+  #
+  # The regexes below are the ones that were there. The fix is where the work
+  # happens, not what is matched: a scanner that got faster by matching less
+  # would be this gate's own history repeating.
   for file in "${SCHEMA_SOURCE_DIR}"/*.ts; do
     [ -e "${file}" ] || continue
-    TABLE="$table" GUARD_FILE="${file}" perl -0 -ne '
+    GUARD_TABLES="$(printf '%s\n' "${GUARDED_TABLES[@]}")" GUARD_FILE="${file}" perl -0 -ne '
       my $file = $ENV{GUARD_FILE};
-      my $want = $ENV{TABLE};
-      # Table name first, then walk back to the pgTable( that introduces it.
-      while (m{pg_?Table\([[:space:]]*\n[[:space:]]*\x27$want\x27}g) {
-        my $start = pos($_);
-        my $rest  = substr($_, $start);
-        # Column block runs until the closing "}," that ends the object literal.
-        if ($rest =~ m{\{(.*?)\n[[:space:]]*\},\n}s) {
-          my $body = $1;
-          while ($body =~ m{([A-Za-z0-9_]+)[[:space:]]*:[[:space:]]*[A-Za-z]+\([[:space:]]*\x27([A-Za-z0-9_]+)\x27}g) {
-            print "$want:$2:$file\n";
+      my @want = split /\n/, $ENV{GUARD_TABLES};
+      for my $want (@want) {
+        # Table name first, then walk back to the pgTable( that introduces it.
+        while (m{pg_?Table\([[:space:]]*\n[[:space:]]*\x27\Q$want\E\x27}g) {
+          my $start = pos($_);
+          my $rest  = substr($_, $start);
+          # Column block runs until the closing "}," that ends the object literal.
+          if ($rest =~ m{\{(.*?)\n[[:space:]]*\},\n}s) {
+            my $body = $1;
+            while ($body =~ m{([A-Za-z0-9_]+)[[:space:]]*:[[:space:]]*[A-Za-z]+\([[:space:]]*\x27([A-Za-z0-9_]+)\x27}g) {
+              print "$want:$2:$file\n";
+            }
           }
+          pos($_); pos($_)++;
         }
-        pos($_); pos($_)++;
       }
     ' "$file" 2>/dev/null || true
-  done
   done
 }
 
@@ -135,12 +146,14 @@ list_guard_declarations() {
 # considered, and a declared type is required so an index name or a constraint
 # name is not mistaken for a column.
 list_migration_columns() {
-  local sql table
+  local sql
+  # One perl per migration file, for the same reason as the source scan above:
+  # the table list used to be the outer loop, so this was nine spawns per file.
   for sql in "${MIGRATION_DIR}"/*.sql; do
     [ -e "${sql}" ] || continue
-    for table in "${GUARDED_TABLES[@]}"; do
-      TABLE="$table" perl -0 -ne '
-        my $t = $ENV{TABLE};
+    GUARD_TABLES="$(printf '%s\n' "${GUARDED_TABLES[@]}")" perl -0 -ne '
+      my @want = split /\n/, $ENV{GUARD_TABLES};
+      for my $t (@want) {
         # Columns added later.
         while (m{ALTER\s+TABLE\s+"?\Q$t\E"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z0-9_]+)"?}gi) {
           print "$t:$1:$ARGV\n";
@@ -152,14 +165,20 @@ list_migration_columns() {
             print "$t:$1:$ARGV\n";
           }
         }
-      ' "$sql" 2>/dev/null || true
-    done
+      }
+    ' "$sql" 2>/dev/null || true
   done
 }
 
+# Both checks are pure bash rather than `tr | grep`.
+#
+# They run once per column the scanners emit, and a spawn is ~70ms on Windows:
+# three processes per line turned a 6-second scan into a 104-second one, which
+# is how the gate's own tests came to time out at 30 seconds while the stage
+# itself passed. The matching is identical — the pattern is already lowercase,
+# so lowercasing the candidate is what `tr` was doing.
 is_allowed_hash() {
-  local column="$1" allowed
-  column="$(printf '%s' "$column" | tr '[:upper:]' '[:lower:]')"
+  local column="${1,,}" allowed
   for allowed in "${ALLOWED_HASH_COLUMNS[@]}"; do
     if [ "$column" = "$allowed" ]; then
       return 0
@@ -169,15 +188,21 @@ is_allowed_hash() {
 }
 
 is_exempt_secret() {
-  local table="$1" column="$2" entry
-  local key
-  key="$(printf '%s' "$table:$column" | tr '[:upper:]' '[:lower:]')"
+  local key="${1,,}:${2,,}" entry
   for entry in "${EXEMPT_SECRET_COLUMNS[@]}"; do
     if [ "$key" = "$entry" ]; then
       return 0
     fi
   done
   return 1
+}
+
+looks_credential_shaped() {
+  # [[ =~ ]] takes an ERE, which is what SECRET_COLUMN_PATTERN already is. The
+  # whole value is in a variable rather than a literal so the pattern is not
+  # parsed as this script's own syntax.
+  local candidate="${1,,}"
+  [[ "${candidate}" =~ $SECRET_COLUMN_PATTERN ]]
 }
 
 declare -a offenders=()
@@ -199,7 +224,7 @@ while IFS= read -r declaration; do
   # shaped like a credential are of interest. This filter was missing, so once
   # the CREATE TABLE branch started working it flagged every column in the
   # table rather than only the dangerous ones.
-  if ! printf '%s' "$column" | grep -qiE "$SECRET_COLUMN_PATTERN"; then
+  if ! looks_credential_shaped "$column"; then
     continue
   fi
   if is_allowed_hash "$column" || is_exempt_secret "$table" "$column"; then
