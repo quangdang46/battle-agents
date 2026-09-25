@@ -46,22 +46,19 @@ if ! (cd "$REPO_ROOT" && pnpm --silent codegen >/dev/null 2>&1); then
   # Restore before reporting: codegen may have truncated the file on its way to
   # failing, and a failed check that also damages the tree is two problems.
   restore
-  fail 'pnpm codegen exited non-zero.'
+  fail 'pnpm codegen exited non-zero. If the message names a feature that
+  declares action ids but is not registered in MANIFESTS, that is the real
+  finding: codegen refuses to emit a union that would silently omit it.'
 fi
 
-# The committed file is the PRETTIER-FORMATTED codegen output, because the
-# repository's own `pnpm lint` is `prettier --check .` and the generated file is
-# committed like any other. Comparing raw codegen output against it reports a
-# diff on a completely clean tree — the generator emits double quotes and its own
-# line breaking, the committed file carries single quotes and prettier's — so the
-# first version of this check was red on a healthy repository, which is the
-# failure mode a gate exists to prevent. Formatting is normalized before
-# comparing, so the only difference that can remain is a real one: an id.
-if ! (cd "$REPO_ROOT" && npx --no-install prettier --write "$GENERATED" >/dev/null 2>&1); then
-  restore
-  fail 'prettier could not normalise the generated file, so no comparison is possible.'
-fi
-
+# No formatting normalisation here, and that is deliberate. An earlier version
+# compared raw generator output to the committed file and went red on a healthy
+# tree, because the generator emitted double quotes and its own line breaking
+# while the committed file carried single quotes and prettier's. The fix was not
+# to teach the check to ignore formatting; it was to make `pnpm codegen` format
+# its own output, so what it writes is exactly what gets committed. The
+# comparison then has one thing left to be about, and no second opinion about
+# whether a diff is real.
 regenerated=$(cat "$GENERATED")
 
 if [ "$original" != "$regenerated" ]; then

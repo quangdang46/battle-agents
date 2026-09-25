@@ -1,4 +1,5 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUTPUT = join(REPO_ROOT, 'packages/protocol/src/generated/action-ids.ts');
+const FEATURES_DIR = join(REPO_ROOT, 'packages/features');
 
 /** Every feature's action ids, in one place the generator reads. */
 const MANIFESTS: Readonly<Record<string, readonly string[]>> = {
@@ -31,6 +33,83 @@ const MANIFESTS: Readonly<Record<string, readonly string[]>> = {
   progression: PROGRESSION_ACTION_IDS,
   reputation: REPUTATION_ACTION_IDS,
 };
+
+/**
+ * Every feature that declares an action-id manifest on disk, discovered rather
+ * than assumed.
+ *
+ * MANIFESTS above is a hand-written list, and a hand-written list is the hole
+ * this whole generator exists to close. A fifth feature adds
+ * `BOUNTY_ACTION_IDS` to its manifest, registers it, and ships — and the union
+ * silently omits it, because nothing here knows the feature exists. `act()`
+ * then rejects a legitimate id at runtime, and the type-level guarantee this
+ * file buys quietly stops covering that feature. Worse, the failure is invisible
+ * to a staleness check: codegen reproduces the same omission, so a gate that
+ * runs codegen and diffs the result is green on a union missing a whole feature.
+ *
+ * Discovery does not replace the static imports above — those are what give the
+ * values their types, and a computed import would give up that for a check that
+ * can be a preflight instead. It asserts the two agree, loudly, before anything
+ * is written.
+ */
+function discoverManifestOwners(): Map<string, string> {
+  const owners = new Map<string, string>();
+  let entries: string[];
+  try {
+    entries = readdirSync(FEATURES_DIR);
+  } catch {
+    return owners;
+  }
+  for (const entry of entries) {
+    const manifest = join(FEATURES_DIR, entry, 'src/manifest.ts');
+    if (!existsSync(manifest)) continue;
+    const source = readFileSync(manifest, 'utf8');
+    for (const match of source.matchAll(/export const (?<actionIds>[A-Z0-9_]+)_ACTION_IDS\b/g)) {
+      // The capture group is `string | undefined` under noUncheckedIndexedAccess
+      // even though the pattern guarantees it. A named group makes the guarantee
+      // part of the type instead of something the reader has to take on trust.
+      const constant = match.groups?.['actionIds'];
+      if (constant === undefined) continue;
+      // Keyed by the FEATURE, which is how MANIFESTS is keyed. The constant name
+      // is carried along only so the error can name what to go and add.
+      owners.set(entry, constant);
+    }
+  }
+  return owners;
+}
+
+function assertEveryManifestIsRegistered(): void {
+  const discovered = discoverManifestOwners();
+  if (discovered.size === 0) {
+    // A glob that matches nothing is indistinguishable from a clean tree, and
+    // that is the failure this guard exists to catch.
+    throw new Error(
+      'codegen: no feature manifest declaring *_ACTION_IDS was found under ' +
+        'packages/features. The discovery step is not seeing the tree, so it ' +
+        'cannot catch a feature that was never registered.',
+    );
+  }
+  const missing = [...discovered].filter(([feature]) => !(feature in MANIFESTS));
+  if (missing.length > 0) {
+    throw new Error(
+      'codegen: these features declare action ids but are not registered in ' +
+        'MANIFESTS, so their ids would be missing from the union and act() ' +
+        'would reject them at runtime:\n' +
+        missing
+          .map(([feature, name]) => `  - ${feature} (${name}_ACTION_IDS, packages/features/${feature})`)
+          .join('\n') +
+        '\nAdd the import and the entry, then run pnpm codegen again.',
+    );
+  }
+  const stale = Object.keys(MANIFESTS).filter((feature) => !discovered.has(feature));
+  if (stale.length > 0) {
+    throw new Error(
+      'codegen: MANIFESTS registers features that declare no action-id manifest ' +
+        'on disk, so the union is describing something that is not there:\n' +
+        stale.map((feature) => `  - ${feature} (packages/features/${feature})`).join('\n'),
+    );
+  }
+}
 
 const banner = `/**
  * GENERATED FILE — do not edit. Run \`pnpm codegen\` instead.
@@ -55,6 +134,7 @@ function unionOf(names: readonly string[]): string {
 }
 
 function main(): void {
+  assertEveryManifestIsRegistered();
   const byFeature = Object.entries(MANIFESTS)
     .map(
       ([feature, ids]) =>
@@ -101,6 +181,17 @@ ${every.map((name) => `  ${JSON.stringify(name)},`).join('\n')}
 
   mkdirSync(dirname(OUTPUT), { recursive: true });
   writeFileSync(OUTPUT, body);
+  // Format the output before anyone looks at it. The generated file is
+  // committed, and this repository's own `pnpm lint` is `prettier --check .`,
+  // so an unformatted artifact fails the gate on style while reading like a
+  // real drift. Worse, it makes the freshness check ambiguous: "does codegen
+  // reproduce the committed file" has two answers — ids or quoting style — and
+  // only one of them is the question anyone is asking. Formatting here means
+  // codegen's output is what gets committed, and the comparison has exactly one
+  // thing left to be about.
+  execFileSync('npx', ['--no-install', 'prettier', '--write', OUTPUT], {
+    stdio: 'ignore',
+  });
   process.stdout.write(
     `codegen: ${every.length} action id(s) across ${Object.keys(MANIFESTS).length} feature(s) -> ${OUTPUT}\n`,
   );
