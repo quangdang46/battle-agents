@@ -7,11 +7,11 @@
  * is where they meet, and the ledger is how they avoid reporting the same tool
  * call twice.
  *
- * The installer is deliberately NOT here. Writing to somebody's
+ * The installer is exported but is not run on import. Writing to somebody's
  * `~/.claude/settings.json` is consent-gated and belongs to a command a person
- * runs, not to a module a program imports — an adapter that rewrote a
- * developer's editor configuration on import would be a bug nobody would file,
- * because nobody would expect it.
+ * runs; a module that rewrote a developer's editor configuration as a side
+ * effect of being imported would be a bug nobody would file, because nobody
+ * would expect it.
  */
 
 export { ClaudeHookNormalizer } from './hooks/hook-handler.js';
@@ -29,3 +29,11 @@ export type { HookLedger, ParsedLine } from './parsers/jsonl.js';
 
 export { ClaudeWatcher } from './watcher.js';
 export type { BatchSender, ClaudeWatcherOptions } from './watcher.js';
+
+export {
+  defaultSettingsPath,
+  installClaudeHooks,
+  uninstallClaudeHooks,
+  withoutOurHooks,
+} from './installer/install-claude.js';
+export type { InstallOptions, InstallOutcome } from './installer/install-claude.js';
