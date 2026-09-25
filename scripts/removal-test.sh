@@ -34,6 +34,10 @@ declare -a FAILED_FEATURES=()
 declare -a SKIPPED_FEATURES=()
 MOVED_PATH=""
 COMPOSITION_BACKUP=""
+WEB_PACKAGE_BACKUP=""
+TSCONFIG_BACKUP=""
+readonly WEB_PACKAGE="${REPO_ROOT}/apps/web/package.json"
+readonly TSCONFIG_PATH="${REPO_ROOT}/tsconfig.json"
 
 # Signal exit codes follow the shell convention of 128 + signal number.
 # These are separate traps on purpose: with one `trap cleanup EXIT INT TERM`, a
@@ -60,6 +64,14 @@ restore_in_flight() {
   if [[ -n "${COMPOSITION_BACKUP}" && -f "${COMPOSITION_BACKUP}" ]]; then
     mv "${COMPOSITION_BACKUP}" "${COMPOSITION_BACKUP%.bak}"
     COMPOSITION_BACKUP=""
+  fi
+  if [[ -n "${WEB_PACKAGE_BACKUP}" && -f "${WEB_PACKAGE_BACKUP}" ]]; then
+    mv "${WEB_PACKAGE_BACKUP}" "${WEB_PACKAGE_BACKUP%.removal-bak}"
+    WEB_PACKAGE_BACKUP=""
+  fi
+  if [[ -n "${TSCONFIG_BACKUP}" && -f "${TSCONFIG_BACKUP}" ]]; then
+    mv "${TSCONFIG_BACKUP}" "${TSCONFIG_BACKUP%.removal-bak}"
+    TSCONFIG_BACKUP=""
   fi
   if [[ -n "${MOVED_PATH}" && -d "${STASH_DIR}/$(basename "${MOVED_PATH}")" ]]; then
     # The destination must not exist before the restore. "pnpm -r typecheck"
@@ -136,6 +148,14 @@ strip_from_composition_root() {
   if [ "${target}" = "${COMPOSITION_ROOT}" ]; then
     COMPOSITION_BACKUP="${COMPOSITION_ROOT}.bak"
     cp "${COMPOSITION_ROOT}" "${COMPOSITION_BACKUP}"
+    # The workspace wiring is backed up here because the strip below edits it.
+    # Restoring the composition root alone would leave a removed feature's
+    # dependency and path entry deleted for good, and the next run would fail on
+    # a tree the operator never asked to change.
+    WEB_PACKAGE_BACKUP="${WEB_PACKAGE}.removal-bak"
+    TSCONFIG_BACKUP="${TSCONFIG_PATH}.removal-bak"
+    cp "${WEB_PACKAGE}" "${WEB_PACKAGE_BACKUP}"
+    cp "${TSCONFIG_PATH}" "${TSCONFIG_BACKUP}"
   fi
   # The composition root imports each feature as a named import and lists its
   # factory call alone on one line in the extensions array. Both lines go.
@@ -166,7 +186,38 @@ strip_from_composition_root() {
   # The backslash before @ is for perl, which would otherwise read @battle as
   # an array in the pattern and interpolate it to nothing.
   perl -0pi -e "s/^import (?:type )?\{[^}]*\} from ['\"]\@battle-agents\/${feature_name}['\"];\r?\n//mg" "${target}"
-  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(.*?(?:\)[[:space:]]*,?[[:space:]]*\n|^[[:space:]]*\}\)[[:space:]]*,?[[:space:]]*\n)//msg" "${target}"
+  # The wrapped form was written with an unclosed non-capturing group: the
+  # `(?:` opens a group and the `\)` inside it is a literal parenthesis, so
+  # the group never closed and perl refused the whole expression. It failed
+  # SILENTLY in the way that matters: the script kept going and reported a
+  # clean run while this half stripped nothing. The self-test could not see it
+  # because it only asserts on the import line, and that half worked. Both
+  # halves of a guard have to be seen failing, or one of them is decoration.
+  perl -0pi -e "s/^[ \t]*\b${feature_name}\w*\(.*?\)[ \t]*,?[ \t]*\n|^[ \t]*\b${feature_name}\w*\(.*?\n(?:.*?\n)*?[ \t]*\}[ \t]*,?[ \t]*\n//msg" "${target}"
+}
+
+# A feature is wired into four places, not two. The two above are in the
+# composition root; a third is the workspace dependency and a fourth is the
+# source alias the test stages resolve it through.
+#
+# This was found the hard way: composing a second feature made the removal test
+# fail for `agent` with a typecheck error and for `animation` with a dangling
+# tsconfig path, neither of which had anything to do with coupling. The strip was
+# still the two-line one, so every feature added after the first made the test
+# report a false failure. A test that cries wolf is one people learn to skip.
+strip_workspace_wiring() {
+  local feature_name="$1"
+  local package_json="${2:-${WEB_PACKAGE}}"
+  local tsconfig="${2:-${TSCONFIG_PATH}}"
+
+  # The dependency line and the path entry are each one line, and both name the
+  # package the directory is named after. Single-quoted perl with the name
+  # interpolated by perl itself, because the double-quoted form here breaks on
+  # the quotes inside the pattern.
+  [ -f "${package_json}" ] &&
+    perl -0pi -e 's/^\s*"\@battle-agents\/'"${feature_name}"'"\s*:\s*"workspace:\*[^"]*",?\r?\n//mg' "${package_json}"
+  [ -f "${tsconfig}" ] &&
+    perl -0pi -e 's/^\s*"\@battle-agents\/'"${feature_name}"'"\s*:\s*\[[^\]]*\],?\r?\n//mg' "${tsconfig}"
 }
 
 # A guard nobody has seen fail is not a guard, and this one had never been seen
@@ -292,6 +343,7 @@ main() {
     printf 'checking removal of %s\n' "${feature_name}"
     MOVED_PATH="${feature_dir%/}"
     strip_from_composition_root "${feature_name}"
+    strip_workspace_wiring "${feature_name}"
     mkdir -p "${STASH_DIR}"
     mv "${MOVED_PATH}" "${STASH_DIR}/${feature_name}"
 

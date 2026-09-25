@@ -1,4 +1,4 @@
-import { issueCredential } from '@battle-agents/agent';
+import { authenticate, issueCredential } from '@battle-agents/agent';
 import {
   agents,
   closeDatabasePool,
@@ -149,8 +149,16 @@ beforeAll(async () => {
   otherInstallationId = await createInstallation('secondary', otherSessionId);
   otherToken = await issueFor(otherInstallationId);
 
+  // The authenticator is supplied rather than imported, because the gateway is a
+  // transport and must not reach into a feature. The composition root wires the
+  // real one; a test wires the same thing against the same store.
+  const credentialStore = new DrizzleCredentialStore(database);
   gateway = createEventGateway({
     database,
+    authenticate: async (request) => {
+      const caller = await authenticate({ store: credentialStore, now: AT }, request as never);
+      return { installationId: caller.installationId };
+    },
     // Pin the clock the credential expiry is judged against, so a token issued
     // at AT is live for the whole suite regardless of the wall clock.
     now: () => AT,

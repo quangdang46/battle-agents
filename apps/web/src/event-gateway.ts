@@ -1,4 +1,5 @@
-import { authenticate, AuthenticationError } from '@battle-agents/agent';
+import { authenticate } from '@battle-agents/agent';
+import { isAuthenticationFailure } from '@battle-agents/api';
 import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
 import {
@@ -49,6 +50,20 @@ import type { HttpRequest, HttpResponse } from './routes.js';
  */
 
 export interface EventGatewayDependencies {
+  /**
+   * How a request proves which installation is calling.
+   *
+   * Injected rather than imported, and that is the whole point. The gateway
+   * imported `authenticate` from the agent feature, which put a feature import
+   * outside the composition root — and the removal test then correctly reported
+   * that the agent feature could not be removed, because two files besides the
+   * root had to change with it. "Adding a feature is a package and one line"
+   * stopped being true. The gateway is a transport; asking it for an
+   * authenticator is a dependency, and the composition root is the place that
+   * decides which features exist.
+   */
+  readonly authenticate?: (request: unknown) => Promise<{ readonly installationId: string }>;
+
   readonly database: Database;
   /** Resolved once here, at composition time, so a bad env var fails at startup. */
   readonly limits?: BatchLimits;
@@ -69,12 +84,18 @@ export interface EventGateway {
 
 export function createEventGateway(dependencies: EventGatewayDependencies): EventGateway {
   const limits = dependencies.limits ?? readBatchLimits(process.env);
-  const now = dependencies.now ?? (() => new Date().toISOString());
 
   const bus = createInMemoryEventBus();
   const store = new DrizzleStateStore(dependencies.database);
   const sessionRepository = new DrizzleSessionRepository(dependencies.database);
-  const credentialStore = new DrizzleCredentialStore(dependencies.database);
+
+  // Falls back to refusing rather than to a default. A gateway wired without
+  // an authenticator is a gateway that would accept unauthenticated ingest if
+  // the fallback were permissive, and "unreachable in practice" is not a
+  // property worth betting a write path on.
+  const authenticateRequest =
+    dependencies.authenticate ??
+    ((): Promise<never> => Promise.reject(new Error('no authenticator was supplied')));
 
   const runtime = createGameRuntime({
     store,
@@ -107,9 +128,14 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
     // `resolveSession` proves the session belongs to it, which is the whole of
     // what this route checks. A scope here would be a second, weaker gate in
     // front of a real one, and it would be the one a fixture forgets to grant.
+    // The mapping from whatever the authenticator threw to the shape `routes.ts`
+    // recognises as a 401 happens HERE, where the authenticator is called, and
+    // not inside each authenticator. A supplied authenticator that forgot it
+    // turned a rejected token into a 500, which tells the caller to retry a
+    // credential that will never be accepted.
     authenticate: async (request) => {
       try {
-        const caller = await authenticate({ store: credentialStore, now: now() }, request);
+        const caller = await authenticateRequest(request);
         return { installationId: caller.installationId };
       } catch (error) {
         return toAuthenticationFailure(error);
@@ -134,22 +160,46 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
 }
 
 /**
- * Re-throws a credential failure as the shape the HTTP surface recognises.
+ * Re-throws an authentication failure as the shape the HTTP surface recognises.
  *
- * The agent feature's `AuthenticationError` carries its reason at
- * `failure.reason`, while `isAuthenticationFailure` in the api package — which
- * `routes.ts` uses to turn any authentication failure into a 401 — recognises
- * the same reason at the top level. The two are structurally compatible but not
- * identical, and the mapping between them belongs here, in the one place that
- * knows both, rather than in each route that has to catch it.
+ * `isAuthenticationFailure` in the api package is what `routes.ts` uses to turn
+ * any authentication failure into a 401, and it reads the reason at the top
+ * level. An authenticator supplied by the composition root may carry it nested
+ * instead, so both are accepted here — in the one place that knows both — rather
+ * than in each route that has to catch it.
  */
 export function toAuthenticationFailure(error: unknown): never {
-  if (error instanceof AuthenticationError) {
-    const failure = new Error(error.message) as Error & { reason: string };
-    failure.reason = error.failure.reason;
-    throw failure;
+  if (isAuthenticationFailure(error)) {
+    throw withReason(new Error(error.message, { cause: error }), error.reason);
+  }
+  // The agent feature's own error carries its reason nested under `failure`,
+  // while the api's guard reads it at the top level. An earlier version of this
+  // function handled only one of the two and the rejected-token case answered
+  // 500 instead of 401, which tells a caller to retry a credential that will
+  // never be accepted. Both shapes are accepted here, in the one place that
+  // knows both, rather than in each authenticator.
+  const nested = readNestedReason(error);
+  if (nested !== undefined) {
+    throw withReason(
+      new Error(error instanceof Error ? error.message : String(error), { cause: error }),
+      nested,
+    );
   }
   throw error;
+}
+
+function readNestedReason(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('failure' in error)) return undefined;
+  const failure = (error as { failure: unknown }).failure;
+  if (typeof failure !== 'object' || failure === null || !('reason' in failure)) return undefined;
+  const reason = (failure as { reason: unknown }).reason;
+  return typeof reason === 'string' ? reason : undefined;
+}
+
+function withReason(error: Error, reason: string): Error & { reason: string } {
+  const annotated = error as Error & { reason: string };
+  annotated.reason = reason;
+  return annotated;
 }
 
 let cached: { gateway: EventGateway; close: () => Promise<void> } | undefined;
@@ -167,7 +217,21 @@ export function sharedEventGateway(): EventGateway {
   }
   const pool = createDatabasePool();
   const database = createDatabase(pool);
-  const gateway = createEventGateway({ database });
+  // The authenticator is the one thing here that needs the agent feature, and it
+  // is supplied here rather than imported, so this file has no feature import and
+  // the removal test can take the feature out without touching it. This function
+  // is the composition root for the telemetry plane, which is where the plan says
+  // the decision of which features exist belongs.
+  const gateway = createEventGateway({
+    database,
+    authenticate: async (request) => {
+      const caller = await authenticate(
+        { store: new DrizzleCredentialStore(database), now: new Date().toISOString() },
+        request as never,
+      );
+      return { installationId: caller.installationId };
+    },
+  });
   cached = { gateway, close: () => closeDatabasePool(pool) };
   return gateway;
 }
