@@ -22,6 +22,12 @@ import { describe, expect, it } from 'vitest';
  * this repository, which is exactly the kind of thing worth asserting rather than
  * believing. The first version of this file only checked that the catch-all
  * existed, which is true whether or not it eats /api/events.
+ *
+ * The ROUTING was then checked against the framework rather than assumed: `next
+ * build` lists `/api/[...path]` and all six siblings in one route table with the
+ * catch-all displacing none of them. Recorded because the assertion below covers
+ * the FILES and the build covered the PRECEDENCE, and a reader deciding how far
+ * to trust the claim should know which is which.
  */
 
 const repoRoot = resolve(import.meta.dirname, '../..');
