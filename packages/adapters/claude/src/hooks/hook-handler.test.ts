@@ -201,6 +201,110 @@ describe('tools', () => {
   });
 });
 
+/**
+ * What a command turned out to be.
+ *
+ * These are the two families only this plane can produce: the tail reads the
+ * tool_use line and never the result, so a session whose hooks were down reports
+ * which files it touched and never which commands it ran. They are also the two
+ * the bead's success criteria name, and until these assertions existed nothing
+ * in the package proved the derivation was WIRED rather than merely correct —
+ * deleting the `deriveOutcomeEvents` call from PostToolUse left all 94 tests
+ * green, because the only tests naming a command called the function directly.
+ */
+describe('a completed command', () => {
+  /**
+   * One `pnpm test` from the two payloads Claude actually sends for it.
+   *
+   * The input is remembered rather than echoed, because that is the shape the
+   * normalizer was built to survive: PostToolUse carries the result, and the
+   * command is only known because PreToolUse said so. A suite that always
+   * echoed the input back would pass whether or not the input is remembered.
+   */
+  function ran(
+    response: unknown,
+    options: { readonly command?: string; readonly echoInput?: boolean } = {},
+  ): readonly AgentEvent[] {
+    const normalizer = new ClaudeHookNormalizer();
+    const command = options.command ?? 'pnpm test';
+    normalize(normalizer, {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command },
+    });
+    return normalize(
+      normalizer,
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        ...(options.echoInput === true ? { tool_input: { command } } : {}),
+        tool_response: response,
+      },
+      { ...CONTEXT, at: '2026-09-25T09:00:02.500Z' },
+    );
+  }
+
+  const types = (events: readonly AgentEvent[]): readonly string[] =>
+    events.map((event) => event.type);
+
+  it('names the program it ran, and that the tests passed', () => {
+    const events = ran({ is_error: false, content: 'Test Files 2 passed\n Tests 51 passed' });
+
+    expect(types(events)).toEqual(['tool.completed', 'command.run', 'test.passed']);
+    expect(events[1]).toMatchObject({ type: 'command.run', argv0: 'pnpm' });
+  });
+
+  it('carries the exit code, because a red run is the fact worth having', () => {
+    const events = ran({ is_error: true, content: 'Exit code 2\n 3 failed' });
+
+    expect(events[1]).toMatchObject({ type: 'command.run', argv0: 'pnpm', exitCode: 2 });
+  });
+
+  it('reaches the same answer when the harness echoes the input back', () => {
+    // Both spellings exist in the wild. Reading only the echoed one would break
+    // on a PostToolUse that omits it; reading only the remembered one would
+    // ignore a corrected command.
+    expect(types(ran({ is_error: false, content: '51 passed' }, { echoInput: true }))).toEqual([
+      'tool.completed',
+      'command.run',
+      'test.passed',
+    ]);
+  });
+
+  it('reports a failure for a run that exited non-zero', () => {
+    expect(types(ran({ is_error: true, content: 'Exit code 1\n 3 failed' }))).toEqual([
+      'tool.failed',
+      'command.run',
+      'test.failed',
+    ]);
+  });
+
+  it('reports NOTHING for a command the harness blocked before it ran', () => {
+    // The failure this guards is worse than a wrong answer: a blocked command
+    // produced no test output at all, so a red suite is a result nobody saw.
+    const events = ran({ is_error: true, content: '<tool_use_error>Blocked: pnpm test' });
+
+    expect(types(events)).toEqual(['tool.failed', 'command.run']);
+  });
+
+  it('reports NOTHING for a command that is not a test run', () => {
+    // A failing build is a command that failed, and no claim about tests.
+    const events = ran({ is_error: true, content: 'Exit code 1' }, { command: 'pnpm build' });
+
+    expect(types(events)).toEqual(['tool.failed', 'command.run']);
+  });
+
+  it('reports NOTHING when the harness said nothing either way', () => {
+    // The assertion that matters most in this file. `test.passed` pays 100
+    // experience, so a result this adapter cannot read has to earn no claim —
+    // and the only thing standing between a silent skip and a scored green
+    // suite is a test that fails when the two are confused.
+    const events = ran({ content: 'still going' });
+
+    expect(types(events)).toEqual(['tool.completed', 'command.run']);
+  });
+});
+
 describe('payloads this adapter does not understand', () => {
   it('drops an event type it has no mapping for, and counts it', () => {
     // Claude ships new hooks. An adapter that threw on one would break the
