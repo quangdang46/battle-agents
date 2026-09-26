@@ -2,7 +2,26 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // DOM, unlike every other package in this repo, and deliberately rather
+    // than globally. The base config's `lib: ["ES2023"]` and `types: []` is
+    // right for packages that must not reach for a browser global — the
+    // server-side half of a monorepo is not allowed to need `document`. This
+    // package IS the browser half: camera-guards intercepts wheel and Safari
+    // gesture events, and the frame loop schedules against
+    // `requestAnimationFrame`. Both are real DOM, not a convenience, and
+    // without this the correct code does not typecheck.
+    //
+    // Scoped here rather than in the base so a server package that later
+    // reaches for `document` fails to compile, which is the guarantee the base
+    // config is making.
+    "lib": ["ES2023", "DOM"],
+    // Node builtins, for the architecture test, which reads the repository to
+    // run the shared layering engine over this package's own source. The same
+    // shape packages/features/battle uses and for the same reason: a test that
+    // inspects the tree needs `node:fs`. `@types/node` is a root devDependency,
+    // so pnpm-lock.yaml is untouched by asking for it here.
+    "types": ["node"]
   },
   "references": [
     {

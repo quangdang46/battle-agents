@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@battle-agents/core": "workspace:*",
-    "@battle-agents/protocol": "workspace:*"
+    "@battle-agents/protocol": "workspace:*",
+    "pixi.js": "^8.21.0"
   }
 }
