@@ -8,6 +8,8 @@ import { headers } from 'next/headers.js';
 import { notFound } from 'next/navigation.js';
 import type { Metadata } from 'next';
 
+import { renderReport, UNKNOWN_HARNESS_LABEL, WITHHELD_CRITERION_LABEL } from '@/battle-report.js';
+import type { BattleReport } from '@/battle-report.js';
 import { loadPublicReplay, replayHeadline, replayShare } from '@/replay-view.js';
 import type { PublicReplay } from '@/replay-view.js';
 
@@ -91,7 +93,7 @@ export default async function ReplayPage({ params }: ReplayParams) {
   return (
     <main>
       <ReplayHeader replay={replay} />
-      {replay.state === 'expired' ? <ExpiredNotice /> : <Timeline replay={replay} />}
+      <BattleReportView replay={replay} />
     </main>
   );
 }
@@ -107,82 +109,169 @@ function ReplayHeader({ replay }: { readonly replay: PublicReplay }) {
 }
 
 /**
- * What a viewer sees when the log no longer holds this battle.
+ * What a viewer sees when the log holds nothing for this battle.
  *
- * A stated state rather than an error, and the state is the one the activity
- * feature's retention policy produces: this feature keeps a trail for 365 days
- * because a replay is a link, and this is what the far end of that window looks
- * like. The alternative — a 500, or a page that renders as if the battle never
- * happened — is a dead link that lies about why.
+ * A stated state rather than an error. The alternative — a 500, or a page that
+ * renders as if the battle never happened — is a dead link that lies about why.
+ *
+ * The wording was changed by `ba-battle-reporter-good-first-rxz` and the change
+ * is a correction, not a rewording. This used to say the events "are older than
+ * the 365 days the log keeps them", which is the retention inference, and
+ * `docs/design/public-replay.md` is explicit that `expired` may claim only "no
+ * events for this battle are present" — whether they were pruned or never
+ * written is not answerable from the log. `buildPublicReplay` gives a battle
+ * with no beats the same state whatever the reason, and running the reporter
+ * against a real database found a `running` battle that was never joined being
+ * told it had aged out. It is not aged out; it has no rows.
  */
 function ExpiredNotice() {
   return (
     <section>
-      <h2>This replay is past its retention window</h2>
+      <h2>No timeline for this battle</h2>
       <p>
-        The timeline is rebuilt from the activity log, and this battle&rsquo;s events are older than
-        the 365 days the log keeps them. The result it recorded is still on the scoreboard row; the
-        step-by-step story is not kept.
+        A timeline is rebuilt from the activity log, and the log holds no events for this battle.
+        The log keeps a trail for 365 days because a replay is a link, so this is usually the far
+        end of that window — but the log cannot say whether the events were pruned or were never
+        written, and this page will not guess.
       </p>
     </section>
   );
 }
 
-function Timeline({ replay }: { readonly replay: PublicReplay }) {
+/**
+ * The report, and the states that suppress it.
+ *
+ * Everything a viewer reads is rendered from `renderReport`, which is a pure
+ * function of the projection. That is a security decision and not a tidiness
+ * one: `docs/design/public-replay.md` publishes an allow-list, and a page that
+ * assembled sentences itself would be a second place deciding what a public
+ * page may say — the exact shape of failure the projection exists to prevent,
+ * one layer out. This file holds no vocabulary; the one string it substitutes
+ * for a withheld value comes from `@/battle-report.js` rather than being
+ * written here.
+ */
+function BattleReportView({ replay }: { readonly replay: PublicReplay }) {
+  const report = renderReport(replay);
+  if (replay.state === 'expired') {
+    return (
+      <>
+        <p>{report.summary}</p>
+        <ExpiredNotice />
+      </>
+    );
+  }
   return (
     <>
-      <Scoreboard replay={replay} />
-      <ol>
-        {replay.beats.map((beat, index) => (
-          // Two events can share an instant, so the index is part of the key.
-          // Without it React warns about a duplicate key and reconciliation
-          // drops a beat, which on a timeline is a silently missing event.
-          <li key={`${beat.at}-${index}`}>
-            <time dateTime={beat.at}>{formatOffset(beat.offsetMs)}</time> <span>{beat.beat}</span>
-            {beat.fighter === null ? null : <span> &mdash; {beat.fighter}</span>}
-            {Object.keys(beat.detail).length === 0 ? null : (
-              <span> ({describeDetail(beat.detail)})</span>
-            )}
-          </li>
-        ))}
-      </ol>
+      <p>{report.summary}</p>
+      <Scoreboard report={report} />
+      <Breakdown report={report} />
+      <Steps steps={report.steps} />
     </>
   );
 }
 
-function Scoreboard({ replay }: { readonly replay: PublicReplay }) {
-  if (replay.fighters.length === 0) return null;
+function Scoreboard({ report }: { readonly report: BattleReport }) {
+  if (report.fighters.length === 0) return null;
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Fighter</th>
-          <th>Harness</th>
-          <th>Score</th>
-        </tr>
-      </thead>
-      <tbody>
-        {replay.fighters.map((fighter) => (
-          <tr key={fighter.label}>
-            <th scope="row">{fighter.label}</th>
-            <td>{fighter.harness ?? 'unknown harness'}</td>
-            <td>{fighter.won ? `${fighter.total ?? 0} (winner)` : (fighter.total ?? '—')}</td>
+    <section>
+      <h2>Who competed</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Fighter</th>
+            <th>Harness</th>
+            <th>Score</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {report.fighters.map((fighter) => (
+            <tr key={fighter.label}>
+              <th scope="row">{fighter.label}</th>
+              <td>{fighter.harness ?? UNKNOWN_HARNESS_LABEL}</td>
+              <td>{fighter.won ? `${fighter.total ?? 0} (winner)` : (fighter.total ?? '—')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
-function formatOffset(offsetMs: number): string {
-  const totalSeconds = Math.floor(offsetMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+/**
+ * The published weights and the scores they produced.
+ *
+ * Both halves or neither. A total with no rubric beside it is a number a reader
+ * has to take on trust, and the rubric is the one claim on this page they cannot
+ * check for themselves — which is why `docs/design/public-replay.md` publishes
+ * it in the first place.
+ */
+function Breakdown({ report }: { readonly report: BattleReport }) {
+  if (report.rubric.length === 0 && report.fighters.length === 0) return null;
+  return (
+    <section>
+      <h2>How it was scored</h2>
+      {report.rubric.length === 0 ? null : (
+        <table>
+          <thead>
+            <tr>
+              <th>Criterion</th>
+              <th>Weight</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rubric.map((entry) => (
+              <tr key={entry.criterion ?? String(entry.weight)}>
+                <th scope="row">{entry.criterion ?? WITHHELD_CRITERION_LABEL}</th>
+                <td>{entry.weight}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {report.fighters.map((fighter) => (
+        <table key={fighter.label}>
+          <caption>
+            {fighter.label} &mdash; {fighter.harness ?? UNKNOWN_HARNESS_LABEL}
+          </caption>
+          <thead>
+            <tr>
+              <th>Criterion</th>
+              <th>Weight</th>
+              <th>Score</th>
+              <th>Weighted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fighter.criteria.map((row, index) => (
+              <tr key={row.criterion ?? `withheld-${index}`}>
+                <th scope="row">{row.criterion ?? WITHHELD_CRITERION_LABEL}</th>
+                <td>{row.weight}</td>
+                <td>{row.score}</td>
+                <td>{row.weighted}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ))}
+    </section>
+  );
 }
 
-function describeDetail(detail: Readonly<Record<string, string | number | boolean>>): string {
-  return Object.entries(detail)
-    .map(([key, value]) => `${key} ${String(value)}`)
-    .join(', ');
+function Steps({ steps }: { readonly steps: BattleReport['steps'] }) {
+  if (steps.length === 0) return null;
+  return (
+    <section>
+      <h2>What happened, in order</h2>
+      <ol>
+        {steps.map((step, index) => (
+          // Two events can share an instant, so the index is part of the key.
+          // Without it React warns about a duplicate key and reconciliation
+          // drops a step, which on a timeline is a silently missing event.
+          <li key={`${step.at}-${index}`}>
+            <time dateTime={step.at}>{step.label}</time> <span>{step.text}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }

@@ -173,6 +173,33 @@ built here. Rendering a diff stream belongs to this bead; _emitting_ one belongs
 to `ba-event-ingest-and-sse-gu9`, and that server side does not exist. This page
 reads the log and renders a timeline. There is no invented substitute.
 
+## Two things this document does not narrow, found while rendering the replay
+
+`apps/web/src/battle-report.ts` turns the projection above into sentences, and
+writing it turned up two places where a value reaches this page with nothing
+behind it. Neither is fixed in the projection — both are narrowed by the report,
+and both are recorded here because a narrowing that lives in a consumer is a
+narrowing that disappears when the consumer does.
+
+**`mode`.** `modeOf` accepts any non-empty string. The six values are a closed
+list (`BATTLE_MODES`), but nothing between the log and the page checks them.
+
+**`PublicCriterion.criterion`.** `criteriaOf` checks that a criterion name is a
+string and stops there. The judge refuses to record an unknown one
+(`criterion-not-a-known-criterion`), so the name is sound **by provenance** — and
+a report printed from a durable log cannot check provenance, only content.
+
+**And one that is narrower than it looks.** The `suite` pattern below is a
+_path_ guard, which is what it was written for. It is not a handle guard: a uuid
+is letters, digits and dashes under 64 characters, so
+`11111111-1111-4111-8111-111111111111` passes `/^[A-Za-z0-9._-]{1,64}$/`. There is
+no closed vocabulary of suite names in the protocol or in any adapter, so a
+character class is the only shape available and it cannot tell a name from a
+handle. The report adds a uuid check of its own for that reason.
+
+Moving any of the three into the projection is a change to this table, not a
+refactor.
+
 ## Where the boundary is enforced
 
 | Claim                            | Enforced by                                                                                                            |
@@ -181,3 +208,4 @@ reads the log and renders a timeline. There is no invented substitute.
 | no credential on the public path | `apps/web/src/replay-view.test.ts`, which reads the read model and both routes and fails on one reaching for a session |
 | the timeline is the log's        | `tests/integration/battle-replay.test.ts`, by contradicting the row                                                    |
 | the handle is random and unique  | `db:verify.ts`, and an integration test reading `information_schema`                                                   |
+| the report publishes no handle   | `apps/web/src/battle-report.test.ts`, on a projection seeded with a session id in every field a report reads           |
