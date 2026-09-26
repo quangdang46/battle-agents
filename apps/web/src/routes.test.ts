@@ -7,7 +7,12 @@ import {
 import { createApplicationApi } from '@battle-agents/api';
 import { describe, expect, it } from 'vitest';
 
-import { createRoutes, type HttpRequest, type HttpResponse } from './routes.js';
+import {
+  callerScopedRefusal,
+  createRoutes,
+  type HttpRequest,
+  type HttpResponse,
+} from './routes.js';
 
 const ORIGIN = 'https://agentbattle.test';
 
@@ -26,17 +31,28 @@ class TestAuthFailure extends Error {
   }
 }
 
+/**
+ * A stand-in domain, carrying a stand-in action this surface will still run.
+ *
+ * The action is `bounty.list` and not the `quest.claim` this file used to use,
+ * and that is a change with a reason rather than a rename: `/api/act` REFUSES
+ * every action whose payload names its caller, and `quest.claim` is one of them
+ * (see `CALLER_SCOPED_ACTIONS` in `routes.ts`). A stand-in for "some action the
+ * primitive can run" that sits on the refusal list cannot demonstrate that the
+ * primitive runs one, so the stand-in moved to an action the same list does not
+ * name. Nothing about the primitive changed; only the fixture did.
+ */
 function runtimeWithOneAction() {
   return createRuntime({
     extensions: [
       {
-        id: 'quest',
-        capabilities: [{ name: 'quest.read', description: 'reads quests' }],
+        id: 'bounty',
+        capabilities: [{ name: 'bounty.read', description: 'reads bounties' }],
         actionDefs: [
           defineAction({
-            id: 'quest.claim',
-            permissions: ['quest.claim'],
-            run: async (input: { id: string }) => ({ claimed: input.id }),
+            id: 'bounty.list',
+            permissions: ['bounty.list'],
+            run: async (input: { id: string }) => ({ listed: input.id }),
           }),
         ],
       },
@@ -62,32 +78,32 @@ describe('the five primitives over HTTP', () => {
     const response = await call({ path: '/api/discover' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ domains: ['quest'] });
+    expect(response.body).toEqual({ domains: ['bounty'] });
   });
 
   it('serves one domain on request', async () => {
-    const response = await call({ path: '/api/discover?domain=quest' });
+    const response = await call({ path: '/api/discover?domain=bounty' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ detail: { actions: [{ id: 'quest.claim' }] } });
+    expect(response.body).toMatchObject({ detail: { actions: [{ id: 'bounty.list' }] } });
   });
 
   it('serves search', async () => {
-    const response = await call({ path: '/api/search?type=quest&name=clai' });
+    const response = await call({ path: '/api/search?type=bounty&name=lis' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'quest.claim', name: 'claim' }]);
+    expect(response.body).toEqual([{ id: 'bounty.list', name: 'list' }]);
   });
 
   it('runs an action through act', async () => {
     const response = await call({
       method: 'POST',
       path: '/api/act',
-      body: { action: 'quest.claim', input: { id: 'shared-1' } },
+      body: { action: 'bounty.list', input: { id: 'shared-1' } },
     });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ claimed: 'shared-1' });
+    expect(response.body).toEqual({ listed: 'shared-1' });
   });
 
   it('answers 404 for a path it does not serve', async () => {
@@ -109,7 +125,9 @@ describe('what a client is told when something fails', () => {
     const response = await call({ method: 'POST', path: '/api/act', body: { action: 'nope.run' } });
 
     expect(response.status).toBe(404);
-    expect(response.body).toMatchObject({ error: expect.stringContaining('known domains: quest') });
+    expect(response.body).toMatchObject({
+      error: expect.stringContaining('known domains: bounty'),
+    });
   });
 
   it('reports a failed authentication as 401, with the reason', async () => {
@@ -145,7 +163,7 @@ describe('what a client is told when something fails', () => {
       method: 'POST',
       url: `${ORIGIN}/api/act`,
       headers: new Map(),
-      body: { action: 'quest.claim', input: { id: 'x' } },
+      body: { action: 'bounty.list', input: { id: 'x' } },
     });
 
     expect(checked).toEqual(['auth']);
@@ -163,11 +181,98 @@ describe('what a client is told when something fails', () => {
       method: 'POST',
       url: `${ORIGIN}/api/act`,
       headers: new Map(),
-      body: { action: 'quest.claim', input: { id: 'x' } },
+      body: { action: 'bounty.list', input: { id: 'x' } },
     });
 
     expect(response.status).toBe(401);
-    expect(response.body).not.toHaveProperty('claimed');
+    expect(response.body).not.toHaveProperty('listed');
+  });
+});
+
+describe('the actions /api/act refuses because it cannot see the caller', () => {
+  /**
+   * Every id whose payload names a caller, and what the refusal says.
+   *
+   * Written out as data rather than derived, because the list in `routes.ts` is
+   * the thing that can rot: a new action that takes an `agentId` and is not on
+   * it is a hole, and nothing in the build notices. A test that merely asserts
+   * "these six are refused" would pass against a list of one, or of none.
+   */
+  const REFUSED = [
+    { action: 'quest.claim', names: 'POST /api/quests/{id}/claim' },
+    { action: 'quest.submit', names: 'POST /api/quests/{id}/submit' },
+    { action: 'quest.admin.revoke', names: 'no HTTP door' },
+    { action: 'session.create', names: 'POST /api/sessions' },
+    { action: 'session.heartbeat', names: 'POST /api/sessions/{id}/heartbeat' },
+    { action: 'session.end', names: 'POST /api/sessions/{id}/end' },
+  ] as const;
+
+  for (const { action, names } of REFUSED) {
+    it(`refuses ${action} and says ${names}`, async () => {
+      // A runtime that has never heard of the action, deliberately: the refusal
+      // has to be the ROUTE's, decided before the registry is consulted. A gate
+      // that ran after the lookup would answer "unknown action" for a caller who
+      // has the id right, which is a different bug wearing the same test.
+      const handle = createRoutes({ api: createApplicationApi(runtimeWithOneAction()) });
+
+      const response = await handle({
+        method: 'POST',
+        url: `${ORIGIN}/api/act`,
+        headers: new Map(),
+        body: { action, input: { agentId: 'agent-theirs', ownerId: 'user-theirs' } },
+      });
+
+      expect(response.status).toBe(403);
+      expect(response.body).toMatchObject({ action });
+      expect(String((response.body as { error: string }).error)).toContain(names);
+    });
+  }
+
+  it('refuses before the runtime is asked, so a payload naming somebody else changes nothing', () => {
+    // The negative case for the tests above. If the gate were a comparison
+    // against something the payload supplied, an id that HAPPENS to match would
+    // sail through — so this asserts the opposite of the hole rather than a
+    // restatement of the fix.
+    expect(callerScopedRefusal('quest.claim')).toBeDefined();
+    expect(callerScopedRefusal('bounty.list')).toBeUndefined();
+    expect(callerScopedRefusal('social.send')).toBeUndefined();
+  });
+
+  it('answers an unknown action as unknown rather than as gated', async () => {
+    // Ordering, and it is a real one: a client that misspelled an id must be
+    // told that, not sent looking for a route.
+    const handle = createRoutes({ api: createApplicationApi(runtimeWithOneAction()) });
+
+    const response = await handle({
+      method: 'POST',
+      url: `${ORIGIN}/api/act`,
+      headers: new Map(),
+      body: { action: 'session.stop', input: {} },
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('still refuses an unauthenticated caller, whatever the action', async () => {
+    // The gate sits BEHIND authentication. If it did not, the 403 would leak
+    // which actions exist to a caller with no credential at all — and this
+    // surface is a catch-all, so "which ids are gated" is a map of the routes
+    // in the app.
+    const handle = createRoutes({
+      api: createApplicationApi(runtimeWithOneAction()),
+      authenticate: () => {
+        throw new TestAuthFailure('missing');
+      },
+    });
+
+    const response = await handle({
+      method: 'POST',
+      url: `${ORIGIN}/api/act`,
+      headers: new Map(),
+      body: { action: 'quest.claim', input: {} },
+    });
+
+    expect(response.status).toBe(401);
   });
 });
 

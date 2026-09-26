@@ -13,11 +13,12 @@ import type { HttpRequest, HttpResponse } from './routes.js';
  * path. `createRoutes` switches on `` `${method} ${pathname}` ``, which has
  * exactly one spelling per route; a session id is a value, not a spelling.
  *
- * One route lives here, and it is worth being honest about why. `session
- * .heartbeat` is a registered action and `/api/act` already reaches it, so this
- * route adds no capability. What it adds is the one thing `act()` structurally
- * cannot: see the note on `resolveSession` below. The ownership question has to
- * be answered by whoever exposes an action over HTTP, and this is that place.
+ * Three routes, and all three exist for the same reason rather than because
+ * they are useful: each one reaches a registered action that names its caller,
+ * and `act()` structurally cannot see the caller. `/api/act` refuses those three
+ * ids outright (see `CALLER_SCOPED_ACTIONS` in `routes.ts`), so these are the
+ * only way over HTTP to start a run, keep one alive, or end one — and each of
+ * them fills in the identity from the credential rather than from the body.
  */
 
 /** The installation a presented Bearer token resolved to. */
@@ -30,6 +31,25 @@ export interface OwnedSession {
   readonly id: string;
   readonly agentId: string;
   readonly status: string;
+}
+
+/**
+ * The human and the machine a caller's installation belongs to, as the ownership
+ * query returns them.
+ *
+ * Two fields rather than one, and the second is not a convenience. The handshake
+ * takes an `installationKey`, and `findOrCreateInstallation` is unique on
+ * (owner, key) — so a key the client guessed wrong does not fail, it quietly
+ * creates a SECOND installation, and the session that lands on it belongs to an
+ * installation the presented credential does not own. Every ownership-checked
+ * route then refuses it, so a caller cannot use the run it just opened on
+ * anything else. Nothing over HTTP tells a client which key its credential was
+ * issued against, which makes the body's copy of it a field a client gets wrong
+ * rather than one it can supply.
+ */
+export interface OwnedOwner {
+  readonly userId: string;
+  readonly installationKey: string;
 }
 
 export interface SessionRouteDependencies {
@@ -61,28 +81,48 @@ export interface SessionRouteDependencies {
     sessionId: string,
     installationId: string,
   ) => Promise<OwnedSession | undefined>;
+  /**
+   * The human and the machine the caller's installation belongs to.
+   *
+   * `session.create` takes an `ownerId`, and it is the most consequential of
+   * the three: the handshake resolves the installation AND the character by
+   * that id, so a caller naming somebody else's gets a live session on their
+   * account — one it then holds the id of, and the id is the join key to every
+   * other surface. It is also the only one of the three where the answer is
+   * never a question about an existing row, because the caller's installation
+   * ALWAYS has an owner (`installations.user_id` is NOT NULL) and a credential
+   * whose installation is gone cannot authenticate at all.
+   *
+   * REQUIRED, for the reason `authenticate` is: an optional resolver would mean
+   * a surface that could start a run as anybody, and the only signal that it
+   * could would be the shape of the wiring.
+   */
+  readonly resolveOwner: (installationId: string) => Promise<OwnedOwner | undefined>;
 }
 
 /**
  * The action this route reaches, written out rather than imported.
  *
- * `SESSION_HEARTBEAT` is exported by the agent feature, and this app is not
- * allowed to import a feature outside the composition root: `scripts/
- * removal-test.sh` strips the feature's import from `composition.ts` and its
- * dependency and path from the workspace, then typechecks the tree, so a second
- * importer turns "remove a feature" into "edit three files". `composition.ts` is
- * currently the only place in `apps/web` that names a feature, and that is a
- * property the gate depends on, not a coincidence.
+ * `SESSION_HEARTBEAT` and its two siblings are exported by the agent feature,
+ * and this app is not allowed to import a feature outside the composition root:
+ * `scripts/removal-test.sh` strips the feature's import from `composition.ts`
+ * and its dependency and path from the workspace, then typechecks the tree, so a
+ * second importer turns "remove a feature" into "edit three files".
+ * `composition.ts` is currently the only place in `apps/web` that names a
+ * feature, and that is a property the gate depends on, not a coincidence.
  *
- * The `satisfies` is what stops the literal from rotting. The union is
- * generated from every feature's manifest, so renaming the id upstream and
- * regenerating turns this line into a compile error rather than a route that
- * quietly 404s for everybody.
+ * The `satisfies` is what stops the literals from rotting. The union is
+ * generated from every feature's manifest, so renaming an id upstream and
+ * regenerating turns these lines into compile errors rather than routes that
+ * quietly 404 for everybody.
  */
+const SESSION_CREATE = 'session.create' satisfies RegisteredActionId;
 const SESSION_HEARTBEAT = 'session.heartbeat' satisfies RegisteredActionId;
+const SESSION_END = 'session.end' satisfies RegisteredActionId;
 
 /** `{id}` is the whole addressable part of a session, so one segment matches. */
 const HEARTBEAT_PATH = /^\/api\/sessions\/([^/]+)\/heartbeat$/;
+const END_PATH = /^\/api\/sessions\/([^/]+)\/end$/;
 
 export function createSessionRoutes(
   dependencies: SessionRouteDependencies,
@@ -90,8 +130,19 @@ export function createSessionRoutes(
   return async (request: HttpRequest) => {
     const url = new URL(request.url);
     try {
-      const match = request.method === 'POST' ? HEARTBEAT_PATH.exec(url.pathname) : null;
-      const segment = match?.[1];
+      if (request.method === 'POST' && url.pathname === '/api/sessions') {
+        return await create(dependencies, request);
+      }
+      if (request.method !== 'POST') {
+        return { status: 404, body: { error: 'not found', path: url.pathname } };
+      }
+      // The two `{id}` routes are told apart by their own patterns, and a
+      // segment is only decoded once one of them has matched: a path this
+      // surface does not address is a 404, and a `%` that is not valid
+      // percent-encoding in a path that IS addressed is a 400.
+      const beat = HEARTBEAT_PATH.exec(url.pathname);
+      const stop = beat === null ? END_PATH.exec(url.pathname) : null;
+      const segment = beat?.[1] ?? stop?.[1];
       if (segment === undefined) {
         return { status: 404, body: { error: 'not found', path: url.pathname } };
       }
@@ -99,10 +150,127 @@ export function createSessionRoutes(
       if (sessionId === undefined) {
         return { status: 400, body: { error: 'session id is not a valid URL segment' } };
       }
-      return await heartbeat(dependencies, request, sessionId);
+      return beat !== null
+        ? await heartbeat(dependencies, request, sessionId)
+        : await end(dependencies, request, sessionId);
     } catch (error) {
       return describeHttpFailure(error);
     }
+  };
+}
+
+/**
+ * `POST /api/sessions` — "this run is starting".
+ *
+ * BOTH identity fields are filled from the credential and neither is read from
+ * the body. The `ownerId` is who the run belongs to; the `installationKey` is
+ * which machine it is on, and the second is not cosmetic — see `OwnedOwner` for
+ * what a guessed key does.
+ *
+ * A body naming either one is REFUSED rather than ignored: 403 for every value
+ * that is not the caller's own, whether or not the named user or key exists, so
+ * the answer carries no information about which ids are real. Refusing rather
+ * than quietly substituting is the point, and it is the same trade
+ * `bounty.fund` makes for the same reason — a client whose idea of who it is has
+ * drifted is told so instead of being handed a run on somebody else's account.
+ *
+ * `agentName`, `harness` and an optional `projectKey` ARE read from the body: a
+ * property of the RUN rather than of the caller. Each is shape-checked here, and
+ * a field that is not a string is a 400 rather than a rejection from the
+ * feature, because the feature's rejection is a MALFORMED INPUT and reads as
+ * "the platform refused your input" to a client that in fact sent the wrong type
+ * in a field it filled in itself.
+ */
+async function create(
+  dependencies: SessionRouteDependencies,
+  request: HttpRequest,
+): Promise<HttpResponse> {
+  const caller = await dependencies.authenticate(request);
+  const body = request.body;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return { status: 400, body: { error: 'body must be a handshake' } };
+  }
+  const fields = body as Record<string, unknown>;
+  const { agentName, harness } = fields;
+  const projectKey = fields['projectKey'];
+  if (
+    typeof agentName !== 'string' ||
+    agentName.trim() === '' ||
+    typeof harness !== 'string' ||
+    harness.trim() === '' ||
+    (projectKey !== undefined && (typeof projectKey !== 'string' || projectKey.trim() === ''))
+  ) {
+    return {
+      status: 400,
+      body: {
+        error:
+          'body must carry a non-empty agentName and harness string, ' +
+          'and a projectKey string if it carries one at all',
+      },
+    };
+  }
+  // The body is checked before the store is asked anything: a request that was
+  // built wrong should not cost a query, and the caller is already authenticated
+  // by the time it arrives.
+  const owner = await dependencies.resolveOwner(caller.installationId);
+  if (owner === undefined) {
+    // Unreachable through the real store, because `installations.user_id` is NOT
+    // NULL and a credential whose installation is deleted cascades away with
+    // it. It is here so that if the schema ever moves, a session is refused
+    // rather than started for an owner nobody can name.
+    return { status: 404, body: { error: 'no owner for this credential' } };
+  }
+  const namedOwner = fields['ownerId'];
+  if (typeof namedOwner === 'string' && namedOwner !== owner.userId) {
+    return { status: 403, body: { error: 'a run belongs to the credential, not to the body' } };
+  }
+  const namedKey = fields['installationKey'];
+  if (typeof namedKey === 'string' && namedKey !== owner.installationKey) {
+    return { status: 403, body: { error: 'a run belongs to the credential, not to the body' } };
+  }
+  return {
+    status: 201,
+    body: await dependencies.api.act(SESSION_CREATE, {
+      installationKey: owner.installationKey,
+      ownerId: owner.userId,
+      agentName,
+      harness,
+      ...(projectKey === undefined ? {} : { projectKey }),
+    }),
+  };
+}
+
+/**
+ * `POST /api/sessions/{id}/end` — "this run is over".
+ *
+ * The same order as the heartbeat, and the same ownership query, because it is
+ * the same authorization question with a different verb: without it any
+ * credential-holder could end a run they have merely seen the id of, which
+ * stops an agent mid-task and releases its resume window to whoever gets there
+ * first.
+ *
+ * `reason` is the one field that reaches the action from the body. It is a
+ * label on the caller's OWN run — who asked for the end — so unlike the
+ * identities it names nobody, and the feature maps anything it does not
+ * recognise onto `crashed`, which is its decision and not this route's.
+ */
+async function end(
+  dependencies: SessionRouteDependencies,
+  request: HttpRequest,
+  sessionId: string,
+): Promise<HttpResponse> {
+  const caller = await dependencies.authenticate(request);
+  const session = await dependencies.resolveSession(sessionId, caller.installationId);
+  if (session === undefined) {
+    return { status: 404, body: { error: 'no such session' } };
+  }
+  const reason = stringField(request.body, 'reason');
+  return {
+    status: 200,
+    body: await dependencies.api.act(SESSION_END, {
+      sessionId,
+      ...(reason === undefined ? {} : { reason }),
+    }),
   };
 }
 
@@ -154,4 +322,20 @@ function decodeSegment(segment: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A non-blank string from a body, or undefined.
+ *
+ * Absent and blank are the same answer, which is what a client that sent
+ * `reason: ''` meant: it named no reason. `bounty-routes.ts` reads its fields
+ * the same way, and the two must agree — a route that treated one as present
+ * and the other as absent would answer differently for the same mistake.
+ */
+function stringField(body: unknown, name: string): string | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const value = (body as Record<string, unknown>)[name];
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }

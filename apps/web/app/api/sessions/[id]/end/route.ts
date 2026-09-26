@@ -1,0 +1,50 @@
+import { sharedSessionGateway } from '@/session-gateway.js';
+import type { HttpRequest, HttpResponse } from '@/routes.js';
+
+/**
+ * `POST /api/sessions/[id]/end` — the Next.js adapter.
+ *
+ * Thin for the same reason the event route is: it turns a `Request` into the
+ * shape the pure handler takes and the handler's `HttpResponse` back into a
+ * `Response`. Authentication, the ownership check and the translation into
+ * `session.heartbeat` all live behind `await sharedSessionGateway()`, where they are
+ * reachable from a test without a server.
+ *
+ * The path is rebuilt from the route segment rather than read off `request.url`,
+ * because the segment is the one Next.js has already matched: reading the URL
+ * back would re-parse a path the router has an answer for. `encodeURIComponent`
+ * and the handler's `decodeURIComponent` are a round trip, so the handler sees
+ * exactly the id Next.js put in `params` — whether Next hands that over decoded
+ * or raw, the two ends cancel out. The segment is never interpolated into a
+ * bare string, so a `..` or a slash in it cannot walk the URL somewhere else.
+ */
+export const POST = async (
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+): Promise<Response> => {
+  const { id } = await context.params;
+  const url = new URL(request.url);
+  url.pathname = `/api/sessions/${encodeURIComponent(id)}/end`;
+
+  const body: unknown = await request.json().catch(() => undefined);
+  const httpRequest: HttpRequest = {
+    method: request.method,
+    url: url.toString(),
+    headers: {
+      get: (name: string) => request.headers.get(name),
+    },
+    // An end may carry a `reason`. A body that is not JSON becomes `undefined`
+    // rather than a thrown SyntaxError, which the handler would answer as a 400
+    // anyway — and the heartbeat adapter can skip this entirely only because
+    // its command takes nothing from the body.
+    ...(body === undefined ? {} : { body }),
+  };
+
+  const response: HttpResponse = await (await sharedSessionGateway()).handle(httpRequest);
+  return new Response(JSON.stringify(response.body), {
+    status: response.status,
+    // exactOptionalPropertyTypes: a response with no headers omits the field
+    // rather than carrying an explicit undefined, so the spread needs no guard.
+    ...(response.headers === undefined ? {} : { headers: response.headers }),
+  });
+};

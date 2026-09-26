@@ -1,4 +1,9 @@
-import { authenticate, DrizzleCredentialStore, DrizzleSessionRepository } from '@battle-agents/db';
+import {
+  authenticate,
+  DrizzleCredentialStore,
+  DrizzleInstallationRepository,
+  DrizzleSessionRepository,
+} from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
 import type { ApplicationApi } from '@battle-agents/api';
 
@@ -53,6 +58,7 @@ export async function createSessionGateway(
 ): Promise<SessionGateway> {
   const { database } = dependencies;
   const sessions = new DrizzleSessionRepository(database);
+  const ownership = new DrizzleInstallationRepository(database);
   const handle = createSessionRoutes({
     api: dependencies.api ?? (await sharedApi()),
     // The same authenticator the telemetry plane uses, supplied rather than
@@ -83,6 +89,11 @@ export async function createSessionGateway(
     },
     resolveSession: (sessionId, installationId) =>
       sessions.findOwnedByInstallation(sessionId, installationId),
+    // The one query that turns a presented token into a human, and the SAME one
+    // the bounty gateway uses through `resolveSponsor`. Two copies of it would
+    // be two JOINs and two ideas of which column owns an installation, and the
+    // one that drifts is the one a route stops trusting.
+    resolveOwner: (installationId) => ownership.findOwner(installationId),
   });
   return { handle, close: () => Promise.resolve() };
 }

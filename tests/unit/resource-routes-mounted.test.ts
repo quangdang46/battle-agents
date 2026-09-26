@@ -54,6 +54,14 @@ const ADAPTERS = [
   { path: 'battles', gateway: 'sharedBattleGateway', methods: ['GET', 'POST'] },
   { path: 'battles/[id]', gateway: 'sharedBattleGateway', methods: ['GET'] },
   { path: 'battles/[id]/join', gateway: 'sharedBattleGateway', methods: ['POST'] },
+  // The quest transitions and the two session routes that resolve a caller.
+  // `POST /api/act` REFUSES every action these reach (see `CALLER_SCOPED_ACTIONS`
+  // in `apps/web/src/routes.ts`), so an adapter that is built, tested and never
+  // mounted is not a 404 somewhere nobody looks — it is the only door, closed.
+  { path: 'quests/[id]/claim', gateway: 'sharedQuestGateway', methods: ['POST'] },
+  { path: 'quests/[id]/submit', gateway: 'sharedQuestGateway', methods: ['POST'] },
+  { path: 'sessions', gateway: 'sharedSessionGateway', methods: ['POST'] },
+  { path: 'sessions/[id]/end', gateway: 'sharedSessionGateway', methods: ['POST'] },
 ] as const;
 
 describe('the bounty and battle resource routes are mounted', () => {
@@ -146,6 +154,8 @@ describe('the removal test is still survivable', () => {
       'battle-gateway.ts',
       'battle-routes.ts',
       'http-failure.ts',
+      'quest-gateway.ts',
+      'quest-routes.ts',
     ];
     for (const name of newFiles) {
       const source = readFileSync(join(srcDir, name), 'utf8');
