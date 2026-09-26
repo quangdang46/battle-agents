@@ -91,6 +91,75 @@ export type {
 } from './judge.js';
 export { BATTLE_ACTION_IDS } from './manifest.js';
 export type { BattleActionId, BattleActionTypes } from './manifest.js';
+export {
+  commitLintVerdict,
+  DESTRUCTIVE_PATTERNS,
+  destructiveVerdict,
+  evaluateCommand,
+  extractCommitMessage,
+  GATE_NAMES,
+  isCommitOnMain,
+  mainCommitVerdict,
+  testGateVerdict,
+  validateCommitMessage,
+  VALID_COMMIT_TYPES,
+} from './gates.js';
+export type {
+  CommandGuard,
+  DestructivePattern,
+  GateContext,
+  GateName,
+  GateVerdict,
+} from './gates.js';
+export {
+  BATTLE_JUDGE_RESULT,
+  BATTLE_JUDGE_STEP,
+  compileRules,
+  criteriaFrom,
+  DEFAULT_JUDGE_PLAN,
+  DEFAULT_SECURITY_RULES,
+  emitJudgeEvents,
+  JUDGE_PERSISTED_EVENT_TYPES,
+  JUDGE_STEPS,
+  parseNumstat,
+  runJudge,
+} from './judge-run.js';
+export type {
+  JudgeForfeit,
+  JudgeObservation,
+  JudgeReport,
+  JudgeRunRequest,
+  JudgeStepEvent,
+  JudgeStepName,
+  JudgeStepOutcome,
+  JudgeStepPlan,
+  RejectedRule,
+  SecurityFinding,
+  SecurityRule,
+} from './judge-run.js';
+export {
+  isInside,
+  realpathOfNearestExisting,
+  resolveInside,
+  WorkspaceEscape,
+} from './workspace-paths.js';
+export type { WorkspaceEscapeReason } from './workspace-paths.js';
+export {
+  environmentFor,
+  guardInWorkspace,
+  makeScratchBase,
+  provisionWorkspace,
+  removeScratchBase,
+  runInWorkspace,
+  SKIP_TEST_GATE_ENV,
+  WORKSPACE_ENV_ALLOWLIST,
+} from './workspace.js';
+export type {
+  WorkspaceHandle,
+  WorkspaceProvision,
+  WorkspaceRunOptions,
+  WorkspaceRunResult,
+} from './workspace.js';
 export { BATTLE_NOT_FOUND, isBattleStorageFailure } from './repository.js';
 export type {
   BattleFilter,

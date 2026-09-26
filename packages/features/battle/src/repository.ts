@@ -112,6 +112,20 @@ export interface BattleRepository {
   findById(battleId: string): Promise<StoredBattle | undefined>;
 
   /**
+   * A battle by the handle its public replay link carries, or undefined.
+   *
+   * A SECOND identifier rather than reusing `id`, and the reason is that a
+   * replay link is permanent and public while a battle's primary key is an
+   * internal handle. Handing the same value to both means every leak of the
+   * internal id — a log line, a support ticket, an error message — is also a
+   * leak of a public address, and it means the day the internal read path gets
+   * an access rule the shared link becomes the way around it. `replay_id` is
+   * random rather than derived, so the public handle cannot be walked back to
+   * the row from anything else.
+   */
+  findByReplayId(replayId: string): Promise<StoredBattle | undefined>;
+
+  /**
    * Battles matching the filter, newest first.
    *
    * No limit, for the reason features/quest states: a store that silently capped

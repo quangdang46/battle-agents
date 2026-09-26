@@ -60,6 +60,35 @@ export interface ActivityLog {
    * happened" without paging through everything before it.
    */
   recent(sessionId: string, limit: number): Promise<readonly ActivityEntry[]>;
+
+  /**
+   * The rows belonging to one subject, in log order.
+   *
+   * A subject is a payload key and its value, plus a set of sessions. A battle
+   * is the case this exists for: its own rows are tagged `battleId`, and the
+   * rows its fighters produced are tagged with a session and nothing else, so
+   * neither half alone is the battle's timeline. A caller reads the tagged half,
+   * learns which sessions took part, and reads their half — every row from the
+   * log, and no feature table, which is the property that keeps a trail from
+   * disagreeing with the tables that wrote it.
+   *
+   * The key is a PARAMETER rather than a named scope because a log that knew
+   * what a battle is would be a log that had to change when the game's
+   * vocabulary does. The caller chooses what it is asking about; this only knows
+   * that a row can carry a tag.
+   *
+   * A query with neither a tag nor any session id is EMPTY, not "everything".
+   * The other answer is a full table scan of the audit trail handed to a caller
+   * that asked for nothing, so the empty case is decided here rather than left
+   * to a WHERE clause that happens to have no clauses.
+   */
+  scopedTimeline(query: ScopedTimelineQuery): Promise<readonly ActivityEntry[]>;
+}
+
+export interface ScopedTimelineQuery {
+  readonly tagged?: { readonly key: string; readonly value: string };
+  readonly sessionIds?: readonly string[];
+  readonly limit?: number;
 }
 
 /** Ordering and the shape of a summary line. Both belong to the log, not to

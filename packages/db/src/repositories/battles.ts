@@ -72,6 +72,17 @@ export interface BattleStore {
     readonly now: string;
   }): Promise<BattleRow>;
   findById(battleId: string): Promise<BattleRow | undefined>;
+  /**
+   * A battle by the public handle its replay link carries.
+   *
+   * The only lookup the logged-out replay path performs, and it is deliberately
+   * narrow: it answers whether a battle EXISTS behind a link and returns its
+   * internal id so the caller can read the log. Nothing the row says about the
+   * battle is used to build the replay, because the replay is a projection of
+   * the event log and a table that could contradict it is a second source for
+   * one fact.
+   */
+  findByReplayId(replayId: string): Promise<BattleRow | undefined>;
   list(filter: { readonly status?: string }): Promise<readonly BattleRow[]>;
   participants(battleId: string): Promise<readonly BattleParticipantRow[]>;
   /**
@@ -151,6 +162,16 @@ export class DrizzleBattleRepository implements BattleStore {
       .select()
       .from(battles)
       .where(eq(battles.id, battleId))
+      .limit(1);
+    const row = rows[0];
+    return row === undefined ? undefined : toBattleRow(row);
+  }
+
+  async findByReplayId(replayId: string): Promise<BattleRow | undefined> {
+    const rows = await this.#database
+      .select()
+      .from(battles)
+      .where(eq(battles.replayId, replayId))
       .limit(1);
     const row = rows[0];
     return row === undefined ? undefined : toBattleRow(row);

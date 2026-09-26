@@ -8,6 +8,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -107,16 +108,47 @@ export const battles = pgTable(
     pausedAt: timestamp('paused_at', { withTimezone: true }),
     resumeDeadline: timestamp('resume_deadline', { withTimezone: true }),
     /**
-     * The battle timeline, built by ba-battle-replay-yjb from the activity log
-     * and the judge's per-criterion events. Left nullable and untouched: the
-     * column is where that bead writes, and a battle that has not been replayed
-     * has no timeline rather than an empty one.
+     * The battle's PUBLIC handle: the id a shared replay link carries.
+     *
+     * A second identifier rather than the primary key, for the reason the port
+     * method `findByReplayId` gives. A replay link is permanent and public; a
+     * row's primary key is an internal handle; sharing one value makes every
+     * leak of the internal id a leak of a public address.
+     *
+     * NOT NULL with a random default, so a battle is addressable the moment it
+     * exists and there is no window in which a row has no public id. Random and
+     * not derived, because a derived id is either guessable (the row's own
+     * primary key) or dependent on a secret whose rotation breaks every link
+     * already on the internet. UNIQUE, because two battles answering to one
+     * public link is the one state in which the handle does not identify a
+     * battle.
+     */
+    replayId: uuid('replay_id').notNull().defaultRandom(),
+    /**
+     * Never written.
+     *
+     * It was here for ba-battle-replay-yjb, on the assumption that the bead
+     * would store the built timeline here. It does not, and the reason is the
+     * property the bead exists to have: a replay is a pure function of the
+     * persisted event stream, so a copy kept in a feature table is a second
+     * source for one fact, free to disagree with the log, and a row that
+     * disagrees with the log is indistinguishable from a correct one. A battle
+     * whose log has aged out gets a stated degraded state instead of a
+     * preserved timeline, which is what a 365-day retention window means.
+     *
+     * The column stays so a later bead can drop it without a migration here, and
+     * the comment is corrected rather than deleted because the claim it used to
+     * make was false and a false claim is what a reader acts on.
      */
     replayJson: jsonb('replay_json').$type<Record<string, unknown>>(),
   },
   (table) => [
     index('battles_bounty_id_idx').on(table.bountyId),
     index('battles_status_idx').on(table.status),
+    // The public replay path looks a battle up by THIS column and by nothing
+    // else, so the index is what makes a shared link cheap — and its uniqueness
+    // is the reason one link cannot resolve to two battles.
+    uniqueIndex('battles_replay_id_unique').on(table.replayId),
     // The sweep asks "which paused battles are past their window" on every tick,
     // and without this it is a sequential scan of every battle ever opened.
     index('battles_resume_deadline_idx').on(table.resumeDeadline),

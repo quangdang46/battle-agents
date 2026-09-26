@@ -104,6 +104,10 @@ interface CountRow {
   readonly row_count: number;
 }
 
+interface ColumnDefaultRow {
+  readonly column_default: string | null;
+}
+
 interface ProbeIdRow {
   readonly id: number;
 }
@@ -431,6 +435,66 @@ export function checkBattleParticipantIdentity(snapshot: SchemaSnapshot): readon
   return failures;
 }
 
+export function checkBattleReplayHandle(snapshot: SchemaSnapshot): readonly string[] {
+  const failures: string[] = [];
+  const battles = columnNames(snapshot, 'battles');
+  if (!battles.includes('replay_id')) {
+    failures.push(
+      'battles.replay_id is missing. It is the only handle a public replay link carries, ' +
+        'and without it every shared link is either a guess at battles.id or a dead link.',
+    );
+    return failures;
+  }
+  return failures;
+}
+
+/**
+ * The public handle is present, random and one-per-battle.
+ *
+ * The three properties are the ones a bulk scrape of every battle on the
+ * platform would need, and the third is the only one a column list can answer:
+ * a shared link resolving to two battles is not an address. The first two are
+ * read out of `information_schema` rather than assumed, because the assumption
+ * is exactly what a later migration would quietly break — swapping a random
+ * default for a sequence keeps the column, keeps it non-null, and turns the
+ * platform's entire battle history into an enumerable list.
+ */
+async function checkBattleReplayIds(database: Database): Promise<readonly string[]> {
+  const failures: string[] = [];
+  const columns = await readRows<ColumnDefaultRow>(
+    await database.execute(sql`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_schema = ${PUBLIC_SCHEMA} AND table_name = 'battles' AND column_name = 'replay_id'
+    `),
+    'battles.replay_id default',
+  );
+  const columnDefault = columns[0]?.column_default;
+  if (columnDefault === undefined || columnDefault === null) {
+    failures.push('battles.replay_id has no default, so a battle is created with no public link');
+  } else if (!columnDefault.includes('gen_random_uuid()')) {
+    failures.push(
+      `battles.replay_id defaults to "${columnDefault}", which is not a random value. A public ` +
+        'handle that is sequential lets anybody enumerate every battle on the platform.',
+    );
+  }
+
+  const duplicates = await readRows<CountRow>(
+    await database.execute(sql`
+      SELECT COUNT(*)::integer AS row_count FROM (
+        SELECT replay_id FROM battles WHERE replay_id IS NOT NULL
+        GROUP BY replay_id HAVING COUNT(*) > 1
+      ) duplicated
+    `),
+    'duplicate battles.replay_id',
+  );
+  if ((duplicates[0]?.row_count ?? 0) > 0) {
+    failures.push(
+      'two or more battles share a replay_id, so a shared link does not identify one battle',
+    );
+  }
+  return failures;
+}
+
 export function checkPlatformAndFeatureSplit(snapshot: SchemaSnapshot): readonly string[] {
   const managed = new Set<string>([...PLATFORM_TABLES, ...FEATURE_TABLES]);
   return snapshot.tableNames
@@ -525,6 +589,7 @@ export async function runSchemaVerification(database: Database): Promise<readonl
     ...checkCredentialStoresOnlyHashes(snapshot),
     ...checkMoneyIsIntegerCents(snapshot),
     ...checkBattleParticipantIdentity(snapshot),
+    ...checkBattleReplayHandle(snapshot),
   ];
 
   if (funding === undefined) {
@@ -543,6 +608,7 @@ export async function runSchemaVerification(database: Database): Promise<readonl
 
   failures.push(...(await checkSeedIsIdempotent(database)));
   failures.push(...(await checkEventLogSequenceIsWritable(database)));
+  failures.push(...(await checkBattleReplayIds(database)));
   return failures;
 }
 

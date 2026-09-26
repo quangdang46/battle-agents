@@ -12,9 +12,11 @@
  * resolved by a stated rule or shared, and a half-judged battle is refused rather
  * than scored. What is NOT here is anything that stops a participant from
  * reading the other one's work, from having an unfair environment, or from
- * winning by means the judge cannot see. The isolated workspaces that address the
- * first of those belong to ba-battle-workspace-judge-jc9 and do not exist yet, so
- * today two participants have no isolation from this feature's side.
+ * winning by means the judge cannot see. `workspace.ts` and `judge-run.ts` are
+ * that half and they arrived with ba-battle-workspace-judge-jc9; read
+ * `workspace.ts`'s own header for the boundary they actually draw, because it is
+ * narrower than "two participants cannot see each other" and the difference
+ * matters more than the presence of the file.
  *
  * Stated here rather than in a document because a gap written down in a document
  * is a gap nobody reads at the point they decide to trust a result.
@@ -22,10 +24,12 @@
  * anti-cheat is solved; nothing in this package claims it is.
  *
  * The workspace-level half of isolation — one participant cannot see or affect
- * the other's workspace — is ba-battle-workspace-judge-jc9. What this feature
- * owns of isolation is the one half it can: a session that is not a participant
- * cannot have a result scored into the battle, and a battle's view never carries
- * another battle's session.
+ * the other's workspace — is `workspace.ts`, and what it guarantees is narrower
+ * than its name: THE JUDGE READS A WORKSPACE THROUGH A HANDLE THAT CANNOT
+ * LEAVE IT, and a command a participant runs is not confined by that. What this
+ * feature owns of isolation is the one half it always could: a session that is
+ * not a participant cannot have a result scored into the battle, and a battle's
+ * view never carries another battle's session.
  *
  * The battle itself is not a second resolution path. A participant submits to a
  * BOUNTY through the bounty feature and the merge is what resolves the battle;
@@ -96,6 +100,7 @@ import {
   type BattleStats,
   type BehaviourAccumulator,
 } from './stats.js';
+import { JUDGE_PERSISTED_EVENT_TYPES } from './judge-run.js';
 
 /* ───────────────────────────── events ───────────────────────────── */
 
@@ -238,6 +243,15 @@ export function battleFeature(dependencies: BattleDependencies): GameFeature {
       BATTLE_FINISHED,
       BATTLE_ABANDONED,
       BATTLE_EXPIRED,
+      // The judge RUN's stream, and the reason a replay can show its work.
+      //
+      // Declared here, by the feature that owns the types, because the
+      // alternative is a judge that emits a perfectly good event stream which a
+      // restart erases — and it looks identical until then. `judge-run.ts` names
+      // the list next to the emitters; this is where it becomes durable, and
+      // `tests/integration/battle-judge-persistence.test.ts` breaks the
+      // declaration to watch the replay go empty.
+      ...JUDGE_PERSISTED_EVENT_TYPES,
     ],
     // Declared, and declared for real. `reputation.read` EXISTS as of today, so
     // this is no longer a claim about a hypothetical provider: install the two
@@ -599,6 +613,18 @@ async function finish(
   // And one battle-level record of how the whole thing ended, for the replay and
   // for a dispute. It carries no agent, so it is not an award and cannot be
   // mistaken for one.
+  //
+  // The per-participant scores travel WITH it, and the reason is that this row
+  // is the log's only record of the arithmetic. `battle_participants.score_json`
+  // holds it too, but a trail assembled from a table cannot answer "what
+  // happened next" and a dispute rests on the log, so a judgment the log cannot
+  // reconstruct is a judgment that only the current state of one row supports.
+  // With them, the replay is a pure function of the event stream: read the
+  // timeline, read this row, and the scoreboard is the whole of it.
+  //
+  // Sorted by session id, because a payload whose array order follows the order
+  // a query happened to return is a payload that reads differently on the next
+  // request, and the replay built from it would not be deterministic.
   await context.runtime.emit(
     event(context, BATTLE_FINISHED, {
       battleId: battle.id,
@@ -608,6 +634,13 @@ async function finish(
       reason: outcome.kind === 'won' ? outcome.reason : outcome.reason,
       winnerSessionIds: [...winners].sort(),
       participants: after.map((participant) => participant.sessionId),
+      scores: [...scored]
+        .map((entry) => ({
+          sessionId: entry.result.sessionId,
+          total: entry.score.total,
+          criteria: entry.score.contributions.map((contribution) => ({ ...contribution })),
+        }))
+        .sort((left, right) => left.sessionId.localeCompare(right.sessionId)),
     }),
   );
 

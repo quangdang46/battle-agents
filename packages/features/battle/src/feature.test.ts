@@ -51,6 +51,11 @@ class MemoryBattles implements BattleRepository {
    *  and a field of the same name shadows it — the fake would have satisfied the
    *  interface and thrown on the first call. */
   readonly rows = new Map<string, StoredParticipant[]>();
+  /** A SECOND key, because the port has two identifiers and a fake that
+   *  answered `findByReplayId` from the id map would make the two look like one.
+   *  That look is the property this bead exists to prevent, so the fake has to be
+   *  able to tell them apart or it cannot fail a regression that merged them. */
+  readonly replayIds = new Map<string, string>();
   #nextId = 1;
 
   async create(input: {
@@ -72,6 +77,7 @@ class MemoryBattles implements BattleRepository {
       resumeDeadline: null,
     };
     this.battles.set(battle.id, battle);
+    this.replayIds.set(battle.id, `replay-${battle.id}`);
     this.rows.set(battle.id, [
       {
         battleId: battle.id,
@@ -87,6 +93,17 @@ class MemoryBattles implements BattleRepository {
 
   async findById(battleId: string): Promise<StoredBattle | undefined> {
     return this.battles.get(battleId);
+  }
+
+  async findByReplayId(replayId: string): Promise<StoredBattle | undefined> {
+    // A scan, because the fake keeps the public handle in its own map and the
+    // real store answers from a unique index. A linear scan over a handful of
+    // rows is the honest translation, and it is honest precisely because it does
+    // NOT reuse the id map.
+    for (const [battleId, handle] of this.replayIds) {
+      if (handle === replayId) return this.battles.get(battleId);
+    }
+    return undefined;
   }
 
   async list(filter: { status?: string }): Promise<readonly StoredBattle[]> {
