@@ -71,7 +71,9 @@ import { forRepository, prUrlFor, type RepositoryCoordinates } from './domain.js
 export const GITHUB_PULL_REQUEST_MERGED = 'github.pull_request.merged';
 
 /** The two award names, declared here so a test can read both off one module. */
-export const BOUNTY_COMPLETED = 'bounty.completed';
+import { BOUNTY_EVENTS } from '@battle-agents/protocol';
+
+export const BOUNTY_COMPLETED = BOUNTY_EVENTS.completed;
 export const PULL_REQUEST_MERGED_OUTCOME = 'pr.merged';
 
 /** What the integration layer tells us a merge happened. */

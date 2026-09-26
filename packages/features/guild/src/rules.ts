@@ -1,3 +1,5 @@
+import { BOUNTY_EVENTS } from '@battle-agents/protocol';
+
 import {
   DEFAULT_ROLE,
   GUILD_ROLES,
@@ -83,7 +85,7 @@ export const ROLE_SIGNALS: Readonly<Record<GuildRole, RoleSignalRule>> = {
    * the feature that observed it.
    */
   coder: {
-    evidence: [['bounty.completed', 3]],
+    evidence: [[BOUNTY_EVENTS.completed, 3]],
     wantedButNotDurable: [],
   },
   /**

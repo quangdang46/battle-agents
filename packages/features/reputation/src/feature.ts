@@ -35,7 +35,9 @@ export const REPUTATION_READ = 'reputation.read';
 export const REPUTATION_GATE = 'reputation.gate';
 
 /** The outcomes this feature reacts to, named here so the two sides cannot drift. */
-export const BOUNTY_COMPLETED = 'bounty.completed';
+import { BOUNTY_EVENTS } from '@battle-agents/protocol';
+
+export const BOUNTY_COMPLETED = BOUNTY_EVENTS.completed;
 export const BOUNTY_FAILED = 'bounty.failed';
 
 export interface BountyCompletedPayload {

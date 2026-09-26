@@ -1,4 +1,5 @@
 import { defineAction } from '@battle-agents/core';
+import { BOUNTY_EVENTS } from '@battle-agents/protocol';
 import type {
   ActionDef,
   EventHandler,
@@ -747,7 +748,7 @@ async function observe(
   // counting both would score one pull request twice — the unique key would stop
   // the second row, but the reason to not ask for it is that "work" and "a
   // reviewer's judgement" are different facts and only one of them is work.
-  if (eventType !== 'bounty.completed' || facts === undefined) {
+  if (eventType !== BOUNTY_EVENTS.completed || facts === undefined) {
     return;
   }
 

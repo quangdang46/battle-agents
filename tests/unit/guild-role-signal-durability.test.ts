@@ -2,7 +2,29 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { PERSISTED_EVENT_TYPES } from '@battle-agents/core';
+import {
+  ACHIEVEMENT_EVENTS,
+  AGENT_EVENTS,
+  BATTLE_EVENTS,
+  BOUNTY_EVENTS,
+  GUILD_EVENTS,
+  QUEST_EVENTS,
+  SESSION_EVENTS,
+  SOCIAL_EVENTS,
+} from '@battle-agents/protocol';
 import { describe, expect, it } from 'vitest';
+
+/** The named groups a `GROUP.key` reference in ROLE_SIGNALS can resolve through. */
+const GAME_EVENT_GROUPS = {
+  ACHIEVEMENT_EVENTS,
+  AGENT_EVENTS,
+  BATTLE_EVENTS,
+  BOUNTY_EVENTS,
+  GUILD_EVENTS,
+  QUEST_EVENTS,
+  SESSION_EVENTS,
+  SOCIAL_EVENTS,
+} as const;
 
 /**
  * A guild role may only be projected from a DURABLE event.
@@ -59,6 +81,18 @@ function constantValues(dir: string): Map<string, string> {
     const source = readFileSync(file, 'utf8');
     for (const match of source.matchAll(/(?:export )?const ([A-Z0-9_]+)\s*=\s*'([^']+)'/g)) {
       out.set(match[1] as string, match[2] as string);
+    }
+    // A constant that now points at the protocol's shared name:
+    // `export const BOUNTY_COMPLETED = BOUNTY_EVENTS.completed`. The
+    // literal-only pattern above cannot see it, so `bounty.completed` silently
+    // dropped out of the durable set — and a durable set missing an entry makes
+    // the `leans only on types the installed set will actually keep` assertion
+    // pass for the wrong reason, which is precisely what this file is for.
+    for (const match of source.matchAll(/(?:export )?const ([A-Z0-9_]+)\s*=\s*([A-Z0-9_]+)\.([a-zA-Z0-9_]+)/g)) {
+      const [, constant, group, key] = match;
+      if (constant === undefined || group === undefined || key === undefined) continue;
+      const value = (GAME_EVENT_GROUPS as Record<string, Readonly<Record<string, string>>>)[group]?.[key];
+      if (value !== undefined) out.set(constant, value);
     }
   }
   return out;
@@ -171,12 +205,58 @@ function busOnlyInThisBuild(
   return busOnly;
 }
 
+/**
+ * The event names in the ROLE_SIGNALS table, with a constant reference resolved.
+ *
+ * The pairs used to be written as `['bounty.completed', 3]`, so a regex over
+ * string literals found every one of them. They are now written
+ * `[BOUNTY_EVENTS.completed, 3]` — the name is spelled once, in protocol — and
+ * that change silently emptied this function: the regex matched nothing, the
+ * returned set was empty, and `expect(busOnly).toEqual([])` passed because an
+ * empty set is a subset of every durable set. The floor assertion below did not
+ * catch it either, because it only checks that the set is NON-empty when the
+ * table exists, and the failure was elsewhere.
+ *
+ * So a `GROUP.key` reference is resolved against `GAME_EVENT_NAMES` rather than
+ * skipped. A reference this function cannot resolve is a NAME it does not have,
+ * and reporting that is the honest answer — a silently-dropped row is the exact
+ * failure this file exists to catch, reintroduced through its own parser.
+ */
 function guildEvidenceTypes(): readonly string[] {
   if (!existsSync(GUILD_RULES)) return [];
   const source = stripComments(readFileSync(GUILD_RULES, 'utf8'));
   const table = /ROLE_SIGNALS[\s\S]*?\n\};/.exec(source)?.[0];
   if (table === undefined) return [];
-  return [...table.matchAll(/\[\s*'([^']+)'\s*,\s*\d+\s*\]/g)].map((match) => match[1] as string);
+  const found: string[] = [];
+  // `evidence` holds an array of PAIRS, so the literal in the source is
+  // `[[NAME, 3]]` — doubly nested. A pattern anchored on one `[` starts at the
+  // inner bracket and captures the key correctly, but the outer one is consumed
+  // as part of the match, which is how a working extractor ends up reporting a
+  // name with a bracket stuck to the front of it.
+  for (const match of table.matchAll(/\[\s*([A-Za-z_][A-Za-z0-9_.]*|'[^']*')\s*,\s*\d+\s*\]/g)) {
+    const key = (match[1] ?? '').trim();
+    if (key.startsWith("'") && key.endsWith("'")) {
+      found.push(key.slice(1, -1));
+      continue;
+    }
+    // A `GROUP.key` reference — `BOUNTY_EVENTS.completed` — resolved through
+    // the same object the feature reads, so the two cannot disagree.
+    const [group, name] = key.split('.');
+    if (group === undefined || name === undefined) continue;
+    const value = (GAME_EVENT_GROUPS as Record<string, Readonly<Record<string, string>>>)[group]?.[name];
+    // A reference that resolves to nothing is a row this function cannot read,
+    // and dropping it quietly is the failure this file exists to catch — so it
+    // is reported rather than skipped.
+    if (value === undefined) {
+      throw new Error(
+        `ROLE_SIGNALS references ${key}, which is not a game event group in @battle-agents/protocol. ` +
+          'A row this extractor cannot read would be dropped, and a dropped row makes every ' +
+          'durability assertion below pass for the wrong reason.',
+      );
+    }
+    found.push(value);
+  }
+  return found;
 }
 
 describe('every guild role signal is a durable event', () => {

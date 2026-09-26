@@ -122,6 +122,24 @@ export type { ZoneId } from './tool-map.js';
 
 export { DEFAULT_SESSION_RESUME_GRACE_MS } from './session-limits.js';
 
+// The GAME event names, in one place a removable feature cannot take with it.
+// Listed rather than star-exported, and the listing is the load-bearing part:
+// `GAME_EVENT_NAMES` is what a check compares a feature's spelling against, so
+// a name added to event-names.ts and forgotten here is invisible to the check
+// that exists to catch exactly that.
+export {
+  ACHIEVEMENT_EVENTS,
+  AGENT_EVENTS,
+  BATTLE_EVENTS,
+  BOUNTY_EVENTS,
+  GUILD_EVENTS,
+  GAME_EVENT_NAMES,
+  PULL_REQUEST_MERGED,
+  QUEST_EVENTS,
+  SESSION_EVENTS,
+  SOCIAL_EVENTS,
+} from './event-names.js';
+
 export { PROTOCOL_VERSION, protocolVersionSchema } from './version.js';
 
 // The extension contract version, which is not the protocol version. Listed

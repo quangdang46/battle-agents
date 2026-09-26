@@ -1,3 +1,5 @@
+import { BOUNTY_EVENTS } from '@battle-agents/protocol';
+
 /**
  * The achievement catalogue, as data.
  *
@@ -122,8 +124,8 @@ export interface AchievementRule {
 export const ACHIEVEMENT_RULES: readonly AchievementRule[] = [
   {
     code: 'first-bounty.v1',
-    trigger: 'bounty.completed',
-    evidence: { eventType: 'bounty.completed', times: 1, within: 'agent' },
+    trigger: BOUNTY_EVENTS.completed,
+    evidence: { eventType: BOUNTY_EVENTS.completed, times: 1, within: 'agent' },
     title: 'First Bounty',
     detail: 'Completed a bounty. The whole job: the issue was opened, the work was done, it shipped.',
   },
