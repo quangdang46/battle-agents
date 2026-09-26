@@ -33,9 +33,21 @@ Authorization callback URL: http://127.0.0.1:3000/api/auth/callback/github
 ```
 
 Use `127.0.0.1`, not `localhost`. GitHub treats them as different origins, and
-this mismatch is the single most likely reason a first run fails. The three
-failure modes worth knowing are written up in
-[apps/web/README.md](apps/web/README.md).
+this mismatch is the single most likely reason a first run fails.
+
+Three failure modes account for nearly every blocked first run, and all three
+are written up with symptom, cause and fix in
+[apps/web/README.md](apps/web/README.md#when-it-fails):
+
+- **`redirect_uri_mismatch`** — GitHub rejects the callback. The `127.0.0.1`
+  versus `localhost` mismatch above.
+- **Auth environment incomplete** — the app refuses to start with `auth is not
+configured` and the names of what is missing. `BETTER_AUTH_SECRET`,
+  `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`.
+- **The database is unreachable or empty** — a connection error, or a complaint
+  about a missing relation that surfaces at seed time rather than at startup.
+
+To run the gate as well, `pnpm install` once on the host, then `pnpm test:m0`.
 
 ## The gate
 
@@ -43,12 +55,19 @@ failure modes worth knowing are written up in
 pnpm test:m0
 ```
 
-Twelve stages: compose, migrations, seed, unit, integration, schema-drift,
-typecheck, architecture, schema-hygiene, removal-test, license, e2e-smoke.
 `scripts/stages.manifest` is the single definition, and a preflight fails the
 build if the manifest, the stage array and the dispatcher disagree, so a stage
 cannot be quietly dropped, added in one place only, or left with no
 implementation.
+
+This document deliberately does not enumerate the stages. An earlier version
+did, and went stale — the manifest had three stages the sentence never
+mentioned — because a number a script prints authoritatively is a number that
+will drift again. Read the list, or run it:
+
+```bash
+grep -vE '^[[:space:]]*(#|$)' scripts/stages.manifest
+```
 
 The same pipeline runs in CI. Local and CI execute the same steps in the same
 images, so a green run means what it says.
@@ -114,12 +133,20 @@ Two ideas that are easy to get backwards:
 
 ## Contributing
 
-[AGENTS.md](AGENTS.md) is the map for coding agents: what the project is, how it
-is laid out, and which rules are load-bearing.
+[CONTRIBUTING.md](CONTRIBUTING.md) is the guide for humans: the local setup, the
+three failure modes by name, the four frozen contracts, and the exact files you
+touch to add a package. [AGENTS.md](AGENTS.md) is the same territory arranged
+as a map for coding agents.
 
-Good first contributions are the fun-visible kind the plan asks for: an adapter
-for a harness nobody has added yet, a battle mode, a reporter. You ship
-something that shows up on screen rather than fixing an internal chore.
+There are **3** open good-first-issues, all fun-visible — you ship something
+that shows up on screen rather than fixing an internal chore. Read one with
+`br show <id>`:
+
+| Bead                                | You would add                                      |
+| ----------------------------------- | -------------------------------------------------- |
+| `ba-adapter-goose-good-first-cpd`   | an adapter, so Goose joins the roster              |
+| `ba-adapter-aider-good-first-9f1`   | an adapter, so Aider joins the roster              |
+| `ba-battle-reporter-good-first-rxz` | a page that renders a session as a readable report |
 
 Run the gate before you open a PR. It is the same command CI runs, and it is
 faster than a review round trip.
@@ -130,5 +157,8 @@ faster than a review round trip.
   the public stream may carry, and why the decision comes before the filter
 - [docs/design/payout-rail.md](docs/design/payout-rail.md): how money moves, and
   why the platform never holds it
-- [docs/research/README.md](docs/research/README.md): six reference projects,
+- [docs/design/github-webhook-events.md](docs/design/github-webhook-events.md):
+  signature verification over the raw body, and why a claim is keyed on the
+  state transition rather than the delivery
+- [docs/research/README.md](docs/research/README.md): the reference projects,
   each with a commit SHA and a note on which of our beads can cite it
