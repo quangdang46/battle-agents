@@ -336,11 +336,48 @@ export function apply(
 }
 
 /** The agent an event is about, if it names one. */
+/**
+ * Whose run this was.
+ *
+ * TWO SHAPES EXIST AND ONLY ONE NAMES AN AGENT IN ITS PAYLOAD.
+ *
+ * An event emitted INSIDE the runtime — bounty.completed, pr.merged — names the
+ * agent in `payload.agentId` and puts a FEATURE's name on `actorId` ('bounty',
+ * 'system'). That is the shape the tests here model, and it is the right one:
+ * the feature that emitted an event is its actor.
+ *
+ * An event that arrived over `/api/events` is different. `toGameEvent` in
+ * apps/web/src/event-routes.ts makes the whole validated AgentEvent the payload
+ * and puts the SESSION'S AGENT on the envelope's `actorId`. That payload has no
+ * `agentId` at all, which is why the previous version of this function — payload
+ * only — made every reward from a real harness UNREACHABLE. `test.passed` paid
+ * 100 XP nothing could claim, `session.recovered` had no producer, and a crash
+ * paid a badge and zero experience: §10.2's death rule with the experience
+ * quietly removed.
+ *
+ * So the envelope is a fallback, taken only when the payload has the shape of
+ * the thing ingest produces. `sessionId` is the discriminator, not the NAME on
+ * the envelope: an in-runtime event's actorId is a feature or 'system', and
+ * crediting experience to a domain is worse than paying nothing. Reading the
+ * envelope unconditionally is what an earlier attempt at this did, and the
+ * "names no agent" test caught it.
+ */
 function agentIdOf(event: GameEvent): string | undefined {
   const payload = event.payload;
-  if (typeof payload !== 'object' || payload === null) {
-    return undefined;
+  if (typeof payload === 'object' && payload !== null) {
+    const fields = payload as { readonly agentId?: unknown; readonly sessionId?: unknown };
+    if (typeof fields.agentId === 'string' && fields.agentId.length > 0) {
+      return fields.agentId;
+    }
+    // Ingest shape: the payload IS the agent's own AgentEvent, which always
+    // carries a sessionId, and the envelope's actorId is that session's agent.
+    if (typeof fields.sessionId === 'string' && fields.sessionId.length > 0) {
+      const onEnvelope = event.actorId;
+      if (typeof onEnvelope === 'string' && onEnvelope.length > 0) {
+        return onEnvelope;
+      }
+    }
   }
-  const candidate = (payload as { agentId?: unknown }).agentId;
-  return typeof candidate === 'string' ? candidate : undefined;
+  return undefined;
 }
+

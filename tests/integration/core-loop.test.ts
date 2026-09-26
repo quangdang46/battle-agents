@@ -642,16 +642,26 @@ describe("plan 10.5: one agent's work, through seven stages, to somewhere anothe
     const codes = observed.crashed.badges.badges.map((badge) => badge.code);
     expect(codes).toContain('survived-a-crash.v1');
     expect(codes).toContain('critical-hit.v1');
-    // The experience is NOT paid, and the number below is the report rather than
-    // a passing expectation. `test.passed` is priced at 100 in
-    // progression/src/rules.ts and has a handler for it, but that handler
-    // resolves the agent from `payload.agentId` and nothing that reaches it
-    // carries one: `toGameEvent` puts the agent on `actorId`. So the price
-    // exists, the subscriber exists, and the award is unreachable. Wired the way
-    // achievements is, this would be
-    // `expect(observed.xp.crasher).toBe(observed.awards.testPassed.xp)`.
+    // The experience IS paid, and it is asserted as the price table's own number
+    // rather than as a literal, so a retune moves the expectation with it.
+    //
+    // This assertion used to be `toBe(0)` — a REPORT, not a passing expectation,
+    // and the comment said so. `test.passed` was priced at 100 with a handler
+    // subscribed and the award UNREACHABLE, because that handler resolved the
+    // agent from `payload.agentId` and nothing reaching it carried one:
+    // `toGameEvent` puts the agent on the envelope's `actorId`. The fix reads the
+    // envelope when the payload has the shape ingest produces, which is the same
+    // fallback achievements already used.
+    //
+    // STILL UNWIRED, and the report moves here rather than disappearing:
+    // `session.recovered` is priced at 150 and is §10.2's death rule — a failed
+    // run teaches — but nothing PRODUCES it. So a crash pays what the crash's own
+    // test events pay, and the 150 is still a price with no producer. See
+    // ba-9fh, which carries that alongside the other contract defects this file
+    // exposed.
     expect(observed.awards.testPassed.recognised).toBe(true);
-    expect(observed.xp.crasher).toBe(0);
+    expect(observed.xp.crasher).toBe(observed.awards.testPassed.xp);
+    expect(observed.xp.crasher).toBeGreaterThan(0);
   });
 
   it('SOCIAL does not exist in the composed runtime, and this file says so rather than skipping it', () => {
