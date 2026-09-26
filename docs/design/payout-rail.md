@@ -8,6 +8,10 @@
   left open are now discharged, and the passages below that said so are marked. The DECISIONS are
   unchanged; only what exists changed. What is still open: the rail itself, race-mode adjudication
   (section 4.2's first gap), and the refund path.
+- **Second pass, 2026-09-26** (`ba-bounty-open-funding-et1`): section 3.3 was added, deciding the
+  disposition of a REFUSED contribution, which is the case section 3 does not cover because no money
+  is involved; the second bullet of section 7 is settled and marked there. The decisions in sections 1
+  to 4 are unchanged.
 
 Section 17.5 of the plan lists "payment/compliance for real-money bounties" as a risk the research
 conversation never settled. This note settles it, so that the bounty feature can be built against a
@@ -130,7 +134,77 @@ Rounding: refund in integer cents, largest-remainder allocation, and the residue
 earliest contributor. A sponsor who is short by one cent on a $0.35 refund is a support ticket, and the
 sum of refunds must equal the sum of funds exactly or `bounty_funds` stops reconciling.
 
-### 3.2 Cancelled after work started
+### 3.3 A contribution that was refused
+
+Section 3.1 refunds sponsors; this is the case that is not a refund, and the
+distinction is the whole point of writing it down.
+
+**A top-up can be refused** — the bounty is `completed`, `expired` or
+`disputed`, or its payout intent is already `pending` or `recorded`. When it is,
+no `bounty_funds` row is written, so the refused contribution is not part of
+`sum(bounty_funds)` and is not owed back by anything in section 3.1.
+
+**The disposition is: nothing was taken, and there is nothing to return.** Not
+"refunded" — a refund describes a transfer that happened and was reversed, and
+section 1 says no transfer ever happened. The platform never had the money: a
+contribution is a claim somebody makes about money they are about to move on the
+rail themselves, so a refused claim is a claim that was not made. Saying this in
+those words is not politeness. A sponsor told "refused" and nothing else has to
+assume their bank account is involved, and the failure this product most wants
+to avoid is a person believing the platform is holding money on their behalf.
+
+The disposition has two members, because the sentence a sponsor needs is the same
+and the answer they actually have is not:
+
+| Refusal reason                              | Disposition      | What the sponsor is told                                    |
+| ------------------------------------------- | ---------------- | ----------------------------------------------------------- |
+| lifecycle finished (`completed`/`expired`/`disputed`) | `bounty-finished` | the bounty is over, and a sponsor can open a new one on the same issue |
+| payout already `pending` or `recorded`      | `already-payable` | a pull request has been merged; the reward is owed to the solver and the amount is settled |
+
+The boundary between "may a sponsor still stack" and "may not" is **the merge**,
+not the claim and not the submit. A solver's work is not a reason to refuse a
+stranger money, and the refund arithmetic in section 3.1 is identical whether the
+funds arrived before or after it. This settles the second bullet of section 7,
+which the design previously left open.
+
+**Where the refusal is recorded.** Persisted as `bounty.funding_refused`, with
+the amount ATTEMPTED, the sponsor, the reason, the disposition and the sentence —
+never a `funded`, a `totalCents` or any other value a reader could mistake for
+money that landed. Payout-rail section 4.2's rule applies unchanged: a sponsor
+told "refused" whose attempt left no trace has nothing to show the repository
+owner. The same sentence is on the thrown error, because a sponsor who is
+refused once and never reads the log must be told the same thing either way.
+
+Over HTTP the refusal is a **409**, declared by the thrower and read off the
+value rather than kept in a table in the transport. A 500 would tell the client
+the platform is broken, and a client that believes that retries a contribution
+which can never be accepted.
+
+> **Status, 2026-09-26** (`ba-bounty-open-funding-et1`). Implemented in
+> `packages/features/bounty/src/funding.ts`, which owns the reasons, the
+> dispositions and the sentences; `refuseFunding` in `feature.ts` writes one
+> value to both the event and the throw. The refused-top-up path is gated in
+> `tests/m2/payout-stub.test.ts` (durable, against a real `event_log`) and
+> `tests/integration/funding-refusal-over-http.test.ts` (409, and the same answer
+> through the Application API and the CLI). Multi-sponsor stacking itself, the
+> pro-rata refund, the per-sponsor attribution and the "total is the sum of the
+> rows" invariant all landed earlier with `ba-feature-bounty-xhk` and are not
+> re-asserted here.
+
+### 3.4 What is still not decided
+
+- Whether a sponsor may withdraw their own contribution before a claim. The
+  refund arithmetic would be the same, but "a sponsor may take their money back
+  off a bounty two agents are racing for" is a product decision and not a
+  consequence of anything above.
+- Whether a sponsor can be anonymous. `bounty_funds.sponsor_user_id` is NOT NULL
+  and a CHECK refuses a blank sponsor, because an unattributed ledger row is
+  nobody's to refund to. If a privacy-preserving variant is ever wanted, it is a
+  schema change with a real payout consequence, not a flag.
+
+---
+
+## 4. Disputes
 
 This is the case the plan calls hardest, and it has no clean answer, so it gets a decision rather
 than a principle.
@@ -288,7 +362,10 @@ an intent that was never a payment.
 - **The rail itself.** GitHub Sponsors, Open Collective and a direct transfer are all compatible and
   the platform is indifferent between them. Picking one is a sponsor-experience decision, and it does
   not change anything in this document.
-- **Whether sponsors stack on bounties the solver has already claimed.** The refund arithmetic is
-  the same either way, so it is not a prerequisite for building.
+- ~~**Whether sponsors stack on bounties the solver has already claimed.**~~ **Settled,
+  2026-09-26: yes, and the boundary is the merge.** See section 3.3. A claim and a submit leave the
+  payout intent at `funded`, so a bounty a solver is working on still takes money; the intent moves to
+  `pending` on the merge, and a payable bounty refuses. The refund arithmetic is the same either way,
+  which is what made this decidable without a product opinion.
 - **Season prize pools.** Guild treasuries and seasonal pools change who the payer is, which changes
   section 4.1. That is a P2 question and the design here is correct for the single-maintainer case.

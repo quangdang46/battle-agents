@@ -1,7 +1,7 @@
-import { isAuthenticationFailure } from '@battle-agents/api';
 import type { ApplicationApi } from '@battle-agents/api';
 import type { RegisteredActionId } from '@battle-agents/protocol';
 
+import { describeHttpFailure } from './http-failure.js';
 import type { HttpRequest, HttpResponse } from './routes.js';
 
 /**
@@ -101,7 +101,7 @@ export function createSessionRoutes(
       }
       return await heartbeat(dependencies, request, sessionId);
     } catch (error) {
-      return describeFailure(error);
+      return describeHttpFailure(error);
     }
   };
 }
@@ -118,6 +118,12 @@ export function createSessionRoutes(
  * `active` before heartbeating it: that question is answered by the repository
  * the action calls, which refuses anything but a live session, and a second
  * opinion up here would be one more place to keep in step.
+ *
+ * So a heartbeat for a session that is not running reaches the shared mapping as
+ * a plain `Error` and becomes a 500. Classifying it would mean this route
+ * recognising a failure the ACTION defined, which is the game-logic-in-a-handler
+ * rule this file exists to respect; it belongs to `packages/api`, which owns the
+ * vocabulary every surface is allowed to share.
  */
 async function heartbeat(
   dependencies: SessionRouteDependencies,
@@ -148,27 +154,4 @@ function decodeSegment(segment: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/**
- * The same mapping the other surfaces use.
- *
- * This is the third copy, and the drift risk is real — it is the failure the
- * api package already documents for `isAuthenticationFailure`: a caller who
- * cannot tell "log in again" from "that does not exist" from "the platform is
- * broken" retries the wrong thing. Collapsing them into one helper means editing
- * `routes.ts` and `event-routes.ts`, which belongs with whoever next touches
- * those two rather than folded into a route bead.
- *
- * A session that is not running reaches here as a plain `Error` and becomes a
- * 500. Classifying it would mean the route recognising a failure the action
- * defined, which is the game-logic-in-a-handler rule this file exists to
- * respect; it belongs to `packages/api`, which owns the vocabulary every
- * surface is allowed to share.
- */
-function describeFailure(error: unknown): HttpResponse {
-  if (isAuthenticationFailure(error)) {
-    return { status: 401, body: { error: error.message, reason: error.reason } };
-  }
-  return { status: 500, body: { error: error instanceof Error ? error.message : String(error) } };
 }

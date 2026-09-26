@@ -1,12 +1,8 @@
-import {
-  createApplicationApi,
-  isAuthenticationFailure,
-  UnknownActionError,
-  UnknownDomainError,
-} from '@battle-agents/api';
+import { createApplicationApi, UnknownActionError } from '@battle-agents/api';
 import { isRegisteredActionId } from '@battle-agents/protocol';
 import type { ApplicationApi } from '@battle-agents/api';
 
+import { describeHttpFailure } from './http-failure.js';
 import { closeSharedRuntime, sharedRuntime } from './shared-runtime.js';
 
 /**
@@ -66,7 +62,10 @@ export function createRoutes(
       }
       return await route(dependencies.api, request);
     } catch (error) {
-      return describeFailure(error);
+      // One mapping for every surface, and it used to be four. See the note in
+      // `http-failure.ts`: the copies had already drifted, in that only this
+      // dispatcher's knew an unknown action was a 404 rather than a 500.
+      return describeHttpFailure(error);
     }
   };
 }
@@ -117,24 +116,6 @@ async function act(api: ApplicationApi, request: HttpRequest): Promise<HttpRespo
     throw new UnknownActionError(action, (await api.discover()).domains ?? []);
   }
   return json(200, await api.act(action, input ?? {}));
-}
-
-/**
- * Turns a failure into a status a client can act on.
- *
- * The distinction that matters is 401 versus 404 versus 500. A client that
- * cannot tell "log in again" from "that does not exist" from "the platform is
- * broken" retries the wrong thing, and a dead credential reported as a 500
- * reads as our fault rather than theirs.
- */
-function describeFailure(error: unknown): HttpResponse {
-  if (isAuthenticationFailure(error)) {
-    return json(401, { error: error.message, reason: error.reason });
-  }
-  if (error instanceof UnknownActionError || error instanceof UnknownDomainError) {
-    return json(404, { error: error.message });
-  }
-  return json(500, { error: error instanceof Error ? error.message : String(error) });
 }
 
 /**

@@ -35,6 +35,12 @@ const apiDir = join(repoRoot, 'apps/web/app/api');
 
 const SIBLINGS = [
   '/api/auth/[...all]',
+  '/api/battles',
+  '/api/battles/[id]',
+  '/api/battles/[id]/join',
+  '/api/bounties',
+  '/api/bounties/[id]/claim',
+  '/api/bounties/[id]/submit',
   '/api/events',
   '/api/events/stream',
   '/api/mcp',

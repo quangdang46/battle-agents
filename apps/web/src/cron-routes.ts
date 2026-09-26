@@ -1,5 +1,4 @@
-import { isAuthenticationFailure } from '@battle-agents/api';
-
+import { describeHttpFailure } from './http-failure.js';
 import type { HttpRequest, HttpResponse } from './routes.js';
 
 /**
@@ -68,9 +67,9 @@ export function createCronRoutes(
       if (dependencies.authenticate === undefined) {
         return refuseUnauthenticated();
       }
-      // A failed authenticate throws, and the dispatcher's describeFailure turns
-      // it into a 401 by the same rule the other three surfaces use, so a
-      // rejected credential reads the same way wherever it was presented.
+      // A failed authenticate throws, and the shared failure mapping turns it
+      // into a 401 by the same rule every other surface uses, so a rejected
+      // credential reads the same way wherever it was presented.
       await dependencies.authenticate(request);
       const swept = await dependencies.sweep();
       // Counts, not ids. A trigger's caller asked for the sweep to happen, not
@@ -81,7 +80,7 @@ export function createCronRoutes(
         body: { disconnected: swept.disconnected, abandoned: swept.abandoned },
       };
     } catch (error) {
-      return describeFailure(error);
+      return describeHttpFailure(error);
     }
   };
 }
@@ -91,15 +90,4 @@ function refuseUnauthenticated(): HttpResponse {
     status: 401,
     body: { error: 'no cron credential is configured for this surface', reason: 'cron-closed' },
   };
-}
-
-/**
- * The same mapping the other surfaces use; see `session-routes.ts` for why it is
- * copied rather than shared, and what would go wrong if the copies diverged.
- */
-function describeFailure(error: unknown): HttpResponse {
-  if (isAuthenticationFailure(error)) {
-    return { status: 401, body: { error: error.message, reason: error.reason } };
-  }
-  return { status: 500, body: { error: error instanceof Error ? error.message : String(error) } };
 }

@@ -1,8 +1,8 @@
-import { isAuthenticationFailure } from '@battle-agents/api';
 import type { GameEvent } from '@battle-agents/core';
 import type { AgentEvent } from '@battle-agents/protocol';
 
 import { checkBatchSize, parseEventBatch, type BatchLimits } from './event-batch.js';
+import { describeHttpFailure } from './http-failure.js';
 import { encodeStreamFrame, type EventStreamHub } from './event-stream.js';
 import type { HttpRequest, HttpResponse } from './routes.js';
 
@@ -93,7 +93,7 @@ export function createEventRoutes(
           return { status: 404, body: { error: 'not found', path: url.pathname } };
       }
     } catch (error) {
-      return describeFailure(error);
+      return describeHttpFailure(error);
     }
   };
 }
@@ -128,7 +128,7 @@ async function postEvents(
   }
 
   // A failed authenticate throws an authentication failure and is turned into
-  // a 401 by the dispatcher's describeFailure, the same as any other failure —
+  // a 401 by the shared failure mapping, the same as any other failure —
   // so there is no second mapping to drift out of step with the first.
   const caller = await dependencies.authenticate(request);
 
@@ -254,11 +254,4 @@ function tooLarge(limit: number, limits: BatchLimits): HttpResponse {
     headers: { 'Retry-After': retryAfter },
     body: { error: 'batch too large', limit, retryAfterSeconds: limits.retryAfterSeconds },
   };
-}
-
-function describeFailure(error: unknown): HttpResponse {
-  if (isAuthenticationFailure(error)) {
-    return { status: 401, body: { error: error.message, reason: error.reason } };
-  }
-  return { status: 500, body: { error: error instanceof Error ? error.message : String(error) } };
 }
