@@ -20,6 +20,9 @@
 export type AgentActionId =
   'agent.describe' | 'agent.read' | 'session.create' | 'session.end' | 'session.heartbeat';
 
+/** animation */
+export type AnimationActionId = 'animation.pose';
+
 /** bounty */
 export type BountyActionId =
   | 'bounty.create'
@@ -84,6 +87,7 @@ export type RegisteredActionId =
   | 'achievements.project'
   | 'agent.describe'
   | 'agent.read'
+  | 'animation.pose'
   | 'battle.create'
   | 'battle.finish'
   | 'battle.join'
@@ -149,6 +153,7 @@ export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'achievements.project',
   'agent.describe',
   'agent.read',
+  'animation.pose',
   'battle.create',
   'battle.finish',
   'battle.join',

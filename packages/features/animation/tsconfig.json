@@ -2,7 +2,15 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // Node builtins, for golden-frames.test.ts, which reads the COMMITTED
+    // goldens/agent-16.json off disk rather than importing them. That is the
+    // point of the file: a golden an import can regenerate beside the change
+    // that broke it is not a golden. `packages/game-client` scopes the same
+    // setting for the same reason, and scoping it here means a server package
+    // that later reaches for `fs` fails to compile — which is the guarantee the
+    // base config's `types: []` is making.
+    "types": ["node"]
   },
   "references": [
     {

@@ -69,6 +69,20 @@ const OWNED: Readonly<Record<string, readonly string[]>> = {
     'battleCapacity',
     'ARENA_MIN_TRUST',
   ],
+  // Added with the animation spike. The entries are the ones a copy would drag
+  // in, and the one a sibling would plausibly reach for: a skeletal runtime has
+  // `evaluate` and `validate` in it like any other package, and a feature that
+  // grew its own would be a second animation core. `AGENT_STATE_ANIMATION` is
+  // here for the other half of the risk — it is game vocabulary, and a copy of
+  // it landing in progression is the shape of mistake this whole file exists for.
+  animation: [
+    'ANIMATION_ACTION_IDS',
+    'AGENT_STATE_ANIMATION',
+    'animationForState',
+    'evaluatePose',
+    'validateSkeleton',
+    'drawList',
+  ],
 };
 
 /** Same technique as scaffold.test.ts, and the same reason for it. */

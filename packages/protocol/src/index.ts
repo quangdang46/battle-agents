@@ -148,6 +148,7 @@ export type { ExtensionContract } from './extension-contract.js';
 export type {
   AchievementsActionId,
   AgentActionId,
+  AnimationActionId,
   BattleActionId,
   BountyActionId,
   GuildActionId,
