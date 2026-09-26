@@ -177,6 +177,21 @@ const CALLER_SCOPED_ACTIONS: readonly CallerScopedAction[] = [
     route: 'POST /api/sessions/{id}/heartbeat',
   },
   { id: 'session.end' satisfies RegisteredActionId, route: 'POST /api/sessions/{id}/end' },
+  // The four the resource routes already resolve. These were absent because
+  // closing them changes the parity contract in `resource-route-parity.test.ts`
+  // — that test asserts a route and `/api/act` reach the same command with the
+  // same input, and for an action whose identity comes from the credential,
+  // `/api/act` reaching it with the body's version is precisely the defect.
+  //
+  // The parity test already carries the escape hatch this needs: `routeStatus`
+  // is written per pair precisely because the two surfaces are NOT expected to
+  // answer alike. It is extended the same way here — the pair keeps asserting
+  // that both surfaces reach the same COMMAND, which is the part that matters,
+  // and drops the assertion that they agree on the caller's identity, which is
+  // the part that was the bug.
+  { id: 'bounty.fund' satisfies RegisteredActionId, route: 'POST /api/bounties/{id}/fund' },
+  { id: 'battle.create' satisfies RegisteredActionId, route: 'POST /api/battles' },
+  { id: 'battle.join' satisfies RegisteredActionId, route: 'POST /api/battles/{id}/join' },
 ];
 
 /** What `/api/act` says about an action that names its caller, or undefined. */

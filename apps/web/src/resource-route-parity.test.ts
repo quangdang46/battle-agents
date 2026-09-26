@@ -70,12 +70,14 @@ function recordingApi(): { api: ApplicationApi; calls: Recorded[] } {
           { name: 'bounty.list', description: 'lists bounties' },
           { name: 'bounty.claim', description: 'claims a bounty' },
           { name: 'bounty.submit', description: 'submits a pull request' },
+          { name: 'bounty.fund', description: 'records a top-up' },
         ],
         actionDefs: [
           action('bounty.create'),
           action('bounty.list'),
           action('bounty.claim'),
           action('bounty.submit'),
+          action('bounty.fund'),
         ],
       },
       {
@@ -108,11 +110,17 @@ function dependencies(api: ApplicationApi): BountyRouteDependencies {
     api,
     authenticate: async () => ({ installationId: 'installation-mine' }),
     resolveSession: async () => OWNED,
-    // Present because `BountyRouteDependencies` requires it, and used by no pair
-    // below: `/api/bounties/{id}/fund` is deliberately NOT one, because the
-    // sponsor a route records is the credential's and a `sponsorUserId` in a
-    // payload is not — a pair asserting the two agree would be asserting the
-    // hole, the same way the agentId pairs are absent for the same reason.
+    // The sponsor the credential owns. `/api/bounties/{id}/fund` WAS deliberately
+    // absent as a pair, on the reasoning that a pair asserting the route and
+    // `/api/act` agree would be asserting the hole. That reasoning was half
+    // right and hid the fix: `bounty.fund` was absent here AND from
+    // `CALLER_SCOPED_ACTIONS`, so nothing asserted either surface was correct.
+    //
+    // The pair is back, with `actRefused: true`. It still asserts both surfaces
+    // are the same command reaching the same input — which is true, and was
+    // always true — and it now additionally asserts `/api/act` refuses it, which
+    // is the part that was false. The hole was never the parity; it was the
+    // absence of a claim about the catch-all.
     resolveSponsor: async () => ({ userId: 'user-mine', login: 'mine-person' }),
   };
 }
@@ -163,6 +171,17 @@ interface Pair {
    * point — they are two spellings of one command.
    */
   readonly routeStatus: number;
+  /**
+   * That `/api/act` REFUSES this action, because its caller comes from the
+   * credential rather than the body.
+   *
+   * Set only where the route resolves a caller the catch-all cannot, and where
+   * `CALLER_SCOPED_ACTIONS` in routes.ts refuses the id with a 403. The flag
+   * asserts the refusal from this file's side, so the two lists cannot drift:
+   * adding an id to one without the other fails here rather than leaving a hole
+   * that only one surface knows about.
+   */
+  readonly actRefused?: boolean;
 }
 
 const PAIRS: readonly Pair[] = [
@@ -211,6 +230,40 @@ const PAIRS: readonly Pair[] = [
     routeStatus: 200,
   },
   {
+    label: 'POST /api/bounties/{id}/fund',
+    overRoute: (api) => createBountyRoutes(dependencies(api)),
+    request: {
+      method: 'POST',
+      path: '/api/bounties/b-1/fund',
+      body: { amountCents: 20000 },
+    },
+    act: {
+      action: 'bounty.fund',
+      input: { bountyId: 'b-1', amountCents: 20000, sponsorUserId: 'user-mine' },
+    },
+    // The identity the route supplies. `/api/act` cannot reach this command at
+    // all — see `actRefused` below and ba-owv.
+    // `reportedBy` is the LOGIN, not the id, and the route adds it — which is
+    // the point of the route. `bounty.fund` reached through `/api/act` would
+    // record the body verbatim, with no login at all, so the funding row names a
+    // person whose display name nobody resolved. A test asserting the two
+    // surfaces agree on this input would be asserting they both omit it.
+    expected: {
+      id: 'bounty.fund',
+      input: {
+        bountyId: 'b-1',
+        amountCents: 20000,
+        sponsorUserId: 'user-mine',
+        reportedBy: 'mine-person',
+      },
+    },
+    // 200, not 201: `fund` answers 200 whether or not the row is new, because a
+    // second top-up for the same bounty is a normal thing to do rather than a
+    // creation. The pair exists to pin that, not to bless it.
+    routeStatus: 200,
+    actRefused: true,
+  },
+  {
     label: 'POST /api/battles',
     overRoute: (api) => createBattleRoutes(battleDependencies(api)),
     request: {
@@ -224,6 +277,7 @@ const PAIRS: readonly Pair[] = [
     act: { action: 'battle.create', input: { sessionId: 'session-mine', mode: 'arena' } },
     expected: { id: 'battle.create', input: { sessionId: 'session-mine', mode: 'arena' } },
     routeStatus: 201,
+    actRefused: true,
   },
   {
     label: 'GET /api/battles',
@@ -240,6 +294,7 @@ const PAIRS: readonly Pair[] = [
     act: { action: 'battle.join', input: { battleId: 'b-1', sessionId: 'session-mine' } },
     expected: { id: 'battle.join', input: { battleId: 'b-1', sessionId: 'session-mine' } },
     routeStatus: 200,
+    actRefused: true,
   },
 ];
 
@@ -260,6 +315,22 @@ describe('a resource route and POST /api/act reach the same command', () => {
       // action id, the same input, once. A route that added a field, renamed an
       // id or invented a command fails here rather than in production.
       expect(overRoute.calls).toEqual([pair.expected]);
+
+      if (pair.actRefused) {
+        // For an action whose caller comes from the CREDENTIAL, `/api/act` is
+        // expected NOT to reach it. Asserting the shared call here would assert
+        // the bug: that a payload naming somebody else's agent or sponsor is
+        // dispatched like any other.
+        //
+        // The contract that remains is the one that matters — both surfaces are
+        // the same command, and the route is the one that can supply an
+        // identity `/api/act` cannot. What is deliberately no longer asserted is
+        // that they agree on WHO the caller is, because that was the hole.
+        expect(overAct.calls).toEqual([]);
+        expect(actAnswer.status).toBe(403);
+        return;
+      }
+
       expect(overAct.calls).toEqual([pair.expected]);
 
       // The two bodies carry the same value because both are the recording
