@@ -23,15 +23,22 @@ import { describe, expect, it } from 'vitest';
  * `handle` is a route that returns nothing, and it satisfies `existsSync` and
  * an import check equally well. `primitive-routes-mounted.test.ts` records the
  * same reasoning for `createRoutes(`, and this file is the copy of that lesson
- * for these six adapters.
+ * for these adapters.
  *
  * What is NOT asserted here, because it cannot be asserted from a file listing:
- * that Next.js prefers these six over the `/api/[...path]` catch-all. That was
+ * that Next.js prefers these over the `/api/[...path]` catch-all. That was
  * checked against the framework by building the app and reading the route
  * table, once, when the catch-all was added — the same split between "the
  * assertion covers the FILES" and "the build covered the PRECEDENCE" that
  * `primitive-routes-mounted.test.ts` documents. Nothing here claims more than it
  * checks.
+ *
+ * Which is exactly the trap this list is exposed to, and the reason it is
+ * written as data: a route added to `bounty-routes.ts` and given a test that
+ * calls the pure handler would be green here with no entry at all, and the only
+ * symptom in production is a 404 from the catch-all. `/api/bounties/{id}/fund`
+ * is the second time that has been available in this repository, which is why
+ * the entry is data rather than prose about the count.
  */
 
 const repoRoot = resolve(import.meta.dirname, '../..');
@@ -43,6 +50,7 @@ const ADAPTERS = [
   { path: 'bounties', gateway: 'sharedBountyGateway', methods: ['GET', 'POST'] },
   { path: 'bounties/[id]/claim', gateway: 'sharedBountyGateway', methods: ['POST'] },
   { path: 'bounties/[id]/submit', gateway: 'sharedBountyGateway', methods: ['POST'] },
+  { path: 'bounties/[id]/fund', gateway: 'sharedBountyGateway', methods: ['POST'] },
   { path: 'battles', gateway: 'sharedBattleGateway', methods: ['GET', 'POST'] },
   { path: 'battles/[id]', gateway: 'sharedBattleGateway', methods: ['GET'] },
   { path: 'battles/[id]/join', gateway: 'sharedBattleGateway', methods: ['POST'] },

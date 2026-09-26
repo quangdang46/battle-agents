@@ -29,10 +29,20 @@ export const misspelled = async (): Promise<void> => {
   await api.act('quest.cliam', { id: 'q1' });
 };
 
-/** An id from a feature that exists but is not installed in this build. */
+/**
+ * An id from a feature whose PACKAGE exists but which is not installed in this
+ * build, so its ids are not in the generated union.
+ *
+ * This example was `guild.join` and it stopped being true: guild shipped, the
+ * generator picked its manifest up, and the `@ts-expect-error` became unused —
+ * which TypeScript reports as an error, so the type suite caught its own
+ * premise expiring rather than letting it rot silently. `inventory` is the
+ * standing example: the package is on disk, it is not mounted, and it declares
+ * no manifest.
+ */
 export const notInstalled = async (): Promise<void> => {
   // @ts-expect-error no such domain is built into this union
-  await api.act('guild.join', { id: 'g1' });
+  await api.act('inventory.open', { id: 'i1' });
 };
 
 /** A command reached through dispatch, which act() must not accept. */

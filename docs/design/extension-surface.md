@@ -224,13 +224,23 @@ Neither is an argument against the shape. Both are arguments for thawing
   one. What the test checks is the part of consumability that lives in a
   manifest — `exports`, `types`, `main`, peer dependencies — which is a property
   of the source and is therefore worth asserting now.
-- **No enumeration of `@battle-agents/protocol`'s barrel.** It is five
-  `export *` lines, so it does not list its own surface and a third party cannot
-  read the package to learn what it offers. That is a real defect in the
-  published SDK and it is reported here rather than fixed, because flattening a
-  barrel that four workspace packages import is a change with a blast radius
-  this bead does not own. The out-of-tree test resolves the names transitively
-  so its guard is correct either way, and a follow-up should flatten the barrel.
+- **The barrel of `@battle-agents/protocol` is now flat, and flattening it found
+  a real hole.** It was five `export *` lines, so it did not list its own surface
+  and a third party could not read the package to learn what it offers. It is now
+  flat, which is the shape `@battle-agents/core` — the frozen reference surface —
+  has always had, and `tests/unit/protocol-barrel.test.ts` fails on an export a
+  module declares and the barrel omits, on a module the barrel does not
+  re-export at all, and on a star-export creeping back in.
+
+  **The hole was not the one the star-exports were hiding.**
+  `generated/action-ids.ts` exports nine per-feature action id unions, and the
+  old barrel listed six of them by hand. `BattleActionId`, `SocialActionId` and
+  `AchievementsActionId` were added when those three features landed and were
+  never added to the barrel, so they were in the package and unreachable from
+  it: a third party dispatching a battle action had `RegisteredActionId` to
+  check against and no way to name the subset it belonged to, which is the only
+  reason the per-feature unions exist. Nothing caught it, because nothing
+  imported them and `tsc` cannot see a name nobody asks for.
 
   That resolution is worth its own note, because getting it wrong is invisible
   in the obvious direction and loud in the other one. The resolver reads a
@@ -239,11 +249,16 @@ Neither is an argument against the shape. Both are arguments for thawing
   does not exist on disk (`agent-event.ts` does, and a build is what turns one
   into the other). Every branch was skipped, the resolver returned only the
   hand-written exports, and the suite was green throughout — a guard that had
-  quietly stopped guarding. It then missed declaration-form exports as well, so
-  it would have reported a correct `import { createIngestSender } from
-'@battle-agents/protocol'` as a name that does not exist. Two assertions exist
-  so neither can rot again: one fails if any `export *` branch fails to resolve,
-  and one pins names that are reachable only through the hop.
+  quietly stopped guarding.
+
+  **Flattening both barrels then made that guard vacuous, which is recorded
+  here rather than left to be noticed.** With no `export *` anywhere, "resolves
+  every `export *`" compared an empty list with an empty list and could not
+  fail — the same failure, one level up, inside the guard written to prevent it.
+  Both barrels are now pinned flat, and the resolver's resolved-name counts are
+  asserted, so it cannot stop reading and start reporting ordinary imports as
+  unexported. Collapsing the resolver to return nothing now fails three
+  assertions, and reintroducing a single star-export fails a fourth.
 
 ## Does M7 hold
 
