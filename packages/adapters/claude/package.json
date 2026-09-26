@@ -18,5 +18,8 @@
   "dependencies": {
     "@battle-agents/core": "workspace:*",
     "@battle-agents/protocol": "workspace:*"
+  },
+  "bin": {
+    "agent-battle-claude": "./dist/bin/watch-claude.js"
   }
 }
