@@ -36,7 +36,12 @@ export type {
   PublishedFactShape,
 } from './repositories/github-deliveries.js';
 export { DrizzleReputationRepository } from './repositories/reputation.js';
-export type { ReputationRow, ReputationStore } from './repositories/reputation.js';
+export type {
+  ReputationOutcomeKind,
+  ReputationOutcomeRow,
+  ReputationRow,
+  ReputationStore,
+} from './repositories/reputation.js';
 export type {
   ProgressionRow,
   ProgressionStore,

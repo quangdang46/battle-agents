@@ -1,5 +1,5 @@
 import { MIN_LEVEL } from './rules.js';
-import type { BehaviourSignal, Build } from './rules.js';
+import type { BehaviourSignal, Build, Skills } from './rules.js';
 
 /**
  * What a character has earned, and what it is becoming.
@@ -15,6 +15,14 @@ export interface AgentProgress {
   readonly xp: number;
   readonly level: number;
   readonly build: Build;
+  /**
+   * Experience in each of the eight skills, counted separately and stored as
+   * counts. This is the RuneScape half of progression and it is NOT a second
+   * level: `xp` above is what the level ladder is built from, and these are
+   * eight separate answers to "what is this character good at", with no way in
+   * this record to fold them into one.
+   */
+  readonly skills: Skills;
   /**
    * The individual outcomes, kept so a reclassification is a re-read rather than
    * a guess, and so a mis-awarded one self-corrects on the next award.

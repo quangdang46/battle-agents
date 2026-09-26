@@ -72,6 +72,20 @@ export interface Outcome {
   readonly build: Exclude<Build, 'generalist'>;
   readonly weight: number;
   /**
+   * Which skill this outcome is evidence of, and the only thing that ever moves
+   * one. Absent when the outcome trains none of the eight, which `battle.finished`
+   * is: a win is the plan's reward for a match, and it is not evidence that the
+   * agent is better at any of the disciplines.
+   *
+   * Here, beside the price, rather than in the reducer, because the two are one
+   * decision: an outcome that pays experience without saying what it teaches
+   * moves the character's level and none of its skills. `skillsEvidencedByOutcomes`
+   * is asserted by a test, so the set changes when a row is added and the failure
+   * is somebody having to say which discipline the new thing trains — or to say
+   * out loud that it trains none, which `battle.finished` does.
+   */
+  readonly skill?: Skill;
+  /**
    * What the payload has to carry for this row to pay, when the event name
    * alone does not decide it. `battle.finished` arrives for a loss as well as a
    * win, and an award table keyed only on the event name would hand a defeated
@@ -89,7 +103,9 @@ export interface Outcome {
 }
 
 export const OUTCOMES: Readonly<Record<OutcomeType, Outcome>> = {
-  'bounty.completed': { xp: 1000, build: 'builder', weight: 1 },
+  // A bounty is the whole job: the issue was opened, the work was done, the
+  // change shipped. That is the definition of having practised coding.
+  'bounty.completed': { xp: 1000, build: 'builder', weight: 1, skill: 'coding' },
   // Five hundred is the plan's price for a merged pull request, and it is
   // payable only for a merge that completed no bounty. A merge that did complete
   // one is already paid a thousand by the row above, and the same pull request
@@ -100,14 +116,20 @@ export const OUTCOMES: Readonly<Record<OutcomeType, Outcome>> = {
   // The gate is fail-closed on purpose: a `pr.merged` whose payload omits
   // `completedBounty` has not made the statement, and pays nothing. Whoever
   // emits it has to say which case it is.
+  //
+  // The skill is collaboration rather than a second bite at coding, and the two
+  // never pay for the same merge anyway. A pull request is the moment somebody
+  // else read the work and accepted it, which is the part of shipping that is
+  // not coding.
   'pr.merged': {
     xp: 500,
     build: 'refactorer',
     weight: 1,
+    skill: 'collaboration',
     requires: { field: 'completedBounty', equals: false },
   },
-  'test.passed': { xp: 100, build: 'tester', weight: 1 },
-  'session.recovered': { xp: 150, build: 'debugger', weight: 1 },
+  'test.passed': { xp: 100, build: 'tester', weight: 1, skill: 'testing' },
+  'session.recovered': { xp: 150, build: 'debugger', weight: 1, skill: 'debugging' },
   'battle.finished': {
     xp: 500,
     build: 'infrastructure',
@@ -229,6 +251,131 @@ export const LEVEL_GATES: readonly LevelGate[] = [
  */
 export function meetsGate(level: number, requiredLevel: number): boolean {
   return level >= requiredLevel;
+}
+
+/* ───────────────────────────── skills ───────────────────────────── */
+
+/**
+ * The eight disciplines a character practises independently.
+ *
+ * Section 10.2 names them and calls this model the best fit of the four it
+ * weighed: independent skills, each with its own level, and NO single power
+ * scalar. That last clause is the load-bearing one. A design with a power score
+ * has exactly one answer to "who is stronger", and from the moment that number
+ * exists every other system quietly becomes a function of it — matchmaking, tier
+ * access, rewards, the lot. The alternative this model takes is a character that
+ * is good at four things and hopeless at the rest, where a matchup is decided by
+ * which of those the two sides brought.
+ *
+ * The names are the plan's, not mine, and they are deliberately NOT the BUILDS.
+ * A build is a specialisation a classifier infers from a whole history; a skill
+ * is something that happened, once. `builder` and `coding` are different claims,
+ * and collapsing them rebuilds the single scalar the plan forbids: one number
+ * that says both what a character is and what it can do.
+ */
+export const SKILLS = [
+  'coding',
+  'debugging',
+  'testing',
+  'research',
+  'refactoring',
+  'security',
+  'documentation',
+  'collaboration',
+] as const;
+
+export type Skill = (typeof SKILLS)[number];
+
+/**
+ * Experience in each skill. A count per skill, never a level.
+ *
+ * A skill level is `levelForXp(skills[skill])` and is deliberately not stored.
+ * The curve is data in this file, and a stored level is a second copy of it that
+ * a retune leaves behind: the character keeps a level the rules no longer
+ * produce and nothing in the tree can say so. The character's own level is the
+ * opposite case and is stored twice, on `agents`, so a leaderboard can sort
+ * without reading a history — that duplication has an owner and a comment.
+ */
+export type Skills = Readonly<Record<Skill, number>>;
+
+/** Every skill at zero: what a character has before it has done anything. */
+export const EMPTY_SKILLS: Skills = Object.freeze(
+  Object.fromEntries(SKILLS.map((skill) => [skill, 0])) as Record<Skill, number>,
+);
+
+export interface SkillProgress {
+  readonly skill: Skill;
+  readonly xp: number;
+  readonly level: number;
+}
+
+/**
+ * Every skill with the level its own experience has earned.
+ *
+ * All eight, always, in the plan's order rather than in the order they happen to
+ * have amounts, so a character sheet does not reshuffle as it grows. A skill at
+ * zero is present and reads as level 1: the plan's "specialization without
+ * maxing everything" is only visible if the untrained skills are on the sheet.
+ *
+ * There is deliberately no total, no average and no power figure. Returning
+ * eight numbers and letting a caller combine them is what keeps the decision
+ * about what a strong character is out of the rules and in the game that asks
+ * the question.
+ */
+export function describeSkills(skills: Skills): readonly SkillProgress[] {
+  return SKILLS.map((skill) => {
+    const xp = skills[skill] ?? 0;
+    return { skill, xp, level: levelForXp(xp) };
+  });
+}
+
+/**
+ * What one outcome does to a skill map.
+ *
+ * Pure, and the only path by which a skill ever moves. The identity of the
+ * skill is a field on the price row, so retuning which discipline an outcome
+ * trains is a change to the table beside it and never to this function.
+ *
+ * An outcome with no skill returns the map it was given, by reference. Copying
+ * it would imply the caller had to be careful about aliasing a value nothing
+ * mutates.
+ */
+export function awardSkill(before: Skills, outcome: Outcome): Skills {
+  if (outcome.skill === undefined) {
+    return before;
+  }
+  // Seeded from EMPTY_SKILLS so a map that arrives with a key missing — a record
+  // written before a skill was added to this list — comes back complete rather
+  // than staying short one field forever.
+  const next: Record<Skill, number> = { ...EMPTY_SKILLS };
+  for (const skill of SKILLS) {
+    next[skill] = (before[skill] ?? 0) + (skill === outcome.skill ? outcome.xp : 0);
+  }
+  return next;
+}
+
+/**
+ * The skills the current outcome set can actually move.
+ *
+ * Four of the eight, and that is a fact about the outcomes rather than about the
+ * skills. `research`, `refactoring`, `security` and `documentation` have no
+ * outcome that is evidence of them yet, because no event says they happened.
+ * Inventing an award to fill the gap would be the opposite: a skill that levels
+ * for something nobody did.
+ *
+ * The test that pins this set is the one that makes adding an outcome a decision.
+ * A sixth outcome lands, the set changes, and the test fails until somebody
+ * says which discipline it trains.
+ */
+export function skillsEvidencedByOutcomes(): readonly Skill[] {
+  const seen = new Set<Skill>();
+  for (const outcomeType of OUTCOME_TYPES) {
+    const skill = OUTCOMES[outcomeType].skill;
+    if (skill !== undefined) {
+      seen.add(skill);
+    }
+  }
+  return SKILLS.filter((skill) => seen.has(skill));
 }
 
 /* ───────────────────── behaviour to build ───────────────────── */

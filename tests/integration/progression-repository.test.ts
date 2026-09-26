@@ -5,6 +5,7 @@ import {
   DrizzleAgentRepository,
   DrizzleProgressionRepository,
   eq,
+  type ProgressionRow,
   users,
 } from '@battle-agents/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -82,6 +83,7 @@ describe('the progression repository, over a real database', () => {
       xp: 340,
       level: 4,
       build: 'builder',
+      skills: { ...created.skills, coding: 340 },
       history: [{ build: 'builder', weight: 2, at: now }],
       updatedAt: now,
     });
@@ -123,33 +125,111 @@ describe('the progression repository, over a real database', () => {
     ).rejects.toThrow();
   });
 
-  it('leaves a skill map alone when it saves something else', async () => {
-    // `skills_json` is not a field of ProgressionRow, so a save has nothing to
-    // say about it. A column is not the absence of a writer: this one is
-    // reserved for the independent-skills model, and writing `{}` on every
-    // award would erase a map the moment anything populated it — silently,
-    // because until then nothing observes the loss.
+  it('round-trips the skill map, which is the column the independent-skills model needs', async () => {
+    // `skills_json` had a writer before the model did, and it wrote `{}` on
+    // every award. That was invisible until something read it and now it is the
+    // map the whole RuneScape half of progression sits on, so the round trip is
+    // asserted here rather than assumed from a unit test that never touched a
+    // database.
     const now = '2026-09-25T00:03:00.000Z';
-    const skills = { coding: 7, debugging: 3 };
-    await database
-      .update(agentStats)
-      .set({ skillsJson: skills })
-      .where(eq(agentStats.agentId, agentId));
+    const current = await repository.find(agentId);
+    expect(current).toBeDefined();
 
+    const practised = { ...(current as ProgressionRow).skills, coding: 700, debugging: 300 };
     await repository.save({
       agentId,
       xp: 900,
       level: 3,
       build: 'tester',
+      skills: practised,
       history: [{ build: 'tester', weight: 1, at: now }],
       updatedAt: now,
     });
 
+    const read = await repository.find(agentId);
+    expect(read?.skills).toEqual(practised);
+    // Two keys carried, six still there at zero. A save that wrote only what it
+    // was told about would come back as a two-key map, and every consumer would
+    // then need to know the difference.
+    expect(Object.keys(read?.skills ?? {}).sort()).toEqual([
+      'coding',
+      'collaboration',
+      'debugging',
+      'documentation',
+      'refactoring',
+      'research',
+      'security',
+      'testing',
+    ]);
+  });
+
+  it('drops a skill it does not know rather than passing a stranger through', async () => {
+    // A row written by a newer build, or corrupted on disk. The feature's own
+    // type names eight disciplines and this package may not import that list, so
+    // the narrowing here is what keeps an unknown key from arriving as a claim
+    // the feature has no way to level.
+    await database
+      .update(agentStats)
+      .set({ skillsJson: { coding: 12, carpentry: 4000 } })
+      .where(eq(agentStats.agentId, agentId));
+
+    const read = await repository.find(agentId);
+    expect(read?.skills.coding).toBe(12);
+    expect(Object.values(read?.skills ?? {})).toEqual([12, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('reports when the record last changed, and only then', async () => {
+    // It used to be read time, which meant the same unchanged row answered with
+    // a different value on every call and the instant the feature set on save was
+    // discarded by the next read. Both halves are asserted: that a save moves it,
+    // and that a read which changes nothing does not.
+    const before = await repository.find(agentId);
+    const settled = before?.updatedAt ?? '';
+    expect(settled).not.toBe('');
+
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const reread = await repository.find(agentId);
+    expect(reread?.updatedAt).toBe(settled);
+
+    const later = '2026-09-25T00:05:00.000Z';
+    await repository.save({
+      agentId,
+      xp: 1200,
+      level: 3,
+      build: 'tester',
+      skills: { ...(before as ProgressionRow).skills, testing: 200 },
+      history: [{ build: 'tester', weight: 1, at: later }],
+      updatedAt: later,
+    });
+
+    const moved = await repository.find(agentId);
+    expect(moved?.updatedAt).toBe(new Date(later).toISOString());
+  });
+
+  it("stamps a new record with the caller's clock rather than the server's", async () => {
+    // `ensure` writes the instant the feature supplied. Left on the column
+    // default, the row would carry the database's time while everything else in
+    // it carries the feature's, and the two are only the same by coincidence —
+    // which is exactly the kind of bug that never shows up on a machine whose
+    // clock and its database are the same machine.
+    const owner = await ownerFor(database);
+    const agent = await new DrizzleAgentRepository(database).create(
+      { ownerId: owner, name: `stamp-${Math.random().toString(36).slice(2)}`, harness: 'claude' },
+      '2026-09-25T00:06:00.000Z',
+    );
+    const supplied = '2026-01-02T03:04:05.000Z';
+
+    const created = await repository.ensure({ agentId: agent.id }, supplied);
+
+    expect(created.updatedAt).toBe(supplied);
+    // Read back through the column, not through the value `ensure` returned, or
+    // the assertion would be about a field the method just echoed.
     const [row] = await database
-      .select({ skillsJson: agentStats.skillsJson })
+      .select({ updatedAt: agentStats.updatedAt })
       .from(agentStats)
-      .where(eq(agentStats.agentId, agentId))
+      .where(eq(agentStats.agentId, agent.id))
       .limit(1);
-    expect(row?.skillsJson).toEqual(skills);
+    expect(row?.updatedAt.toISOString()).toBe(new Date(supplied).toISOString());
   });
 });

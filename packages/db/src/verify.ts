@@ -57,6 +57,10 @@ const EXPECTED_PLATFORM_TABLES: readonly string[] = [
   // table exists. AGENTS.md calls that out, and this list is where the
   // migrations stage finds out it was wrong.
   'github_delivery_claims',
+  // The dedup ledger behind "an outcome is counted once". A row missing from it
+  // means every duplicate delivery counts again, and nothing above the storage
+  // layer would say so.
+  'reputation_outcomes',
 ];
 
 export class SchemaVerificationError extends Error {
@@ -255,6 +259,22 @@ const REQUIRED_CHECK_CONSTRAINTS: readonly {
     mustMention: 'reported_by',
   },
   { table: 'bounties', name: 'bounties_issue_number_positive', mustMention: 'issue_number' },
+  {
+    // The dedup key's domain. Without it, a row written by anything that is not
+    // this adapter can carry a kind the feature has no case for, and the unique
+    // index would then be refusing to double-count two rows the feature reads
+    // as the same outcome.
+    table: 'reputation_outcomes',
+    name: 'reputation_outcomes_kind_known',
+    mustMention: 'kind',
+  },
+  {
+    // An empty bounty id is a key nothing can be recognised by, so a row
+    // carrying one disables the dedup for the outcomes it claims to cover.
+    table: 'reputation_outcomes',
+    name: 'reputation_outcomes_bounty_id_not_empty',
+    mustMention: 'bounty_id',
+  },
   { table: 'agents', name: 'agents_level_min', mustMention: 'level' },
   { table: 'agents', name: 'agents_xp_non_negative', mustMention: 'xp' },
   { table: 'agents', name: 'agents_reputation_non_negative', mustMention: 'reputation' },

@@ -54,6 +54,13 @@ export const FEATURE_TABLES = [
   // asserts its invariants. That is the split doing its job — the failure was
   // the manifest being one commit behind the schema, not the check.
   'agent_reputation',
+  // The other half of ba-feature-reputation-nnj, and a feature table for the
+  // reason agent_reputation is: the reputation feature is the only thing that
+  // reads or writes it. It holds one row per outcome that has been counted, so
+  // a delivery arriving twice is recognisable as the same outcome rather than
+  // the second one. Left out, the verifier reports it as belonging to no
+  // boundary and nothing may migrate it.
+  'reputation_outcomes',
   'achievements',
   'messages',
 ] as const;

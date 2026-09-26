@@ -1,7 +1,17 @@
 import { eq } from 'drizzle-orm';
 
-import { agentReputation } from '../schema/features/reputation.js';
+import { agentReputation, reputationOutcomes } from '../schema/features/reputation.js';
 import type { Database } from '../client.js';
+
+/**
+ * The two kinds, typed from the schema rather than restated.
+ *
+ * A third name added to `REPUTATION_OUTCOME_KINDS` widens this union for free,
+ * and a caller passing anything else does not compile. The CHECK on the column
+ * is the second half of the same rule, for a row written by something that is
+ * not this adapter.
+ */
+export type ReputationOutcomeKind = (typeof reputationOutcomes.$inferInsert)['kind'];
 
 /**
  * Reputation against the real database.
@@ -41,12 +51,31 @@ export interface ReputationRow {
   /** 0..5. Stored as 0..500. */
   readonly reviewScore: number;
   readonly earnedCents: number;
+  readonly refusedOutcomes: number;
   readonly updatedAt: string;
+}
+
+/** The identity of one outcome, as the store receives it. */
+export interface ReputationOutcomeRow {
+  readonly agentId: string;
+  readonly bountyId: string;
+  /**
+   * Typed from the schema's own list rather than as a string, so the adapter
+   * cannot be handed a kind the column would refuse and the caller would not
+   * hear about until the insert threw.
+   */
+  readonly kind: ReputationOutcomeKind;
 }
 
 export interface ReputationStore {
   find(agentId: string): Promise<ReputationRow | undefined>;
   save(record: ReputationRow): Promise<void>;
+  /**
+   * True when this call is the one that recorded the outcome, false when it was
+   * already there. See the port's own doc for why the caller has to ask before
+   * it changes the record.
+   */
+  claimOutcome(outcome: ReputationOutcomeRow, now: string): Promise<boolean>;
 }
 
 export class DrizzleReputationRepository implements ReputationStore {
@@ -74,6 +103,7 @@ export class DrizzleReputationRepository implements ReputationStore {
       ),
       reviewScore: clamp(row.reviewScore / REVIEW_SCALE, 0, REVIEW_CEILING / REVIEW_SCALE),
       earnedCents: row.earnedCents,
+      refusedOutcomes: row.refusedOutcomes,
       updatedAt: row.updatedAt.toISOString(),
     };
   }
@@ -85,6 +115,7 @@ export class DrizzleReputationRepository implements ReputationStore {
       acceptanceRate: Math.round(record.acceptanceRate * ACCEPTANCE_SCALE),
       reviewScore: Math.round(record.reviewScore * REVIEW_SCALE),
       earnedCents: record.earnedCents,
+      refusedOutcomes: record.refusedOutcomes,
       updatedAt: new Date(record.updatedAt),
     };
 
@@ -99,6 +130,34 @@ export class DrizzleReputationRepository implements ReputationStore {
         target: agentReputation.agentId,
         set: stored,
       });
+  }
+
+  /**
+   * The unique index is the mutex, not a check afterwards.
+   *
+   * Read-then-insert would leave two concurrent callers both finding no row and
+   * both inserting, and the loser's insert is the double count. Letting the
+   * database refuse the second one means the answer and the record are written
+   * in the same statement, so there is no window in which both callers believe
+   * they were first.
+   *
+   * `doNothing` rather than `doUpdate`: an update would succeed and report a
+   * row, which would read as "I counted this one" and put the double count
+   * back with an extra step.
+   */
+  async claimOutcome(outcome: ReputationOutcomeRow, now: string): Promise<boolean> {
+    const inserted = await this.database
+      .insert(reputationOutcomes)
+      .values({
+        agentId: outcome.agentId,
+        bountyId: outcome.bountyId,
+        kind: outcome.kind,
+        recordedAt: new Date(now),
+      })
+      .onConflictDoNothing()
+      .returning({ id: reputationOutcomes.id });
+
+    return inserted.length > 0;
   }
 }
 

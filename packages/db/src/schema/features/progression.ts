@@ -1,8 +1,17 @@
 import { sql } from 'drizzle-orm';
-import { check, integer, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { check, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 import { agents } from '../platform.js';
 
+/**
+ * Experience per skill, and counts rather than levels on purpose.
+ *
+ * The level of a skill is a function of its experience and of a curve that lives
+ * in the feature, so storing it here would be a second copy of a number the
+ * feature can retune. `Record<string, number>` rather than a union of skill
+ * names because this package may not import the feature that owns that union,
+ * the same rule that makes `build` a text column the adapter narrows.
+ */
 export type AgentSkills = Record<string, number>;
 
 /**
@@ -34,6 +43,13 @@ export const agentStats = pgTable(
     battlesWon: integer('battles_won').notNull().default(0),
     battlesLost: integer('battles_lost').notNull().default(0),
     skillsJson: jsonb('skills_json').$type<AgentSkills>().notNull().default({}),
+    // When this progression record last changed. It was read time before, which
+    // made `updatedAt` mean "now" and returned a different value on every read of
+    // an unchanged row — so nothing could tell a stale character sheet from a
+    // current one, and the instant the feature set on save was discarded by the
+    // next read. Defaulted rather than nullable so a row created by `ensure`
+    // has a real one before anything has been awarded.
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // The award history is a list, so it cannot live in skills_json: that column
     // is Record<string, number>, and a list is not a number. Without its own
     // column the feature's promise that a reclassification is a re-read rather

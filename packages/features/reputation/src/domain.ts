@@ -47,6 +47,19 @@ export interface ReputationRecord {
   readonly reviewScore: number;
   /** Lifetime earnings in whole cents. Integer money, never a float. */
   readonly earnedCents: number;
+  /**
+   * Outcomes this feature refused to count, because the event naming them could
+   * not be told apart from a repeat of one already counted.
+   *
+   * Not an input to the trust formula, and nothing in rules.ts reads it: a
+   * refusal is a record about an event, not a fact about the agent. It is here
+   * because a refusal that leaves no trace is indistinguishable from an event
+   * that never happened, and the one that goes wrong when somebody is looking
+   * for the cause is a reputation that is too low for a reason nobody can name.
+   * The event log holds which events were refused and what they said; this
+   * holds how many, per agent, on the surface a caller already reads.
+   */
+  readonly refusedOutcomes: number;
   readonly updatedAt: string;
 }
 

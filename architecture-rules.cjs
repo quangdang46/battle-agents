@@ -12,8 +12,9 @@
 // no matter what is in the tree. A file once named .dependency-cruiser.cjs made both
 // of those look plausible, which is worse than not having the file.
 //
-// The single supported entry point is checkImports(). It is exercised by
-// tests/unit/dependency-rules.test.ts against a fixture, and by
+// The single supported entry point is checkImports(), plus checkContent() for the
+// rules that are about what code SAYS rather than what it imports. Both are
+// exercised by tests/unit/dependency-rules.test.ts against a fixture, and by
 // scripts/check-architecture.ts against the real tree, which is a pipeline
 // stage. If you add a rule, add a fixture that triggers it: the test asserts
 // every declared rule is exercised, so a rule nobody watches work fails CI.
@@ -195,6 +196,105 @@ const FORBIDDEN = [
       'Infrastructure implements the core persistence boundary, so it must not depend on the layers that consume it (plan section 19).',
   },
 ];
+
+/* ── content rules ──
+ *
+ * Everything above is about EDGES: which package may import which. A content
+ * rule is about TEXT. They are declared here rather than in a script of their
+ * own for the reason the whole file is one file: tests/unit/dependency-rules.test.ts
+ * asserts that every declared rule has a fixture that trips it, and a second
+ * file with a second registry is a second list to forget.
+ *
+ * The one rule here is the integrity property no layering rule can express. An
+ * experience award computed from a token count typechecks, imports nothing, and
+ * passes all seven forbidden pairs, because what it breaks is an ECONOMY rather
+ * than a dependency. Plan sections 10.2, 10.3 and 17 are explicit that
+ * experience comes from work and never from tokens or tool counts, and a
+ * comment saying so is a claim rather than a check.
+ */
+
+/**
+ * A token COUNT, which is not the same word as a credential.
+ *
+ * `packages/features/agent/src/credential.ts` mints bearer tokens, and that is
+ * an identity concern with nothing to do with pricing. No allowlist is needed:
+ * a line only trips the rule when it ALSO mentions experience, and a line that
+ * hashed a token and priced something on the same line would be a bug of a
+ * different and more interesting kind.
+ */
+const TOKEN_COUNT = /\w*tokens?\w*/i;
+const EXPERIENCE_AMOUNT = /\bxp\b|experience/i;
+
+/**
+ * Comments and string literals, removed.
+ *
+ * Not an optimisation. `rules.test.ts` asserts that no outcome type contains
+ * "token", and the string that says so contains the word; scanning raw text
+ * would report the guard against the economy as an instance of the economy, and
+ * a guard that cries wolf gets switched off. The replacement keeps newlines, so
+ * the line a violation is reported at is the line it is on.
+ */
+function stripCommentsAndLiterals(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, (literal) => literal.replace(/[^\n]/g, ' '));
+}
+
+const CONTENT_RULES = [
+  {
+    name: 'no-token-derived-experience',
+    files: [FEATURE_PATH],
+    reason:
+      'Experience is awarded from outcomes — a completed bounty, a merged pull request, a passed test, a recovery, a won battle — and never from how much the agent spent running them (plan sections 10.2, 10.3 and 17). A token economy would pay an agent for spending tokens to earn experience for spending tokens, which is the one design in this plan that makes the product worse the more people use it.',
+    detect: (line) => TOKEN_COUNT.test(line) && EXPERIENCE_AMOUNT.test(line),
+  },
+];
+
+/**
+ * The line-level limit of that rule, stated where the rule is declared.
+ *
+ * A derivation split across two statements, with the count stashed in a local
+ * whose name does not mention tokens, is not on one line and is not caught. What
+ * IS caught is every shape that has appeared in practice — `xp: payload.tokens / 100`,
+ * `Math.floor(outcome.tokensSpent * 0.1)`, `const xp = tokens;` — and a check
+ * that quietly implied it covered the rest would be the exact defect this file
+ * exists to prevent, so the limit is written down rather than left to be
+ * discovered.
+ */
+function checkContent({ files }) {
+  const violations = [];
+  for (const file of files) {
+    if (
+      !matchesAnyGlob(
+        CONTENT_RULES.flatMap((rule) => rule.files),
+        file.path,
+      )
+    ) {
+      continue;
+    }
+    const lines = stripCommentsAndLiterals(file.source).split('\n');
+    lines.forEach((line, index) => {
+      for (const rule of CONTENT_RULES) {
+        if (rule.detect(line)) {
+          violations.push(
+            buildViolation({
+              rule: rule.name,
+              from: `${file.path}:${index + 1}`,
+              to: line.trim(),
+              specifier: null,
+              reason: rule.reason,
+            }),
+          );
+        }
+      }
+    });
+  }
+  const deduplicated = new Map(violations.map((violation) => [violationKey(violation), violation]));
+  return [...deduplicated.values()].sort((left, right) =>
+    violationKey(left).localeCompare(violationKey(right)),
+  );
+}
 
 function toPosix(filePath) {
   return filePath.split(sep).join('/');
@@ -495,9 +595,11 @@ function formatReport(violations) {
 
 module.exports = {
   FORBIDDEN,
+  CONTENT_RULES,
   UNRESOLVED_RULE,
   UNRESOLVED_WORKSPACE_IMPORT,
   LAYERS,
+  checkContent,
   checkImports,
   classifyPath,
   discoverWorkspacePackages,

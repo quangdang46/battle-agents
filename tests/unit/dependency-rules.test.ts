@@ -51,9 +51,15 @@ interface CheckImportsInput {
   readonly packages: readonly WorkspacePackage[];
 }
 
+interface CheckContentInput {
+  readonly files: readonly SourceFile[];
+}
+
 interface LayerContract {
   readonly FORBIDDEN: readonly { readonly name: string }[];
+  readonly CONTENT_RULES: readonly { readonly name: string }[];
   readonly UNRESOLVED_RULE: { readonly name: string; readonly reason: string };
+  readonly checkContent: (input: CheckContentInput) => readonly Violation[];
   readonly checkImports: (input: CheckImportsInput) => readonly Violation[];
   readonly discoverWorkspacePackages: (repoRoot: string) => readonly WorkspacePackage[];
   readonly formatReport: (violations: readonly Violation[]) => string;
@@ -67,6 +73,8 @@ function isLayerContract(value: unknown): value is LayerContract {
   const candidate = value as Record<string, unknown>;
   return (
     Array.isArray(candidate['FORBIDDEN']) &&
+    Array.isArray(candidate['CONTENT_RULES']) &&
+    typeof candidate['checkContent'] === 'function' &&
     typeof candidate['checkImports'] === 'function' &&
     typeof candidate['discoverWorkspacePackages'] === 'function' &&
     typeof candidate['formatReport'] === 'function' &&
@@ -78,7 +86,7 @@ function loadContract(): LayerContract {
   const loaded: unknown = nodeRequire(CONTRACT_MODULE_PATH);
   if (!isLayerContract(loaded)) {
     throw new Error(
-      `${CONTRACT_FILENAME} must export FORBIDDEN, checkImports, discoverWorkspacePackages, formatReport and listSourceFiles`,
+      `${CONTRACT_FILENAME} must export FORBIDDEN, CONTENT_RULES, checkContent, checkImports, discoverWorkspacePackages, formatReport and listSourceFiles`,
     );
   }
   return loaded;
@@ -88,6 +96,11 @@ const contract = loadContract();
 
 function sourceFile(path: string, specifiers: readonly string[]): SourceFile {
   return { path, source: specifiers.map((specifier) => `import '${specifier}';`).join('\n') };
+}
+
+/** A content fixture carries real source, because the rule reads the text. */
+function contentFile(path: string, body: string): SourceFile {
+  return { path, source: `${body}\n` };
 }
 
 function summarize(
@@ -155,6 +168,66 @@ const FIXTURE_FILES: readonly SourceFile[] = [
   // fixture to prove the engine distinguishes "legal" from "unresolvable":
   // removing the animation package turns this exact line into a violation.
   sourceFile('packages/game-client/src/view.ts', ['@battle-agents/animation']),
+];
+
+/**
+ * The content-rule fixture, held apart from the import one because the two
+ * engines read different things: checkImports reads specifiers, and every
+ * fixture above is generated from a list of them, so none of them contains any
+ * source text a content rule could look at.
+ *
+ * Four positives and four negatives, and the negatives are the point. A scanner
+ * with no negatives is a scanner nobody has learned what to catch, and one that
+ * reports a comment is a scanner that gets switched off — which is what happened
+ * to the game-vocabulary scanner in tests/unit/scaffold.test.ts and is why it
+ * strips comments first.
+ */
+const CONTENT_FIXTURES: readonly SourceFile[] = [
+  // The shape a token economy would actually be written in.
+  contentFile(
+    'packages/features/quest/src/award.ts',
+    'export const experienceFor = (payload) => Math.floor(payload.tokensUsed / 100);',
+  ),
+  // The object-literal form, which is how a price row is written everywhere in
+  // this tree. A regex that only caught the first shape would be a rule that
+  // catches the shape its author imagined.
+  contentFile(
+    'packages/features/bounty/src/price.ts',
+    ['export const PRICE = { xp: outcome.totalTokens * 0.1 };', ''].join('\n'),
+  ),
+  // A bare local named for what it holds. No division, no property access.
+  contentFile('packages/features/agent/src/wallet.ts', 'const xp = tokens;'),
+  // A test file is production code as far as this rule is concerned. Excluding
+  // them would be a hole with a plausible-looking sign on it: the natural place
+  // to demonstrate the economy you were told not to build is a fixture.
+  contentFile(
+    'packages/features/quest/src/award.test.ts',
+    'expect(reward).toMatchObject({ xp: event.inputTokens / 4 });',
+  ),
+  // A comment naming the forbidden pair. The guard against the economy must not
+  // be reported as an instance of it.
+  contentFile(
+    'packages/features/reputation/src/domain.ts',
+    ['// experience is never derived from tokens.', 'export const TRUST = 1;'].join('\n'),
+  ),
+  // A string naming the forbidden pair, which is how a rule test and an error
+  // message both say the thing out loud.
+  contentFile(
+    'packages/features/reputation/src/feature.ts',
+    ['export const why = "xp must not come from tokens";', ''].join('\n'),
+  ),
+  // The credential sense of the same word. `packages/features/agent` mints
+  // bearer tokens, which is an identity concern and has no business being read
+  // as a price, so the rule is scoped by what the line is FOR rather than by
+  // keeping a list of the words that are innocent.
+  contentFile(
+    'packages/features/agent/src/credential.ts',
+    'const token = random(TOKEN_BYTES).toString("base64url");',
+  ),
+  // Outside a feature. The rule is about what a feature awards, and an adapter
+  // that counts tokens to bill somebody is a different question with a different
+  // answer.
+  contentFile('packages/adapters/claude/src/usage.ts', 'const xp = payload.totalTokens;'),
 ];
 
 const EXPECTED_FIXTURE_VIOLATIONS = [
@@ -257,6 +330,20 @@ describe('layering rule engine', () => {
       ...contract.FORBIDDEN.map((rule) => rule.name),
       contract.UNRESOLVED_RULE.name,
     ]);
+    // The content rules are declared in the same file and asserted here rather
+    // than in a describe block of their own, because the failure this catches is
+    // a rule nobody ever tripped: a content rule with no fixture would otherwise
+    // sit in the contract looking enforced and being checked by no one.
+    const contentRuleNames = contract.CONTENT_RULES.map((rule) => rule.name);
+    expect(contentRuleNames.length).toBeGreaterThan(0);
+    const contentViolations = contract.checkContent({ files: CONTENT_FIXTURES });
+    for (const name of contentRuleNames) {
+      expect(
+        contentViolations.map((violation) => violation.rule),
+        `${name} has no fixture that trips it`,
+      ).toContain(name);
+    }
+
     expect(new Set(violations.map((violation) => violation.rule))).toEqual(expectedRules);
   });
 
@@ -293,5 +380,61 @@ describe('repository layering', () => {
 
   it('reports no dependency violations', () => {
     expect(contract.formatReport(violations)).toBe('');
+  });
+});
+
+describe('no feature may price experience in tokens', () => {
+  // The integrity property no layering rule can express. An award computed from
+  // a token count imports nothing, typechecks, and passes all seven forbidden
+  // pairs, because what it breaks is an economy rather than a dependency. Plan
+  // sections 10.2, 10.3 and 17 say experience comes from work and never from
+  // tokens, and before this rule the only thing saying so in the tree was
+  // packages/features/progression/src/rules.test.ts — which proves the award
+  // TABLE has no such column and says nothing about a feature that computes an
+  // award before it ever reaches the table.
+  const violations = contract.checkContent({ files: CONTENT_FIXTURES });
+
+  it('catches every token-derived award in the fixture, in every shape it is written in', () => {
+    const reported = violations.map((violation) => violation.from.split(':')[0]).sort();
+
+    expect(reported).toEqual([
+      'packages/features/agent/src/wallet.ts',
+      'packages/features/bounty/src/price.ts',
+      'packages/features/quest/src/award.test.ts',
+      'packages/features/quest/src/award.ts',
+    ]);
+  });
+
+  it('says which line and what it said', () => {
+    const [first] = violations.filter(
+      (violation) => violation.from === 'packages/features/quest/src/award.ts:1',
+    );
+    expect(first).toBeDefined();
+    // A report a reader cannot act on is a report nobody acts on, and the line
+    // is the thing they have to find.
+    expect(first?.to).toContain('tokensUsed');
+    expect(first?.message).toContain('no-token-derived-experience');
+  });
+
+  it('does not read the word out of a comment or a string', () => {
+    // Both files above name the forbidden pair and neither is a violation. This
+    // is the half of the check that decides whether it is still running in a
+    // month: a scanner that reports the guard against the economy is a scanner
+    // that gets switched off.
+    const reported = violations.map((violation) => violation.from);
+    expect(reported.some((from) => from.includes('reputation'))).toBe(false);
+  });
+
+  it('is not fooled by the credential sense of the same word, or by a package outside a feature', () => {
+    // `packages/features/agent/src/credential.ts` mints bearer tokens and is in
+    // the fixture. Neither it nor an adapter's usage counter is an award.
+    const reported = violations.map((violation) => violation.from);
+    expect(reported.some((from) => from.includes('credential'))).toBe(false);
+    expect(reported.some((from) => from.includes('adapters'))).toBe(false);
+  });
+
+  it('reports nothing for the repository as it stands', () => {
+    const sourceFiles = contract.listSourceFiles(REPO_ROOT);
+    expect(contract.formatReport(contract.checkContent({ files: sourceFiles }))).toBe('');
   });
 });

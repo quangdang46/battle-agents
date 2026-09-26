@@ -22,6 +22,9 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 
 interface LayerContract {
+  checkContent: (input: {
+    files: readonly { path: string; source: string }[];
+  }) => readonly { rule: string; from: string; to: string; specifier: string | null }[];
   checkImports: (input: {
     files: readonly { path: string; source: string }[];
     packages: readonly { dir: string; name: string }[];
@@ -36,6 +39,7 @@ interface LayerContract {
 function loadContract(): LayerContract {
   const loaded = require(join(REPO_ROOT, 'architecture-rules.cjs')) as LayerContract;
   for (const name of [
+    'checkContent',
     'checkImports',
     'discoverWorkspacePackages',
     'formatReport',
@@ -52,7 +56,14 @@ function main(): void {
   const contract = loadContract();
   const packages = contract.discoverWorkspacePackages(REPO_ROOT);
   const sourceFiles = contract.listSourceFiles(REPO_ROOT);
-  const violations = contract.checkImports({ files: sourceFiles, packages });
+  // Both engines, one report. The layering rules and the content rules answer
+  // different questions and a tree has to pass both, so a stage that ran only one
+  // of them would be a stage that could report green while the other was
+  // failing.
+  const violations = [
+    ...contract.checkImports({ files: sourceFiles, packages }),
+    ...contract.checkContent({ files: sourceFiles }),
+  ];
 
   if (violations.length === 0) {
     console.log(
@@ -64,7 +75,7 @@ function main(): void {
   console.error(`architecture FAILED with ${violations.length} violation(s):`);
   console.error(contract.formatReport(violations));
   console.error(
-    '\nThese are layering rules from the plan: features never import another feature, adapters and core stay at the bottom, and an import that resolves to nothing is reported rather than skipped.',
+    '\nThese are layering rules from the plan: features never import another feature, adapters and core stay at the bottom, an import that resolves to nothing is reported rather than skipped, and no feature may award experience from a token count.',
   );
   process.exitCode = 1;
 }

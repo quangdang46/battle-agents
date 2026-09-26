@@ -22,6 +22,7 @@ function record(overrides: Partial<ReputationRecord> = {}): ReputationRecord {
     acceptanceRate: 0,
     reviewScore: 0,
     earnedCents: 0,
+    refusedOutcomes: 0,
     updatedAt: NOW,
     ...overrides,
   };
@@ -165,6 +166,7 @@ describe('reputation is not progression', () => {
       'completed',
       'earnedCents',
       'failed',
+      'refusedOutcomes',
       'reviewScore',
       'updatedAt',
     ]);
@@ -181,5 +183,16 @@ describe('reputation is not progression', () => {
       'tier',
       'trust',
     ]);
+  });
+
+  it('does not let a refusal move the score', () => {
+    // `refusedOutcomes` counts events this feature declined to count. It is on
+    // the record so the refusal is visible, and it is on NOBODY's side of the
+    // formula: a producer that stops naming the bounty must not be able to move
+    // anybody's tier, in either direction, by being broken.
+    expect(trustScore(record({ refusedOutcomes: 500 }))).toBe(trustScore(record()));
+    expect(summarise(record({ refusedOutcomes: 500 })).tier).toBe(
+      summarise(record()).tier,
+    );
   });
 });

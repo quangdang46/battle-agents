@@ -78,6 +78,20 @@
       "when": 1790381751396,
       "tag": "0010_steady_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790389759742,
+      "tag": "0011_rapid_red_wolf",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790389810497,
+      "tag": "0012_giant_mystique",
+      "breakpoints": true
     }
   ]
 }

@@ -31,13 +31,15 @@ export type {
   ProgressionDependencies,
   ProgressionSummary,
 } from './feature.js';
-export { isNoSuchProgress, NO_SUCH_PROGRESS } from './repository.js';
 export type { ProgressionRepository } from './repository.js';
 export {
+  awardSkill,
   BUILDS,
   classifyBuild,
   DEFAULT_BUILD,
   DEFAULT_BUILD_WEIGHTS,
+  describeSkills,
+  EMPTY_SKILLS,
   explainBuild,
   isOutcomeType,
   LEVEL_GATES,
@@ -48,6 +50,8 @@ export {
   OUTCOME_TYPES,
   outcomeFor,
   qualifies,
+  SKILLS,
+  skillsEvidencedByOutcomes,
   totalXpToReach,
   xpToAdvanceFrom,
 } from './rules.js';
@@ -60,6 +64,9 @@ export type {
   Outcome,
   OutcomeCondition,
   OutcomeType,
+  Skill,
+  SkillProgress,
+  Skills,
   Specialist,
 } from './rules.js';
 export { PROGRESSION_ACTION_IDS } from './manifest.js';

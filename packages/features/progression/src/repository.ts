@@ -16,6 +16,15 @@ import type { AgentProgress, NewProgress } from './domain.js';
  * the owner here, and doing so is easier now than retrofitting.
  */
 export interface ProgressionRepository {
+  /**
+   * The record, or undefined when the agent has never earned anything.
+   *
+   * Undefined rather than a zeroed record, so a caller can still tell a new
+   * character from an established one that happens to be at level 1. It is not
+   * an error condition: an agent row with no progress is the normal state of
+   * every agent until its first outcome arrives, and `progression.read` answers
+   * for it rather than raising.
+   */
   find(agentId: string): Promise<AgentProgress | undefined>;
 
   /**
@@ -28,15 +37,4 @@ export interface ProgressionRepository {
   ensure(progress: NewProgress, now: string): Promise<AgentProgress>;
 
   save(progress: AgentProgress): Promise<void>;
-}
-
-/** Raised when a caller asks about an agent that has no progress record. */
-export const NO_SUCH_PROGRESS = 'no-such-progress';
-
-export function isNoSuchProgress(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === NO_SUCH_PROGRESS
-  );
 }

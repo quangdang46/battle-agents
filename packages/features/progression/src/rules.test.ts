@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import * as RULES from './rules.js';
 import {
+  awardSkill,
   BUILDS,
   classifyBuild,
   DEFAULT_BUILD,
   DEFAULT_BUILD_WEIGHTS,
+  describeSkills,
+  EMPTY_SKILLS,
   explainBuild,
   isOutcomeType,
   LEVEL_GATES,
@@ -14,10 +18,13 @@ import {
   OUTCOME_TYPES,
   outcomeFor,
   qualifies,
+  SKILLS,
+  skillsEvidencedByOutcomes,
   totalXpToReach,
   xpToAdvanceFrom,
   type BehaviourSignal,
   type BuildWeights,
+  type Skills,
 } from './rules.js';
 
 const NOW = '2026-09-24T12:00:00.000Z';
@@ -75,6 +82,11 @@ describe('experience comes from outcomes, and only outcomes', () => {
     // and nothing else, so a token event cannot reach it. If a future edit adds
     // arithmetic on a token field, or a key with "token" in it, this fails —
     // and it is the test the bead asks for, rather than a promise in a comment.
+    //
+    // It is also the WEAKER half. This proves the table has no such column; it
+    // says nothing about a feature that computes an award before it ever gets
+    // here, which is why `no-token-derived-experience` exists in
+    // architecture-rules.cjs and scans the tree.
     for (const type of OUTCOME_TYPES) {
       expect(type.toLowerCase(), `${type} must not be token-derived`).not.toContain('token');
     }
@@ -290,6 +302,143 @@ describe('a model is not a class', () => {
         continue;
       }
       expect(classifyBuild(signals(build, 3))).toBe(build);
+    }
+  });
+});
+
+describe('eight skills, and no single power scalar', () => {
+  it("names the eight the plan names, in the plan's order", () => {
+    // Section 10.2 lists them in this order and calls the model the best fit of
+    // the four it weighed. The order is the character sheet's order, so it is
+    // pinned rather than left to a `Set` iteration.
+    expect([...SKILLS]).toEqual([
+      'coding',
+      'debugging',
+      'testing',
+      'research',
+      'refactoring',
+      'security',
+      'documentation',
+      'collaboration',
+    ]);
+  });
+
+  it('keeps a skill and a build as two claims, and says where the plan spells them the same', () => {
+    // The plan uses "Security" twice with two meanings: §10.2's RuneScape line
+    // lists it as a skill, and §10.2's Diablo line lists it as a build. So the
+    // word is in both vocabularies on purpose and this test must not pretend
+    // otherwise — the thing to forbid is the two becoming the same CLAIM, which
+    // is what would rebuild the single power scalar: one field that says both
+    // what a character is and what it can do.
+    const shared = SKILLS.filter((skill) => (BUILDS as readonly string[]).includes(skill));
+    expect(shared).toEqual(['security']);
+
+    // Two fields, two unions. The price row names both and they are not the same
+    // value: a bounty is evidence of the BUILD `builder` and trains the SKILL
+    // `coding`, and reading either one gives you a different answer.
+    expect(OUTCOMES['bounty.completed'].build).toBe('builder');
+    expect(OUTCOMES['bounty.completed'].skill).toBe('coding');
+    for (const outcome of Object.values(OUTCOMES)) {
+      expect(BUILDS).toContain(outcome.build);
+      if (outcome.skill !== undefined) {
+        expect(SKILLS, `${outcome.skill} is not one of the eight`).toContain(outcome.skill);
+      }
+    }
+  });
+
+  it('levels each skill on the same curve the character uses, independently', () => {
+    const practised: Skills = { ...EMPTY_SKILLS, debugging: 400 };
+
+    const described = describeSkills(practised);
+    const byName = Object.fromEntries(described.map((entry) => [entry.skill, entry]));
+
+    expect(byName['debugging']).toEqual({ skill: 'debugging', xp: 400, level: 3 });
+    // Everyone else is untouched at level 1, which is the claim. `levelForXp` is
+    // the character\'s own function, so a skill level cannot drift away from the
+    // ladder the character walks.
+    expect(byName['coding']).toEqual({ skill: 'coding', xp: 0, level: 1 });
+    expect(levelForXp(400)).toBe(3);
+  });
+
+  it('reports all eight always, so an untrained skill is visible', () => {
+    // "Specialisation without maxing everything" is the plan\'s EVE insight and
+    // it is only legible if the four at zero are on the sheet beside the one
+    // that moved.
+    expect(describeSkills({ ...EMPTY_SKILLS, security: 10 })).toHaveLength(SKILLS.length);
+    expect(describeSkills(EMPTY_SKILLS).every((entry) => entry.level === 1)).toBe(true);
+  });
+
+  it('credits a skill from the price row and not from the name of the event', () => {
+    // The mapping is data beside the award, so a test that only knows the rules
+    // is enough: nothing here names a feature, a handler or a reducer.
+    const afterTest = awardSkill(EMPTY_SKILLS, OUTCOMES['test.passed']);
+    const afterRecovery = awardSkill(EMPTY_SKILLS, OUTCOMES['session.recovered']);
+
+    expect(afterTest.testing).toBe(100);
+    expect(afterRecovery.debugging).toBe(150);
+    // The two the brief names explicitly, and neither one moved the other.
+    expect(afterTest.debugging).toBe(0);
+    expect(afterRecovery.testing).toBe(0);
+  });
+
+  it('leaves every skill alone for an outcome that is evidence of none', () => {
+    const battle = OUTCOMES['battle.finished'];
+    expect(battle.skill).toBeUndefined();
+    // By reference, not a copy: a caller that got a fresh object here would
+    // learn nothing and the type would say the map had been rewritten.
+    expect(awardSkill(EMPTY_SKILLS, battle)).toBe(EMPTY_SKILLS);
+  });
+
+  it('never lets the eight add up to more experience than the character has', () => {
+    // The skills are carved OUT of the same award, not paid on top of it. If
+    // this ever fails, something has started paying twice.
+    let skills: Skills = EMPTY_SKILLS;
+    let total = 0;
+    for (const type of OUTCOME_TYPES) {
+      const outcome = OUTCOMES[type];
+      skills = awardSkill(skills, outcome);
+      total += outcome.xp;
+    }
+
+    const trained = Object.values(skills).reduce((sum, xp) => sum + xp, 0);
+    // 2250 paid in total and 1750 of it evidenced by a discipline. The gap is
+    // the battle win, which pays the character and trains nothing, and it is
+    // written down because a future outcome that trains a skill would move this
+    // number and someone should have to look at why.
+    expect(total).toBe(2250);
+    expect(trained).toBe(1750);
+    expect(trained).toBeLessThan(total);
+  });
+
+  it('names the four skills the current outcomes can move, and says which four they are not', () => {
+    // The pin that makes adding an outcome a decision. A sixth outcome lands,
+    // this set changes, and the failure is somebody having to say which
+    // discipline the new thing trains — rather than a skill that quietly never
+    // moves and nobody noticing for a season.
+    expect(skillsEvidencedByOutcomes()).toEqual([
+      'coding',
+      'debugging',
+      'testing',
+      'collaboration',
+    ]);
+    // The other four have no outcome that is evidence of them yet, because no
+    // event says they happened. Written out rather than derived from the
+    // complement, so a skill added to SKILLS without a fixture fails rather than
+    // passing as quietly untrained.
+    for (const untrained of ['research', 'refactoring', 'security', 'documentation']) {
+      expect(skillsEvidencedByOutcomes(), untrained).not.toContain(untrained);
+    }
+  });
+
+  it('exports no function anywhere in this file that combines the eight', () => {
+    // The single power scalar is forbidden by name in section 10.2, and the way
+    // it comes back is as an ordinary helper somebody adds to a rules file. The
+    // names it would be given are listed; the export surface is checked for them.
+    // What this CANNOT catch is a caller combining the map itself, which is why
+    // the read reply is asserted to carry no aggregate either.
+    const exported = Object.keys(RULES);
+    for (const forbidden of ['power', 'totalPower', 'skillPower', 'skillLevel', 'overallSkill']) {
+      expect(exported, `${forbidden} sounds like a power scalar`).not.toContain(forbidden);
     }
   });
 });

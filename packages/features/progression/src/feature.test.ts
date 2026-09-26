@@ -12,14 +12,16 @@ import {
   whyProgressionReadIsRejected,
   type AgentProgress,
 } from './domain.js';
-import { isNoSuchProgress, type ProgressionRepository } from './repository.js';
+import type { ProgressionRepository } from './repository.js';
 import { apply, progressionFeature, type GateDecision, type LevelGateView } from './feature.js';
 import {
   DEFAULT_BUILD,
   DEFAULT_BUILD_WEIGHTS,
+  EMPTY_SKILLS,
   LEVEL_GATES,
   meetsGate,
   OUTCOMES,
+  SKILLS,
   totalXpToReach,
   type BuildWeights,
 } from './rules.js';
@@ -53,6 +55,7 @@ class InMemoryProgressionRepository implements ProgressionRepository {
       xp: 0,
       level: 1,
       build: DEFAULT_BUILD,
+      skills: EMPTY_SKILLS,
       history: [],
       updatedAt: now,
     };
@@ -277,29 +280,85 @@ describe('the same model, two histories', () => {
 });
 
 describe('reading progress', () => {
-  it('reports experience, level and build', async () => {
+  it('reports experience, level, build and all eight skills', async () => {
     const { runtime } = harness();
     await runtime.emit(outcomeEvent('bounty.completed'));
 
     const summary = await runtime.runAction<
       { agentId: string },
-      { xp: number; level: number; build: string }
+      {
+        xp: number;
+        level: number;
+        build: string;
+        exists: boolean;
+        skills: readonly { skill: string; xp: number; level: number }[];
+      }
     >('progression.read', { agentId: AGENT });
 
-    expect(summary).toMatchObject({ xp: 1000, level: 4, build: 'builder' });
+    expect(summary).toMatchObject({ xp: 1000, level: 4, build: 'builder', exists: true });
+    // All eight, always. A skill at zero has to be on the sheet, because the
+    // plan's "specialisation without maxing everything" is only visible if the
+    // untrained ones are next to the trained one.
+    expect(summary.skills.map((entry) => entry.skill)).toEqual([...SKILLS]);
+    expect(summary.skills.find((entry) => entry.skill === 'coding')).toEqual({
+      skill: 'coding',
+      xp: 1000,
+      level: 4,
+    });
   });
 
-  it('says an unknown character is unknown, not new', async () => {
+  it('answers for a character nobody has heard of rather than refusing', async () => {
     const { runtime } = harness();
 
-    const failure = await runtime
-      .runAction('progression.read', { agentId: 'never-seen' })
-      .catch((cause: unknown) => cause);
+    const summary = await runtime.runAction<
+      { agentId: string },
+      {
+        agentId: string;
+        xp: number;
+        level: number;
+        build: string;
+        exists: boolean;
+        skills: readonly { skill: string; xp: number; level: number }[];
+      }
+    >('progression.read', { agentId: 'never-seen' });
 
-    // A character that has done nothing and a character nobody has heard of are
-    // different answers. Reporting "level 1, zero xp" for both would make a
-    // missing record look like a new player.
-    expect(isNoSuchProgress(failure)).toBe(true);
+    // The read used to throw `no-such-progress`, which made the one caller it
+    // was built for — a character sheet for a new agent — handle an exception
+    // before it could draw anything. The distinction the throw protected is not
+    // lost: `exists` carries it, in the reply, where a client can use it.
+    expect(summary).toMatchObject({ agentId: 'never-seen', exists: false, xp: 0, level: 1 });
+    // Level 1 and not level 0, and all eight skills reported at zero rather than
+    // absent. `levelForXp(0)` is where the number comes from, so a retune of the
+    // ladder cannot leave an unearned character on a level that does not exist.
+    expect(summary.level).toBe(1);
+    expect(summary.skills).toHaveLength(SKILLS.length);
+    expect(summary.skills.every((entry) => entry.xp === 0 && entry.level === 1)).toBe(true);
+  });
+
+  it('distinguishes a character that has done nothing from one nobody has heard of', async () => {
+    const { runtime, repository } = harness();
+    // Seeded rather than produced by an event. Every path that creates a record
+    // also writes an award to it, so an empty one only exists in the store — and
+    // the read has to tell the two apart anyway, which is the whole reason the
+    // old throw existed.
+    repository.rows.set(AGENT, {
+      agentId: AGENT,
+      xp: 0,
+      level: 1,
+      build: DEFAULT_BUILD,
+      skills: EMPTY_SKILLS,
+      history: [],
+      updatedAt: NOW,
+    });
+
+    const summary = await runtime.runAction<
+      { agentId: string },
+      { xp: number; level: number; exists: boolean }
+    >('progression.read', { agentId: AGENT });
+
+    // Same numbers as the unknown character above, and a different answer,
+    // because the flag is the only thing that carries the distinction now.
+    expect(summary).toMatchObject({ exists: true, xp: 0, level: 1 });
   });
 
   it('answers what an outcome is worth before it happens', async () => {
@@ -565,6 +624,7 @@ describe('applying an outcome', () => {
       xp: 0,
       level: 1,
       build: DEFAULT_BUILD,
+      skills: EMPTY_SKILLS,
       history: [],
       updatedAt: NOW,
     };
@@ -574,6 +634,7 @@ describe('applying an outcome', () => {
     // The input is untouched, which is what makes a re-award safe to replay.
     expect(start.xp).toBe(0);
     expect(start.history).toEqual([]);
+    expect(start.skills).toEqual(EMPTY_SKILLS);
     expect(after.xp).toBe(1000);
     expect(after.build).toBe('builder');
   });
@@ -584,6 +645,7 @@ describe('applying an outcome', () => {
       xp: 1000,
       level: 2,
       build: 'builder',
+      skills: { ...EMPTY_SKILLS, coding: 1000 },
       history: [{ build: 'builder', weight: 1, at: NOW }],
       updatedAt: NOW,
     };
@@ -596,5 +658,140 @@ describe('applying an outcome', () => {
     }
     expect(progress.build).toBe('builder');
     expect(progress.history).toHaveLength(7);
+  });
+
+  it('completes a record written before the skills model existed', () => {
+    // A stored row from before this model landed has no `skills` key at all. The
+    // reducer must not spread undefined into arithmetic, and must not leave the
+    // record permanently one field short. The cast is the point rather than an
+    // escape: a row in that shape is what the store can hand back, and typing it
+    // as a real `AgentProgress` would hide the very case under test.
+    const legacy = {
+      agentId: AGENT,
+      xp: 0,
+      level: 1,
+      build: DEFAULT_BUILD,
+      history: [],
+      updatedAt: NOW,
+    } as unknown as AgentProgress;
+
+    const after = apply(legacy, OUTCOMES['test.passed'], NOW);
+
+    expect(Object.keys(after.skills).sort()).toEqual([...SKILLS].sort());
+    expect(after.skills.testing).toBe(100);
+  });
+});
+
+describe('a skill is not a build', () => {
+  // The two are separate claims about a character and the plan is explicit that
+  // they stay separate: a build is what a classifier infers from a whole
+  // history, a skill is something that happened once. Conflating them rebuilds
+  // the single power scalar section 10.2 forbids, and these are the assertions
+  // that say so.
+  it('moves the skill the outcome is evidence of, through the real runtime', async () => {
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('test.passed'));
+    await runtime.emit(outcomeEvent('session.recovered'));
+
+    const read = await runtime.runAction<
+      { agentId: string },
+      { skills: readonly { skill: string; xp: number; level: number }[] }
+    >('progression.read', { agentId: AGENT });
+
+    const bySkill = Object.fromEntries(read.skills.map((entry) => [entry.skill, entry.xp]));
+    expect(bySkill['testing']).toBe(100);
+    expect(bySkill['debugging']).toBe(150);
+    // The three that nothing was evidence of. A bug that added to the wrong one
+    // would still leave the right ones correct, so the untouched ones are part of
+    // the claim rather than an afterthought.
+    expect(bySkill['coding']).toBe(0);
+    expect(bySkill['collaboration']).toBe(0);
+    expect(bySkill['research']).toBe(0);
+  });
+
+  it('keeps every skill below the character, because the character is a sum of them', async () => {
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    const read = await runtime.runAction<
+      { agentId: string },
+      {
+        xp: number;
+        level: number;
+        skills: readonly { skill: string; xp: number; level: number }[];
+      }
+    >('progression.read', { agentId: AGENT });
+
+    // A bounty is the only outcome so far that trains a skill, and it pays all
+    // of its 1000 to `coding`, so the two levels are equal rather than the skill
+    // being lower. What must never happen is the reverse.
+    const totals = read.skills.reduce((sum, entry) => sum + entry.xp, 0);
+    expect(totals).toBeLessThanOrEqual(read.xp);
+    for (const entry of read.skills) {
+      expect(entry.level, `${entry.skill} outran the character`).toBeLessThanOrEqual(read.level);
+    }
+  });
+
+  it('leaves no aggregate a caller could mistake for a power score', async () => {
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('bounty.completed'));
+
+    const read = (await runtime.runAction('progression.read', { agentId: AGENT })) as Record<
+      string,
+      unknown
+    >;
+
+    // Named rather than computed: the failure this forbids is a `power` or
+    // `totalSkillLevel` appearing in the reply, and a rule about arithmetic on
+    // skills would not have caught that.
+    for (const forbidden of [
+      'power',
+      'total',
+      'totalSkillLevel',
+      'strength',
+      'rating',
+      'average',
+    ]) {
+      expect(read[forbidden], `${forbidden} is a power scalar`).toBeUndefined();
+    }
+    // And the skills are eight separate objects, not one number eight times.
+    expect(Array.isArray(read['skills'])).toBe(true);
+  });
+
+  it('does not let a battle win train a skill it is not evidence of', async () => {
+    const { runtime } = harness();
+    await runtime.emit(outcomeEvent('battle.finished', AGENT, { won: true }));
+
+    const read = await runtime.runAction<
+      { agentId: string },
+      { xp: number; skills: readonly { skill: string; xp: number }[] }
+    >('progression.read', { agentId: AGENT });
+
+    // The character is level 3 from a 500 award and every skill is at zero. That
+    // is the honest answer: a win is a reward, and it is not evidence that the
+    // agent is better at any of the eight disciplines.
+    expect(read.xp).toBe(500);
+    expect(read.skills.every((entry) => entry.xp === 0)).toBe(true);
+  });
+
+  it('survives a save that arrives with the skills of a different shape', async () => {
+    // The repository may hand back a map with a key the feature does not know —
+    // a skill added by a newer build, or corrupted on disk. The reducer must
+    // neither crash nor let the unknown key back into the record it writes.
+    const { runtime, repository } = harness();
+    await runtime.emit(outcomeEvent('test.passed'));
+
+    const row = repository.rows.get(AGENT);
+    expect(row).toBeDefined();
+    repository.rows.set(AGENT, {
+      ...(row as AgentProgress),
+      skills: { ...(row as AgentProgress).skills, carpentry: 4000 } as never,
+    });
+
+    await runtime.emit(outcomeEvent('session.recovered'));
+
+    const after = repository.rows.get(AGENT);
+    expect(Object.keys((after as AgentProgress).skills).sort()).toEqual([...SKILLS].sort());
+    expect((after as AgentProgress).skills.testing).toBe(100);
   });
 });

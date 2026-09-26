@@ -17,7 +17,6 @@ export type {
   TierName,
 } from './domain.js';
 export {
-  BATTLE_FINISHED,
   BOUNTY_COMPLETED,
   BOUNTY_FAILED,
   REPUTATION_GATE,
@@ -25,14 +24,17 @@ export {
   reputationFeature,
 } from './feature.js';
 export type {
-  BattleFinishedPayload,
   BountyCompletedPayload,
   BountyFailedPayload,
   ReputationView,
   TierView,
 } from './feature.js';
-export { freshRecord } from './repository.js';
-export type { ReputationRepository } from './repository.js';
+export { freshRecord, REPUTATION_OUTCOME_KINDS } from './repository.js';
+export type {
+  ReputationOutcome,
+  ReputationOutcomeKind,
+  ReputationRepository,
+} from './repository.js';
 export {
   BOUNTY_TIERS,
   isInTier,

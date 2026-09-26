@@ -18,8 +18,12 @@ import {
 } from './domain.js';
 import type { ProgressionRepository } from './repository.js';
 import {
+  awardSkill,
   classifyBuild,
+  DEFAULT_BUILD,
   DEFAULT_BUILD_WEIGHTS,
+  describeSkills,
+  EMPTY_SKILLS,
   explainBuild,
   LEVEL_GATES,
   levelForXp,
@@ -29,6 +33,8 @@ import {
   qualifies,
   type BehaviourSignal,
   type BuildWeights,
+  type Outcome,
+  type SkillProgress,
 } from './rules.js';
 
 export const PROGRESSION_READ = 'progression.read';
@@ -41,7 +47,24 @@ export interface ProgressionSummary {
   readonly xp: number;
   readonly level: number;
   readonly build: string;
+  /**
+   * All eight skills, each with its own level. There is no combined figure
+   * anywhere in this reply, and adding one would be the plan's forbidden single
+   * power scalar arriving through the read path.
+   */
+  readonly skills: readonly SkillProgress[];
   readonly classification: ReturnType<typeof explainBuild>;
+  /**
+   * False when the character has no progress record at all.
+   *
+   * The read answers rather than throwing, because a caller asking about a new
+   * agent needs an answer and an exception is not one. This is the flag that
+   * keeps "has done nothing" and "nobody has heard of" apart: a character at
+   * level 1 with zero experience may be a week-old veteran of nothing, and
+   * rendering them identically is how a missing record comes to look like a
+   * new player.
+   */
+  readonly exists: boolean;
 }
 
 /** What a caller asking "may this character have this?" is told. */
@@ -208,13 +231,10 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
 /**
  * Whether a character has reached a level.
  *
- * Answers for an agent with no record rather than refusing, which is a
- * deliberate difference from `progression.read`. A read is a character sheet,
- * and a sheet for nobody has nothing to draw. A gate is a decision, and a
- * decision a caller has to catch an exception to make is a gate that fails
- * open — every defensive caller turns the error into "allow". A character
- * nobody has heard of is level 1, and the only question here is whether level
- * 1 is enough.
+ * Answers for an agent with no record rather than refusing, because a decision a
+ * caller has to catch an exception to make is a decision that fails open — every
+ * defensive caller turns the error into "allow". A character nobody has heard of
+ * is level 1, and the only question here is whether level 1 is enough.
  */
 async function decideGate(
   repository: ProgressionRepository,
@@ -233,6 +253,21 @@ async function decideGate(
   };
 }
 
+/**
+ * The character sheet, which answers for a character who has not earned anything.
+ *
+ * A gate and a read get the same answer about a missing record, and the
+ * difference is the `exists` flag rather than an exception. This reverses a
+ * contract this feature used to hold: it threw `no-such-progress`, which meant
+ * the one caller it was built for — a gate about a brand-new agent — had to
+ * catch an error before it could let anybody play. Reputation already answers the
+ * same question the same way, and two features disagreeing about what an unknown
+ * character is is how a gate ends up open in one place and shut in another.
+ *
+ * The distinction the throw existed to protect is not lost. It moved into the
+ * reply, where a client can render "never seen" differently from "level 1",
+ * which is more use to it than a rejected call was.
+ */
 async function summarize(
   repository: ProgressionRepository,
   agentId: string,
@@ -240,19 +275,24 @@ async function summarize(
 ): Promise<ProgressionSummary> {
   const progress = await repository.find(agentId);
   if (progress === undefined) {
-    // Distinct from "level 1, zero experience": a character that has never
-    // done anything and a character nobody has heard of are different answers,
-    // and collapsing them makes a missing record look like a new player.
-    throw Object.assign(new Error(`no progress recorded for agent ${agentId}`), {
-      code: 'no-such-progress',
-    });
+    return {
+      agentId,
+      xp: 0,
+      level: levelForXp(0),
+      build: DEFAULT_BUILD,
+      skills: describeSkills(EMPTY_SKILLS),
+      classification: explainBuild([], weights),
+      exists: false,
+    };
   }
   return {
     agentId: progress.agentId,
     xp: progress.xp,
     level: progress.level,
     build: progress.build,
+    skills: describeSkills(progress.skills ?? EMPTY_SKILLS),
     classification: explainBuild(progress.history, weights),
+    exists: true,
   };
 }
 
@@ -263,7 +303,8 @@ async function summarize(
  * counter somebody increments is testable without a store. The build is
  * recomputed from the whole history on every award rather than adjusted, so a
  * mis-awarded outcome self-corrects instead of leaving a permanently wrong
- * specialisation behind.
+ * specialisation behind. Skills move by the same rule: one award moves one
+ * skill, and everything else is recomputed from the whole map.
  *
  * The weights belong on this signature and not only on the read path. A build
  * stored under one set of weights and reported under another is a record that
@@ -272,11 +313,7 @@ async function summarize(
  */
 export function apply(
   before: AgentProgress,
-  outcome: {
-    readonly xp: number;
-    readonly build: BehaviourSignal['build'];
-    readonly weight: number;
-  },
+  outcome: Outcome,
   now: string,
   weights: BuildWeights = DEFAULT_BUILD_WEIGHTS,
 ): AgentProgress {
@@ -290,6 +327,9 @@ export function apply(
     xp,
     level: levelForXp(xp),
     build: classifyBuild(history, weights),
+    // Seeded from EMPTY_SKILLS rather than from `before.skills` alone so a
+    // record written before the skills model landed still comes out complete.
+    skills: awardSkill(before.skills ?? EMPTY_SKILLS, outcome),
     history,
     updatedAt: now,
   };
