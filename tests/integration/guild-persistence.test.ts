@@ -386,9 +386,9 @@ describe('the migration added no cached totals', () => {
       SELECT table_name, column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name IN ('guilds', 'guild_quests')
     `);
-    const columns = (result.rows as unknown as readonly { table_name: string; column_name: string }[]).map(
-      (row) => `${row.table_name}.${row.column_name}`,
-    );
+    const columns = (
+      result.rows as unknown as readonly { table_name: string; column_name: string }[]
+    ).map((row) => `${row.table_name}.${row.column_name}`);
     expect(columns).toContain('guilds.name');
     expect(columns.some((c) => c.startsWith('guilds.') && c.endsWith('_cents'))).toBe(false);
     expect(columns).not.toContain('guild_quests.progress');

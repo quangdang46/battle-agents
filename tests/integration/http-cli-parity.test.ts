@@ -56,6 +56,18 @@ const FIXTURE = {
       permissions: ['quest.read'],
       run: async () => ({ quests: [] }),
     }),
+    // NOT a game action — a stand-in that `/api/act` will still run. The two
+    // `act` cases below used `quest.claim`, which the dispatcher now REFUSES
+    // because its payload names a caller and `act` cannot see one (see
+    // `CALLER_SCOPED_ACTIONS` in `apps/web/src/routes.ts`). Both cases are
+    // about the BRIDGE carrying a body, and the stand-in they happened to pick
+    // is not what either is measuring. An echo of its input, so a bridge that
+    // dropped the body would still be caught.
+    defineAction({
+      id: 'bounty.list',
+      permissions: ['bounty.read'],
+      run: async (input: { id: string }) => ({ listed: input.id }),
+    }),
   ],
 };
 
@@ -149,12 +161,15 @@ describe('HTTP and the CLI, over one Application API', () => {
             id: 'quest',
             capabilities: [{ name: 'quest.read', description: 'reads quests' }],
             actionDefs: [
+              // The same non-gated stand-in as the fixture above, and for the
+              // same reason: this case is about the transport, and `quest.claim`
+              // is an action `/api/act` now refuses.
               defineAction({
-                id: 'quest.claim',
-                permissions: ['quest.claim'],
+                id: 'bounty.list',
+                permissions: ['bounty.read'],
                 run: async (input: { id: string }) => {
                   runs.push(input);
-                  return { claimed: input.id };
+                  return { listed: input.id };
                 },
               }),
             ],
@@ -168,8 +183,8 @@ describe('HTTP and the CLI, over one Application API', () => {
     const transport = bridge(api);
     const cli = new HttpApiClient({ baseUrl: ORIGIN, transport });
 
-    const overHttp = await cli.act('quest.claim', { id: 'quest-1' });
-    const direct = await api.act('quest.claim', { id: 'quest-1' });
+    const overHttp = await cli.act('bounty.list', { id: 'quest-1' });
+    const direct = await api.act('bounty.list', { id: 'quest-1' });
 
     expect(overHttp).toEqual(direct);
     // Two acts, two runs, same payload. A route that reshaped the input — a
@@ -262,7 +277,7 @@ describe('the bridge itself', () => {
     const api = fixtureApi();
     const cli = new HttpApiClient({ baseUrl: ORIGIN, transport: bridge(api) });
 
-    expect(await cli.act('quest.claim', { id: 'quest-1' })).toEqual({ claimed: 'quest-1' });
-    expect(await cli.act('quest.claim', { id: 'quest-2' })).toEqual({ claimed: 'quest-2' });
+    expect(await cli.act('bounty.list', { id: 'quest-1' })).toEqual({ listed: 'quest-1' });
+    expect(await cli.act('bounty.list', { id: 'quest-2' })).toEqual({ listed: 'quest-2' });
   });
 });

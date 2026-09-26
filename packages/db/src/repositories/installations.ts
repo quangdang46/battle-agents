@@ -28,6 +28,17 @@ export interface InstallationOwner {
   readonly userId: string;
   /** The GitHub login. Carried because a funding record is read by a person. */
   readonly login: string;
+  /**
+   * The key this installation is filed under.
+   *
+   * Carried because the handshake takes one, and a caller that had to guess it
+   * would name a DIFFERENT installation: `findOrCreateInstallation` is unique
+   * on (owner, key), so an unrecognised key quietly creates a second row and
+   * every session on it belongs to an installation the presented credential
+   * does not own — which every ownership-checked route then refuses. A key the
+   * client cannot be told is a key it will get wrong.
+   */
+  readonly installationKey: string;
 }
 
 export class DrizzleInstallationRepository {
@@ -49,7 +60,11 @@ export class DrizzleInstallationRepository {
    */
   async findOwner(installationId: string): Promise<InstallationOwner | undefined> {
     const [row] = await this.#database
-      .select({ userId: users.id, login: users.login })
+      .select({
+        userId: users.id,
+        login: users.login,
+        installationKey: installations.installationKey,
+      })
       .from(installations)
       .innerJoin(users, eq(users.id, installations.userId))
       .where(eq(installations.id, installationId))

@@ -26,11 +26,7 @@ import {
   users,
   type Database,
 } from '@battle-agents/db';
-import {
-  createInMemoryEventBus,
-  createRuntime,
-  defineAction,
-} from '@battle-agents/core';
+import { createInMemoryEventBus, createRuntime, defineAction } from '@battle-agents/core';
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 
@@ -275,18 +271,22 @@ describe('funding reaches the bounty feature identically over every surface', ()
     let directTotal = 0;
     for (const [index, sponsorUserId] of sponsors.entries()) {
       const amountCents = amounts[index] ?? 0;
-      wireTotal = ((await cli.act(BOUNTY_FUND, {
-        bountyId: onWire.id,
-        amountCents,
-        sponsorUserId,
-        reportedBy: `sponsor-${index}-person`,
-      })) as BountySummary).rewardCents;
-      directTotal = ((await api.act(BOUNTY_FUND, {
-        bountyId: directApi.id,
-        amountCents,
-        sponsorUserId,
-        reportedBy: `sponsor-${index}-person`,
-      })) as BountySummary).rewardCents;
+      wireTotal = (
+        (await cli.act(BOUNTY_FUND, {
+          bountyId: onWire.id,
+          amountCents,
+          sponsorUserId,
+          reportedBy: `sponsor-${index}-person`,
+        })) as BountySummary
+      ).rewardCents;
+      directTotal = (
+        (await api.act(BOUNTY_FUND, {
+          bountyId: directApi.id,
+          amountCents,
+          sponsorUserId,
+          reportedBy: `sponsor-${index}-person`,
+        })) as BountySummary
+      ).rewardCents;
       // A running total after every contribution, not only at the end. A
       // surface that showed the final number correctly while a middle step was
       // wrong would slip past an end-only assertion.

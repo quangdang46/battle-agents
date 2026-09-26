@@ -116,6 +116,7 @@ interface Identity {
   readonly userId: string;
   readonly login: string;
   readonly installationId: string;
+  readonly installationKey: string;
   readonly token: string;
 }
 
@@ -125,9 +126,10 @@ async function anIdentity(label: string): Promise<Identity> {
     .insert(users)
     .values({ githubId: login, login })
     .returning({ id: users.id });
+  const installationKey = `key-${randomUUID()}`;
   const [installation] = await database
     .insert(installations)
-    .values({ userId: user?.id ?? '', installationKey: `key-${randomUUID()}` })
+    .values({ userId: user?.id ?? '', installationKey })
     .returning({ id: installations.id });
   // Minted with the REAL clock, because the gateway's authenticator compares
   // against `new Date()` rather than a fixture's `now`. A token issued against a
@@ -146,6 +148,7 @@ async function anIdentity(label: string): Promise<Identity> {
     userId: user?.id ?? '',
     login,
     installationId: installation?.id ?? '',
+    installationKey,
     token: issued.token,
   };
 }
@@ -353,9 +356,14 @@ describe('the installation ownership query itself', () => {
     const identity = await anIdentity('owner');
     const repository = new DrizzleInstallationRepository(database);
 
+    // The key comes back too, and the assertion is exact on purpose: the session
+    // handshake resolves the installation by it, so a query that stopped
+    // returning it would leave `POST /api/sessions` filling the field with
+    // something it does not know. A loose matcher here would not notice.
     expect(await repository.findOwner(identity.installationId)).toEqual({
       userId: identity.userId,
       login: identity.login,
+      installationKey: identity.installationKey,
     });
     expect(await repository.findOwner(randomUUID())).toBeUndefined();
   });

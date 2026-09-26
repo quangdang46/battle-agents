@@ -6,6 +6,7 @@ import {
   closeDatabasePool,
   createDatabase,
   DrizzleCredentialStore,
+  DrizzleInstallationRepository,
   DrizzleSessionRepository,
   installations,
   sessions,
@@ -673,6 +674,13 @@ beforeAll(async () => {
     authenticate: async (request) => ({ installationId: (await asCaller(request)).installationId }),
     resolveSession: (id, installationId) =>
       new DrizzleSessionRepository(database).findOwnedByInstallation(id, installationId),
+    // The real installation→user query, for the `POST /api/sessions` route. This
+    // harness drives the documented run lifecycle over MCP, where `act` is still
+    // the door and the identity comes from the payload — so this file is not the
+    // place the handshake is exercised, and the port is wired rather than faked
+    // so that a future case that DOES use the route is not testing a double.
+    resolveOwner: (installationId) =>
+      new DrizzleInstallationRepository(database).findOwner(installationId),
   });
 });
 
