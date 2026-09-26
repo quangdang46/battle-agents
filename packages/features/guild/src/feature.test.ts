@@ -324,9 +324,9 @@ describe('observing work', () => {
   });
 
   it('takes a reviewer signal from a merged pull request, and no work from it', async () => {
-    // `pr.merged` fires for the same merge as `bounty.completed`. Counting it
-    // as work too would score one pull request twice; the role is the part that
-    // is genuinely different.
+    // A merge that completed no bounty: somebody read somebody else's work and
+    // accepted it, which is the Reviewer, and it is not work, so no WORK record.
+    // Counting it as work too would score one pull request twice.
     const h = harness();
     const guild = await foundGuild(h);
     await h.runtime.runAction('guild.join', { guildId: guild.id, agentId: SECOND });
@@ -334,11 +334,39 @@ describe('observing work', () => {
       type: 'pr.merged',
       occurredAt: NOW,
       actorId: SECOND,
-      payload: { bountyId: 'bounty-9', repository: 'a/b', agentId: SECOND, completedBounty: true },
+      payload: { bountyId: 'bounty-9', repository: 'a/b', agentId: SECOND },
     });
     expect(await h.repository.workFor(guild.id)).toHaveLength(0);
     const signals = await h.repository.roleSignalsFor(SECOND);
     expect(signals.map((s) => s.role)).toEqual(['reviewer']);
+  });
+
+  it('does not make an author a reviewer by merging their own bounty', async () => {
+    // The same merge, with `completedBounty: true`, which is what bounty emits
+    // alongside `bounty.completed`. The Reviewer is defined in rules.ts as the
+    // moment "somebody ELSE read the work and accepted it"; this is the author
+    // closing their own pull request, and paying them for it made the role the
+    // cheapest thing in the game to farm — an agent can merge its own bounty as
+    // often as it likes and accrue reviewer evidence each time.
+    //
+    // The coder is still paid, by `bounty.completed`, so the merge is not
+    // unscored. It is scored once, for the thing that actually happened.
+    const h = harness();
+    const guild = await foundGuild(h);
+    await h.runtime.runAction('guild.join', { guildId: guild.id, agentId: SECOND });
+    await completeBounty(h, SECOND, 'bounty-9');
+    await h.runtime.emit({
+      type: 'pr.merged',
+      occurredAt: NOW,
+      actorId: SECOND,
+      payload: { bountyId: 'bounty-9', repository: 'a/b', agentId: SECOND, completedBounty: true },
+    });
+    expect(await h.repository.workFor(guild.id)).toHaveLength(1);
+    const signals = await h.repository.roleSignalsFor(SECOND);
+    expect(signals.map((s) => s.role)).toEqual(['coder']);
+    expect(signals.map((s) => s.role), 'an author reviewed their own work').not.toContain(
+      'reviewer',
+    );
   });
 
   it('takes a tester signal from a test outcome, which core always persists', async () => {

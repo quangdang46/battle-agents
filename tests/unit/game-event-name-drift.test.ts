@@ -201,4 +201,67 @@ describe('a game event name is spelled once', () => {
       ).toEqual([]);
     });
   }
+
+  it('covers every event a feature says is its own', () => {
+    // The scan above can only report a spelling whose NAMESPACE the set already
+    // knows — that is how it tells a game event from a feature's own dotted
+    // vocabulary, a zone id or a mode name. So a name in a namespace the set has
+    // never seen is invisible to it in BOTH directions: the real name is not
+    // reported missing, and a typo of it would not be reported either.
+    //
+    // `pr.merged` was exactly that, and it went unnoticed for the whole life of
+    // the set. Bounty declares it locally in merge.ts and persists it, guild's
+    // rules table reads it as Reviewer evidence, and GAME_EVENT_NAMES did not
+    // have it — so the scan above had nothing to compare against and the guild
+    // fix had to introduce the name before guild could stop spelling it.
+    //
+    // This runs the other way and needs no namespace knowledge: take the events
+    // a feature declares as persisted, resolve them, and require each to be in
+    // the set. That is the assertion the first one cannot make.
+    const missing: string[] = [];
+    for (const feature of features()) {
+      // One level of indirection, because a feature groups its events in a local
+      // array constant and spreads that into `persistedEvents`. Deeper than one
+      // level is not a shape that occurs here, and a resolver that hunted
+      // further would be guessing.
+      const scalars = new Map<string, string>();
+      const groups = new Map<string, string[]>();
+      for (const file of sourceFilesIn(feature)) {
+        const body = readFileSync(file, 'utf8');
+        for (const match of body.matchAll(/(?:const|let)\s+([A-Z][A-Z0-9_]*)\s*=\s*'([a-z][a-z_]*\.[a-z_]+)'/g)) {
+          scalars.set(match[1] as string, match[2] as string);
+        }
+        for (const match of body.matchAll(/(?:const|let)\s+([A-Z][A-Z0-9_]*)\s*=\s*\[([^\]]*)\]/g)) {
+          groups.set(
+            match[1] as string,
+            [...(match[2] as string).matchAll(/[A-Z][A-Z0-9_]*/g)].map((id) => id[0] as string),
+          );
+        }
+      }
+      const resolve = (name: string): string[] => {
+        const scalar = scalars.get(name);
+        if (scalar !== undefined) return [scalar];
+        return (groups.get(name) ?? [])
+          .map((member) => scalars.get(member))
+          .filter((value): value is string => value !== undefined);
+      };
+
+      for (const file of sourceFilesIn(feature)) {
+        const body = readFileSync(file, 'utf8');
+        for (const array of body.matchAll(/persistedEvents\s*:\s*\[([^\]]*)\]/g)) {
+          for (const ref of (array[1] as string).matchAll(/[A-Z][A-Z0-9_]*/g)) {
+            for (const value of resolve(ref[0] as string)) {
+              if (!GAME_EVENT_NAMES.has(value)) {
+                missing.push(`${feature}: '${value}' (via ${ref[0] as string})`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(
+      missing,
+      `These events are declared and persisted by a feature but are not in GAME_EVENT_NAMES, so nothing checks their spelling and a typo of one is invisible:\n  ${missing.join('\n  ')}`,
+    ).toEqual([]);
+  });
 });

@@ -119,6 +119,25 @@ export const SOCIAL_EVENTS = {
 export const PULL_REQUEST_MERGED = 'github.pull_request.merged';
 
 /**
+ * What a merge is worth in the game, which is not the same question.
+ *
+ * `github.pull_request.merged` is the fact — a pull request closed. THIS is the
+ * game's judgement about it, and one merge produces both: bounty emits
+ * `bounty.completed` and `pr.merged` together, with `completedBounty: true` on
+ * the second saying which of the two is carrying the work. Guild's reviewer
+ * evidence reads that flag, which is how it tells a reviewer from an author.
+ *
+ * It was missing from `GAME_EVENT_NAMES` while guild's rules table listed it
+ * literally, and the drift check could not see the omission: it only reports a
+ * spelling whose first segment matches something already in the set, and no
+ * name in the set began with `pr`, so a misspelling of this one was invisible
+ * too. The set is now asserted complete from the other direction — every event
+ * a feature actually emits must appear in it — which does not depend on the set
+ * already knowing a namespace.
+ */
+export const PULL_REQUEST_MERGED_OUTCOME = 'pr.merged';
+
+/**
  * Every game event name, as one flat set.
  *
  * What a check needs to say "a feature must not spell an event name itself" —
@@ -144,4 +163,5 @@ export const GAME_EVENT_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.values(BATTLE_EVENTS),
   ...Object.values(SOCIAL_EVENTS),
   PULL_REQUEST_MERGED,
+  PULL_REQUEST_MERGED_OUTCOME,
 ]);

@@ -1,5 +1,5 @@
 import { defineAction } from '@battle-agents/core';
-import { BOUNTY_EVENTS } from '@battle-agents/protocol';
+import { BOUNTY_EVENTS, PULL_REQUEST_MERGED_OUTCOME } from '@battle-agents/protocol';
 import type {
   ActionDef,
   EventHandler,
@@ -684,6 +684,33 @@ function readOutcome(payload: unknown): OutcomeFacts | undefined {
 }
 
 /**
+ * Whether a merge is somebody reading somebody else's work.
+ *
+ * The reviewer role is defined in `rules.ts` as the moment "somebody ELSE read
+ * the work and accepted it" — and the bounty feature emits `pr.merged`
+ * alongside `bounty.completed` for one merge, carrying `completedBounty: true`
+ * to say so. That merge is the author closing their own pull request, so it is
+ * the author reviewing the author's work, which is the one thing the role is
+ * defined not to be.
+ *
+ * Withdrawn here rather than added somewhere else, because the coder is already
+ * paid for the same merge by `bounty.completed`. Counting it a second time
+ * under a second role is how one pull request becomes two achievements, and the
+ * reviewer role is the expensive one: it is the role a farm would target,
+ * because merging your own bounty is something an agent can do to itself as
+ * often as it likes.
+ */
+function isReviewOfSomebodyElsesWork(eventType: string, payload: unknown): boolean {
+  if (eventType !== PULL_REQUEST_MERGED_OUTCOME) {
+    return true;
+  }
+  if (typeof payload !== 'object' || payload === null) {
+    return true;
+  }
+  return (payload as { readonly completedBounty?: unknown }).completedBounty !== true;
+}
+
+/**
  * One event, handled once, for every guild the actor belongs to.
  *
  * Two records come out of an event and they need different things, which is why
@@ -707,6 +734,9 @@ async function observe(
   const evidence = roleEvidence(eventType);
   const agentId = agentIdOf(event);
   if (evidence === undefined || agentId === undefined) {
+    return;
+  }
+  if (!isReviewOfSomebodyElsesWork(eventType, event.payload)) {
     return;
   }
 
