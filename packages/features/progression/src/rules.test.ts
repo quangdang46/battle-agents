@@ -38,6 +38,23 @@ describe('experience comes from outcomes, and only outcomes', () => {
     expect(OUTCOMES['test.passed'].xp).toBe(100);
   });
 
+  it('prices a merge once, and says in the table which merge pays', () => {
+    // The claim this asserts is the one the bounty feature's existence made
+    // urgent: `bounty.completed` pays 1000 and `pr.merged` pays 500, and a merge
+    // that completed a bounty produces both. The exclusion is a row in the PRICE
+    // TABLE rather than a promise about which events a feature emits, so it
+    // holds however the events are produced.
+    expect(OUTCOMES['bounty.completed'].xp).toBe(1000);
+    expect(OUTCOMES['pr.merged'].xp).toBe(500);
+    expect(OUTCOMES['pr.merged'].requires).toEqual({ field: 'completedBounty', equals: false });
+    expect(qualifies(OUTCOMES['pr.merged'], { completedBounty: true })).toBe(false);
+    expect(qualifies(OUTCOMES['pr.merged'], { completedBounty: false })).toBe(true);
+    // A payload that never stated the case does not pay. The 1000 + 500 that the
+    // old table would have handed out is what this replaces.
+    expect(qualifies(OUTCOMES['pr.merged'], {})).toBe(false);
+    expect(qualifies(OUTCOMES['pr.merged'], { completedBounty: false, agentId: 'a' })).toBe(true);
+  });
+
   it('pays nothing for an event that is not an outcome', () => {
     expect(outcomeFor('file.write')).toBeUndefined();
     expect(outcomeFor('thinking')).toBeUndefined();
@@ -102,8 +119,22 @@ describe('an event name is not always the whole condition', () => {
   });
 
   it('leaves an outcome with no condition always applicable', () => {
+    // The skip list is the outcomes that DO have a condition, and it is written
+    // out rather than derived from `requires` — deriving it would make the
+    // assertion vacuous, since a row that gained a condition would be skipped
+    // and the test would report green having checked nothing. Adding a
+    // condition to a row is therefore a two-line edit, and one of them is
+    // thinking about it.
+    //
+    // `pr.merged` joined this list when ba-feature-bounty-xhk landed: a merge
+    // that completed a bounty is already paid by `bounty.completed`, and saying
+    // so in the price row is what stops one merge paying twice.
+    const conditioned = new Set(['battle.finished', 'pr.merged']);
     for (const [type, outcome] of Object.entries(OUTCOMES)) {
-      if (type === 'battle.finished') continue;
+      if (conditioned.has(type)) {
+        expect(outcome.requires, type).toBeDefined();
+        continue;
+      }
       expect(outcome.requires, type).toBeUndefined();
       expect(qualifies(outcome, undefined), type).toBe(true);
       expect(qualifies(outcome, { anything: 'at all' }), type).toBe(true);

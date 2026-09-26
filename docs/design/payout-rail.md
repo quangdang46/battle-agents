@@ -4,6 +4,10 @@
 - **Bead:** `ba-payout-rail-dispute-1q6`
 - **Status:** decided. M2 ships with the rail absent; this document says what has to exist before it is
   not absent.
+- **Implementation status, 2026-09-26** (`ba-feature-bounty-xhk`): the four obligations this document
+  left open are now discharged, and the passages below that said so are marked. The DECISIONS are
+  unchanged; only what exists changed. What is still open: the rail itself, race-mode adjudication
+  (section 4.2's first gap), and the refund path.
 
 Section 17.5 of the plan lists "payment/compliance for real-money bounties" as a risk the research
 conversation never settled. This note settles it, so that the bounty feature can be built against a
@@ -166,11 +170,15 @@ A dispute is settled by replaying what happened. The evidence is the activity lo
 Concretely, settling "the PR was valid and the money is owed" requires the log to show, in order:
 the bounty claim, the PR opened, the PR merged, the maintainer's identity, the review outcome, and
 that no earlier valid PR won the race. The 365-day retention window is real
-(`features/activity`), but the three payout event types are NOT persisted: `PAYOUT_EVENTS`
-is declared in `payout.ts` and registered in no event union, and nothing emits them. A
-`PayoutIntentStore` is declared too and has no implementation. The bounty feature has to
-arrive before any of this exists at runtime, and until it does the guarantee below is
-unbuilt rather than met.
+(`features/activity`).
+
+> **Status, 2026-09-26.** As written above, this paragraph said the three payout event types were
+> registered in no event union, nothing emitted them, and `PayoutIntentStore` had no implementation.
+> All three were true on 2026-09-24 and are now false. The `payout_intents` table exists
+> (`packages/db/src/schema/features/bounty.ts`) with `DrizzlePayoutIntentStore` satisfying the port,
+> `bounty.payout_funded` and `bounty.payout_pending` are emitted by the bounty feature, and a merged
+> pull request moves a bounty to `completed` with its intent at `pending`. The guarantee below is
+> still only as good as the log, and the second gap below is still open.
 
 Two gaps, stated rather than glossed:
 
@@ -190,10 +198,15 @@ Two gaps, stated rather than glossed:
 | Dispute may be opened          | 30 days after `payout_recorded` | Matches the report window. Longer and the maintainer decision has hardened.                   |
 | Unclaimed refund               | 90 days after bounty cancelled  | Long enough for a solver to notice, short enough that a sponsor is not waiting a year.        |
 
-Windows are enforced by the bounty feature, not by this document. They are not implemented
-yet: there is no `rules.ts` in `packages/features/bounty/`, and the only file there is
-`index.ts`, `payout.ts` and its test. When the feature lands these become a value in
-`rules.ts` so changing one is a visible edit rather than a hunt.
+Windows are enforced by the bounty feature, not by this document. They live in
+`packages/features/bounty/src/rules.ts` as `DISPUTE_WINDOWS`, one named constant per row of the
+table above, and every bounty summary carries the four resolved deadlines. **As written this
+paragraph said they were not implemented and that the file did not exist; that was true on
+2026-09-24 and is false now.** One is enforced as a refusal — a bounty funded longer than
+`claimAfterFundingDays` cannot be claimed. The other three are computed and published, because the
+instants they hang from are the payout intent's and the bounty's own; none of them refuses anything
+yet, because the transfer report and the refund path belong to beads that do not exist. Changing a
+window is an edit to one line in that file.
 
 ---
 
@@ -249,6 +262,15 @@ The rail does not exist at M2 and the product must not imply otherwise.
   status, in its README and in its API responses. Neither exists yet: there is no bounty
   README and no bounty API surface. `needsSandboxBanner` exists and is tested, and is
   called by nothing, because there is no banner to call it.
+
+  > **Status, 2026-09-26.** The API half is done and the README half is not. `needsSandboxBanner` is
+  > now called on every path that returns a bounty: `describePayout` in
+  > `packages/features/bounty/src/domain.ts` decides, and the `payout` object it builds is part of the
+  > value every action returns, so a surface cannot render a reward without encountering the notice and
+  > cannot drop it without dropping a field it was given. What is still missing is a rendered
+  > banner: `apps/web/app/**` may not import a feature, so no route can import the notice directly, and
+  > `ba-web-ui-surface-t3w` owns the bounty board that would carry it. `packages/features/bounty/README.md`
+  > does not exist.
 
 **A user must never believe they have been paid when they have not.** The banner is a hard
 requirement, not polish: the failure mode of getting this wrong is a solver who closed a PR, saw a

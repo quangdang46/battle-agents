@@ -76,13 +76,36 @@ export interface Outcome {
    * alone does not decide it. `battle.finished` arrives for a loss as well as a
    * win, and an award table keyed only on the event name would hand a defeated
    * agent the same five hundred experience as a victorious one.
+   *
+   * It is also how one fact is priced once rather than twice. `pr.merged` and
+   * `bounty.completed` are two names for a merge that finished a bounty, and
+   * which of them pays is stated HERE, in the price table, rather than left to
+   * whichever feature emits the events to remember not to emit both. The
+   * condition is written so that a payload which never says which case it is
+   * does not pay at all: silence about money is the wrong default in both
+   * directions.
    */
   readonly requires?: OutcomeCondition;
 }
 
 export const OUTCOMES: Readonly<Record<OutcomeType, Outcome>> = {
   'bounty.completed': { xp: 1000, build: 'builder', weight: 1 },
-  'pr.merged': { xp: 500, build: 'refactorer', weight: 1 },
+  // Five hundred is the plan's price for a merged pull request, and it is
+  // payable only for a merge that completed no bounty. A merge that did complete
+  // one is already paid a thousand by the row above, and the same pull request
+  // paying 1500 is the failure this condition exists to make impossible — not
+  // 50% more expensive than the plan's own number for the larger award, but a
+  // leaderboard that looks briefly generous for a reason nobody can find.
+  //
+  // The gate is fail-closed on purpose: a `pr.merged` whose payload omits
+  // `completedBounty` has not made the statement, and pays nothing. Whoever
+  // emits it has to say which case it is.
+  'pr.merged': {
+    xp: 500,
+    build: 'refactorer',
+    weight: 1,
+    requires: { field: 'completedBounty', equals: false },
+  },
   'test.passed': { xp: 100, build: 'tester', weight: 1 },
   'session.recovered': { xp: 150, build: 'debugger', weight: 1 },
   'battle.finished': {

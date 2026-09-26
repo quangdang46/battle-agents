@@ -31,9 +31,17 @@ from, and the license it carries. Keep it updated in the same commit that adds t
 | agent-world-codemoo           | https://github.com/codemoo/agent-world             | `851ceee1d3f6` | MIT        | declared in `package.json`                                |
 | agent-world-smallville        | https://github.com/sbenodiz/agent-world            | `13d62dbdeeca` | Apache-2.0 | declared in `LICENSE`                                     |
 | agent-quest (tiny-swords-cc0) | https://github.com/FulAppiOS/Agent-Quest           | `010c791207c9` | CC0-1.0    | `client/public/assets/themes/tiny-swords-cc0/LICENSE.txt` |
+| spacemolt (client)            | https://github.com/SpaceMolt/client                 | `e7af1620a67e` | MIT        | Copyright (c) 2026 spacemolt.com                          |
+| spacemolt (lib)               | https://github.com/SpaceMolt/spacemolt-lib          | `9aa120d3e493` | MIT        | Copyright (c) 2026 SpaceMolt                              |
 
 `agent-move` and `agent-world-codemoo` ship no `LICENSE` file; their MIT terms are declared in
 `package.json`. Carry the attribution into any file derived from them.
+
+The two `spacemolt` rows are a single reading across two checkouts, and are listed
+separately so each revision is attributable: the protocol and the command surface are in
+`client`, the reconnect/presence policy is in `spacemolt-lib`. Neither is copied —
+`docs/research/spacemolt.md` records the reading and the decision, and the only thing it
+proposes taking is a shape, not code.
 
 ## Prohibited sources
 

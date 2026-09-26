@@ -162,23 +162,39 @@ describe('the event the webhook emits', () => {
     expect(PULL_REQUEST_MERGED).not.toBe('bounty.completed');
   });
 
-  it('is named by no feature at all, so no price row can attach to it', () => {
-    // The claim that matters is not "progression's table omits it" but "nothing
-    // under features/ subscribes to it", so the assertion covers every feature
-    // rather than one file. That is the stronger claim — a row added to any
-    // feature is what would start the double-pay — and it is also the only shape
-    // that survives scripts/removal-test.sh, which deletes each feature in turn
-    // and then runs the unit suite.
+  it('is named by no feature but the one that translates it', () => {
+    // The claim this file was written on has expired, and the way it expired is
+    // the feature landing: ba-feature-bounty-xhk made the bounty feature the
+    // thing that decides what a merge means, so it — and only it — names the
+    // integration's event in order to subscribe to it.
     //
-    // A source read is sound for this claim because every OUTCOME_TYPES entry
-    // and every OUTCOMES key is a quoted literal and there is no computed key.
-    // If that ever stops being true, the honest fix is a test inside the
-    // progression package — not an import here.
+    // ## Why the assertion is one-sided
+    //
+    // Asserting "exactly one, and it is bounty" reads better and cannot survive
+    // scripts/removal-test.sh, which strips a feature out of the composition
+    // root, moves its directory and then runs this suite. With bounty gone the
+    // honest answer is zero, and a floor demanding one would fail the removal
+    // test for a feature that is perfectly removable. The direction that IS
+    // load-bearing is the one that survives: NO feature other than bounty may
+    // name this event, because a price row or a second subscriber is what turns
+    // one merge into two awards.
+    //
+    // The price half of the same claim is asserted where both sides are in
+    // scope: tests/integration/bounty-merge-award.test.ts holds the integration's
+    // constant and progression's table at once, and fails with 1500 where this
+    // file could only fail on a string.
+    //
+    // A source read is sound for this claim because the name is a quoted literal
+    // in packages/features/bounty/src/merge.ts with no computed key. If that ever
+    // stops being true, the honest fix is a test inside the bounty package — not
+    // an import here.
     const offenders = typescriptFiles(FEATURES_DIR)
       .filter((file) => stripComments(readFileSync(file, 'utf8')).includes(PULL_REQUEST_MERGED))
       .map(relativeToRepo);
 
-    expect(offenders).toEqual([]);
+    const foreign = offenders.filter((file) => !file.startsWith('packages/features/bounty/'));
+
+    expect(foreign).toEqual([]);
   });
 
   it('is namespaced under the integration, so its origin is legible in a log', () => {

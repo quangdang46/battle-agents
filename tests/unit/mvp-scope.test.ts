@@ -48,6 +48,7 @@ const composition = readFileSync(join(repoRoot, 'apps/web/src/composition.ts'), 
 const DECLARED_MVP_FEATURES: Readonly<Record<string, string>> = {
   agent: '§29.1 contract 2/3 — identity, sessions, presence. M1.',
   quest: '§29.1 contract 4 + the activity log. The generic work item.',
+  bounty: '§11.1 the Bounty object + §22 its lifecycle, §24 its commands. M2.',
   progression: '§10.2 — XP and level. M3.',
   reputation: '§10.2/§11.3 — trust from outcomes, distinct from progression.',
   social:

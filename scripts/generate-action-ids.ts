@@ -29,6 +29,7 @@ const FEATURES_DIR = join(REPO_ROOT, 'packages/features');
 /** Every feature's action ids, in one place the generator reads. */
 const MANIFESTS: Readonly<Record<string, readonly string[]>> = {
   agent: AGENT_ACTION_IDS,
+  bounty: BOUNTY_ACTION_IDS,
   quest: QUEST_ACTION_IDS,
   progression: PROGRESSION_ACTION_IDS,
   reputation: REPUTATION_ACTION_IDS,
@@ -208,6 +209,7 @@ function camel(name: string): string {
 // Imported after the helpers so the "no imports in the OUTPUT" rule is about
 // the generated file, not about this one, which legitimately reads the features.
 import { AGENT_ACTION_IDS } from '../packages/features/agent/src/manifest.js';
+import { BOUNTY_ACTION_IDS } from '../packages/features/bounty/src/manifest.js';
 import { PROGRESSION_ACTION_IDS } from '../packages/features/progression/src/manifest.js';
 import { QUEST_ACTION_IDS } from '../packages/features/quest/src/manifest.js';
 import { REPUTATION_ACTION_IDS } from '../packages/features/reputation/src/manifest.js';

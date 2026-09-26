@@ -14,8 +14,16 @@ import type { Database } from './client.js';
 
 const PUBLIC_SCHEMA = 'public';
 const MONEY_FLOAT_TYPES: readonly string[] = ['numeric', 'real', 'double precision'];
-const MONEY_COLUMN_TABLES: readonly string[] = ['bounties', 'bounty_funds'];
-const REQUIRED_MONEY_COLUMNS: readonly string[] = ['bounty_funds.amount_cents'];
+const MONEY_COLUMN_TABLES: readonly string[] = ['bounties', 'bounty_funds', 'payout_intents'];
+// payout_intents.amount_cents is a STATED TARGET, not a stored total, and it is
+// still money: a float there loses a cent and the refund arithmetic in
+// docs/design/payout-rail.md section 3.1 stops reconciling. Listed so the
+// integer-cents check covers it rather than only the tables that existed when
+// the check was written.
+const REQUIRED_MONEY_COLUMNS: readonly string[] = [
+  'bounty_funds.amount_cents',
+  'payout_intents.amount_cents',
+];
 const EVENTS_SEQUENCE_TABLE = 'event_log';
 const EVENT_LOG_PROBE_TYPE = 'verify.probe';
 const EVENT_LOG_PROBE_ACTOR = 'verify';
@@ -37,6 +45,7 @@ const EXPECTED_PLATFORM_TABLES: readonly string[] = [
   'quests',
   'bounties',
   'bounty_funds',
+  'payout_intents',
   'battles',
   'battle_participants',
   'agent_stats',
@@ -232,6 +241,20 @@ const REQUIRED_CHECK_CONSTRAINTS: readonly {
     name: 'bounty_funds_amount_cents_non_negative',
     mustMention: 'amount_cents',
   },
+  {
+    table: 'payout_intents',
+    name: 'payout_intents_amount_cents_non_negative',
+    mustMention: 'amount_cents',
+  },
+  {
+    // The attribution rule, enforced where the row is written. payout.ts refuses
+    // to build an intent with an empty reporter, and this is what makes a row
+    // written by anything else obey the same rule.
+    table: 'payout_intents',
+    name: 'payout_intents_reported_by_not_empty',
+    mustMention: 'reported_by',
+  },
+  { table: 'bounties', name: 'bounties_issue_number_positive', mustMention: 'issue_number' },
   { table: 'agents', name: 'agents_level_min', mustMention: 'level' },
   { table: 'agents', name: 'agents_xp_non_negative', mustMention: 'xp' },
   { table: 'agents', name: 'agents_reputation_non_negative', mustMention: 'reputation' },

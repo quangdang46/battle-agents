@@ -20,6 +20,7 @@
   "dependencies": {
     "@battle-agents/agent": "workspace:*",
     "@battle-agents/api": "workspace:*",
+    "@battle-agents/bounty": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",
     "@battle-agents/github": "workspace:*",

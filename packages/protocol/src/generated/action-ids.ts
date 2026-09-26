@@ -19,6 +19,15 @@
 /** agent */
 export type AgentActionId = 'agent.describe' | 'agent.read' | 'session.end' | 'session.heartbeat';
 
+/** bounty */
+export type BountyActionId =
+  | 'bounty.create'
+  | 'bounty.list'
+  | 'bounty.claim'
+  | 'bounty.submit'
+  | 'bounty.fund'
+  | 'bounty.expire';
+
 /** quest */
 export type QuestActionId =
   'quest.create' | 'quest.list' | 'quest.claim' | 'quest.submit' | 'quest.admin.revoke';
@@ -43,6 +52,12 @@ export type SocialActionId =
 export type RegisteredActionId =
   | 'agent.describe'
   | 'agent.read'
+  | 'bounty.claim'
+  | 'bounty.create'
+  | 'bounty.expire'
+  | 'bounty.fund'
+  | 'bounty.list'
+  | 'bounty.submit'
   | 'progression.awards'
   | 'progression.gate'
   | 'progression.read'
@@ -80,6 +95,12 @@ export function isRegisteredActionId(value: string): value is RegisteredActionId
 export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'agent.describe',
   'agent.read',
+  'bounty.claim',
+  'bounty.create',
+  'bounty.expire',
+  'bounty.fund',
+  'bounty.list',
+  'bounty.submit',
   'progression.awards',
   'progression.gate',
   'progression.read',

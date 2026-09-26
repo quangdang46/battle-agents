@@ -6,6 +6,7 @@ export { PROTOCOL_VERSION, protocolVersionSchema } from './version.js';
 
 export type {
   AgentActionId,
+  BountyActionId,
   ProgressionActionId,
   QuestActionId,
   RegisteredActionId,

@@ -25,6 +25,8 @@ export {
 } from './repositories/agents.js';
 export type { AgentRow, StoredInstallationRow } from './repositories/agents.js';
 export { DrizzleProgressionRepository } from './repositories/progression.js';
+export { DrizzleBountyRepository, DrizzlePayoutIntentStore } from './repositories/bounties.js';
+export type { StoredPayoutIntent } from './repositories/bounties.js';
 export { DrizzleGithubDeliveryStore } from './repositories/github-deliveries.js';
 export type {
   ClaimRow,

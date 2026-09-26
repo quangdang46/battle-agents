@@ -39,6 +39,12 @@ export const FEATURE_TABLES = [
   'quests',
   'bounties',
   'bounty_funds',
+  // Added by ba-feature-bounty-xhk. It is a feature table rather than a
+  // platform one for the same reason bounty_funds is: the bounty feature is the
+  // only thing that reads or writes it, and "belongs to no boundary" is what
+  // the verifier reports for a table missing from both lists — which is how a
+  // table ends up that nothing may migrate.
+  'payout_intents',
   'battles',
   'battle_participants',
   'agent_stats',

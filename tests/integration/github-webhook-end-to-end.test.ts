@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { githubDeliveryClaims } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
 import { PULL_REQUEST_MERGED, signPayload, WEBHOOK_SECRET_VARIABLE } from '@battle-agents/github';
+import { PULL_REQUEST_MERGED_OUTCOME } from '@battle-agents/bounty';
 
 import { sharedGithubWebhook } from '../../apps/web/src/webhook-routes.js';
 import type { WebhookHttpRequest } from '../../apps/web/src/webhook-routes.js';
@@ -134,8 +135,19 @@ describe('a signed merge, end to end', () => {
       // event published onto a runtime the webhook built for itself would be
       // indistinguishable from this one by shape alone, and invisible to every
       // real subscriber.
-      expect(events).toHaveLength(1);
-      const emitted = events[0] as { type: string; actorId: string; payload: unknown };
+      //
+      // ONE delivery now produces TWO events, because ba-feature-bounty-xhk
+      // mounted the bounty feature and it subscribes to this one. The edge
+      // reports what it observed; the bounty feature decides what it means, and
+      // for a merge that matched no bounty its answer is a `pr.merged` carrying
+      // no agent — a fact on the bus that pays nothing and persists nothing.
+      // This fixture's repository is not a bounty's, so it is the unclaimed
+      // case, and the test now says which event is which rather than counting.
+      const observed = events.filter(
+        (entry) => (entry as { type: string }).type === PULL_REQUEST_MERGED,
+      );
+      expect(observed).toHaveLength(1);
+      const emitted = observed[0] as { type: string; actorId: string; payload: unknown };
       expect(emitted.type).toBe(PULL_REQUEST_MERGED);
       expect(emitted.actorId).toBe('github');
       expect(emitted.payload).toMatchObject({
@@ -143,6 +155,21 @@ describe('a signed merge, end to end', () => {
         pullRequest: 4242,
         merged: true,
       });
+
+      // The game's reading of it, and the flag that keeps it from being priced
+      // twice. Asserted here because this is the only suite that sees both
+      // halves of the pair: an event the edge named and an event the game priced.
+      const read = events.filter(
+        (entry) => (entry as { type: string }).type === PULL_REQUEST_MERGED_OUTCOME,
+      );
+      expect(read).toHaveLength(1);
+      expect((read[0] as { payload: unknown }).payload).toMatchObject({
+        completedBounty: false,
+        pullRequest: 4242,
+      });
+      // No agent: there is no claim, so there is nobody to attribute the work
+      // to, and a merge that completed nothing must not manufacture one.
+      expect((read[0] as { payload: { agentId?: unknown } }).payload.agentId).toBeUndefined();
 
       // Durable, not just in this process: the row exists in the real table.
       const rows = await database.select().from(githubDeliveryClaims);
@@ -155,7 +182,16 @@ describe('a signed merge, end to end', () => {
       const retry = await sharedGithubWebhook()(delivery({ body, deliveryId: 'e2e-2' }));
       expect(retry.status).toBe(200);
       expect(retry.body.outcome).toBe('duplicate');
-      expect(events).toHaveLength(1);
+      // Still exactly one of each, and the count is asserted per event name
+      // rather than over the whole array: a re-delivery is refused by the
+      // ledger before any feature sees it, so a second `pr.merged` OR a second
+      // `pr.merged` outcome would both mean the duplicate was not refused.
+      expect(
+        events.filter((entry) => (entry as { type: string }).type === PULL_REQUEST_MERGED),
+      ).toHaveLength(1);
+      expect(
+        events.filter((entry) => (entry as { type: string }).type === PULL_REQUEST_MERGED_OUTCOME),
+      ).toHaveLength(1);
       expect(await database.select().from(githubDeliveryClaims)).toHaveLength(1);
     } finally {
       stop();

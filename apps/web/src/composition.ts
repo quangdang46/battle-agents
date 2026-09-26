@@ -1,4 +1,5 @@
 import { agentFeature } from '@battle-agents/agent';
+import { bountyFeature } from '@battle-agents/bounty';
 import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { reputationFeature } from '@battle-agents/reputation';
@@ -11,6 +12,8 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleBountyRepository,
+  DrizzlePayoutIntentStore,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
   DrizzleReputationRepository,
@@ -90,6 +93,22 @@ export interface GameRuntimeDependencies {
    * worth wiring rather than a gap to paper over.
    */
   readonly socialRepository: DrizzleSocialRepository;
+  /**
+   * Bounty storage, and the record of payout intent.
+   *
+   * Required for the same reason as the others: a bounty board that answers with
+   * no bounties because nothing was ever written to it is indistinguishable from
+   * an empty one, and a reward whose funding nobody recorded is a claim the
+   * platform cannot back up.
+   */
+  readonly bountyRepository: DrizzleBountyRepository;
+  /**
+   * Payout intent. The conformance between this and the feature's
+   * `PayoutIntentStore` is checked here, at the one call site where the feature's
+   * port and the infrastructure implementation are both in scope, because that
+   * is the only layer allowed to see both.
+   */
+  readonly payoutIntentStore: DrizzlePayoutIntentStore;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -113,6 +132,10 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       progressionFeature({ repository: dependencies.progressionRepository }),
       reputationFeature({ repository: dependencies.reputationRepository }),
       socialFeature({ repository: dependencies.socialRepository }),
+      bountyFeature({
+        repository: dependencies.bountyRepository,
+        payouts: dependencies.payoutIntentStore,
+      }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

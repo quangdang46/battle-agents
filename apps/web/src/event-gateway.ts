@@ -4,7 +4,9 @@ import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
 import {
   DrizzleAgentRepository,
+  DrizzleBountyRepository,
   DrizzleCredentialStore,
+  DrizzlePayoutIntentStore,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
   DrizzleReputationRepository,
@@ -121,6 +123,8 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
       progressionRepository: new DrizzleProgressionRepository(dependencies.database),
       reputationRepository: new DrizzleReputationRepository(dependencies.database),
       socialRepository: new DrizzleSocialRepository(dependencies.database),
+      bountyRepository: new DrizzleBountyRepository(dependencies.database),
+      payoutIntentStore: new DrizzlePayoutIntentStore(dependencies.database),
     });
 
   // The snapshot is deliberately synchronous and deliberately empty of live

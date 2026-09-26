@@ -133,9 +133,38 @@ describe('experience arrives because something happened', () => {
 
     await runtime.emit(outcomeEvent('test.passed'));
     await runtime.emit(outcomeEvent('test.passed'));
-    await runtime.emit(outcomeEvent('pr.merged'));
+    // The merge award only pays for a merge that completed no bounty, so the
+    // payload has to say so. See the `pr.merged` row in rules.ts.
+    await runtime.emit(outcomeEvent('pr.merged', AGENT, { completedBounty: false }));
 
     expect(repository.rows.get(AGENT)?.xp).toBe(100 + 100 + 500);
+  });
+
+  it('does not pay a merge twice for a bounty, whichever of the two events fires', async () => {
+    // The bounty feature emits BOTH `bounty.completed` and `pr.merged` for a
+    // merge that completed a bounty — the first is the award, the second is the
+    // fact — and the price of the second is zero in that case. So the order does
+    // not matter, a re-delivery does not matter, and the only thing that changes
+    // the total is which of the two carries `completedBounty: true`.
+    const { runtime, repository } = harness();
+
+    await runtime.emit(outcomeEvent('bounty.completed'));
+    await runtime.emit(outcomeEvent('pr.merged', AGENT, { completedBounty: true }));
+    await runtime.emit(outcomeEvent('pr.merged', AGENT, { completedBounty: true }));
+
+    expect(repository.rows.get(AGENT)?.xp).toBe(OUTCOMES['bounty.completed'].xp);
+    expect(repository.rows.get(AGENT)?.xp).not.toBe(1500);
+  });
+
+  it('pays a merge that names no case at all nothing, because it said nothing', async () => {
+    // Fail-closed on purpose. A `pr.merged` whose payload omits the field has
+    // not stated which of the two cases it is, and an award that guesses is an
+    // award nobody can audit. See the `pr.merged` row in rules.ts.
+    const { runtime, repository } = harness();
+
+    await runtime.emit(outcomeEvent('pr.merged'));
+
+    expect(repository.rows.size).toBe(0);
   });
 
   it('emits agent.level_up when a level is crossed, and not on every award', async () => {

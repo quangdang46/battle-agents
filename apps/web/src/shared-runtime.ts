@@ -5,6 +5,8 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleBountyRepository,
+  DrizzlePayoutIntentStore,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
   DrizzleReputationRepository,
@@ -74,6 +76,8 @@ export function sharedRuntime(): SharedRuntime {
     progressionRepository: new DrizzleProgressionRepository(database),
     reputationRepository: new DrizzleReputationRepository(database),
     socialRepository: new DrizzleSocialRepository(database),
+    bountyRepository: new DrizzleBountyRepository(database),
+    payoutIntentStore: new DrizzlePayoutIntentStore(database),
   });
 
   cached = { shared: { database, runtime, bus }, close: () => closeDatabasePool(pool) };

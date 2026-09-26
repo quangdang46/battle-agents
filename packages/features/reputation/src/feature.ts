@@ -76,7 +76,15 @@ export function reputationFeature(dependencies: {
 
   return {
     id: 'reputation',
-    persistedEvents: [BOUNTY_COMPLETED, BOUNTY_FAILED, BATTLE_FINISHED],
+    // `bounty.completed` is NOT declared here, and ba-feature-bounty-xhk is why.
+    // The registry allows one owner per persisted event type, and the owner is
+    // the feature that EMITS it: bounty emits a completion, this feature reacts
+    // to one, and a declaration by the reactor is a claim about somebody else's
+    // event. The event is still persisted — bounty declares it, and
+    // `isPersistedEventType` asks the registry rather than the reactor. The
+    // HANDLER above is unchanged, because reacting and owning are different
+    // jobs and only one of them is this feature's.
+    persistedEvents: [BOUNTY_FAILED, BATTLE_FINISHED],
     capabilities: [
       { name: REPUTATION_READ, description: "Read one character's trust and tier." },
       { name: REPUTATION_GATE, description: 'Ask whether a character may take a bounty.' },
