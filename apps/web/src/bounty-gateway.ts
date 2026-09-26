@@ -1,4 +1,9 @@
-import { authenticate, DrizzleCredentialStore, DrizzleSessionRepository } from '@battle-agents/db';
+import {
+  authenticate,
+  DrizzleCredentialStore,
+  DrizzleInstallationRepository,
+  DrizzleSessionRepository,
+} from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
 import type { ApplicationApi } from '@battle-agents/api';
 
@@ -46,6 +51,7 @@ export async function createBountyGateway(
 ): Promise<BountyGateway> {
   const { database } = dependencies;
   const sessions = new DrizzleSessionRepository(database);
+  const ownership = new DrizzleInstallationRepository(database);
   const handle = createBountyRoutes({
     api: dependencies.api ?? (await sharedApi()),
     // The same authenticator the telemetry plane uses, supplied rather than
@@ -74,6 +80,11 @@ export async function createBountyGateway(
     },
     resolveSession: (sessionId, installationId) =>
       sessions.findOwnedByInstallation(sessionId, installationId),
+    // The one query that turns a presented token into a human. It is here and
+    // not in the route for the same reason `resolveSession` is: the route must
+    // stay a translator that can be tested with no database, and this file is
+    // the only place a credential becomes an identity.
+    resolveSponsor: (installationId) => ownership.findOwner(installationId),
   });
   return { handle, close: () => Promise.resolve() };
 }

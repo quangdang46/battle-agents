@@ -7,20 +7,24 @@ import type { HttpRequest, HttpResponse } from './routes.js';
 /**
  * The bounty resource routes, as pure functions.
  *
- * Four of them, and every one is a translator. The lifecycle — claim windows,
+ * Five of them, and every one is a translator. The lifecycle — claim windows,
  * the funding floor, a merge completing a bounty, the payout rail — belongs to
  * `packages/features/bounty`, and this file decides none of it. What it does is
  * put an id from the path into the place the application command wants it, and
- * put the command's answer into an `HttpResponse`. `POST /api/act` already
- * reaches all four commands with the same effect, so this is a convenience
- * surface and deliberately not a capability: the moment one of these branches on
- * what a bounty MEANS, there is a second answer to a question the CLI and the
- * MCP adapter cannot see, and that is how two surfaces start disagreeing about
- * whether somebody may claim something.
+ * put the command's answer into an `HttpResponse`. `POST /api/act` reaches all
+ * five commands too, so on the bounty itself this is a convenience surface and
+ * deliberately not a capability: the moment one of these branches on what a
+ * bounty MEANS, there is a second answer to a question the CLI and the MCP
+ * adapter cannot see, and that is how two surfaces start disagreeing about
+ * whether a top-up may be taken.
  *
- * The one thing `act()` structurally cannot do is decide whose agent is acting,
- * and that is what the claim and submit routes are for. See `resolveSession`
- * below — it is the reason those two routes are worth existing at all.
+ * The one thing `act()` structurally cannot do is decide WHO is calling, and
+ * that is what the claim, submit and fund routes are for — see `resolveSession`
+ * and `resolveSponsor` below. For those three the two surfaces are NOT
+ * equivalent, and saying otherwise is what let `bounty.fund` keep taking a
+ * caller-named sponsor: the command id, the amount and the effects are the same,
+ * but the identity the command records is not, and the catch-all's version of
+ * it is whatever the payload said.
  */
 
 /** The installation a presented Bearer token resolved to. */
@@ -33,6 +37,21 @@ export interface OwnedSession {
   readonly id: string;
   readonly agentId: string;
   readonly status: string;
+}
+
+/**
+ * The human a caller's installation belongs to, as the ownership query returns
+ * it.
+ *
+ * `login` is carried beside the id rather than looked up again, because a
+ * funding record names a person in two columns and they must be the same
+ * person: `sponsorUserId` is what the ledger settles against and `reportedBy`
+ * is what a repository owner reads when they are disputing it. Two independent
+ * lookups would let those disagree.
+ */
+export interface OwnedSponsor {
+  readonly userId: string;
+  readonly login: string;
 }
 
 export interface BountyRouteDependencies {
@@ -72,6 +91,27 @@ export interface BountyRouteDependencies {
     sessionId: string,
     installationId: string,
   ) => Promise<OwnedSession | undefined>;
+  /**
+   * The human the caller's installation belongs to.
+   *
+   * The same argument as `resolveSession`, about a different identity and a
+   * worse consequence. `bounty.fund` takes a `sponsorUserId`, and a funding row
+   * points that id at the `users` row the money is owed FROM: it is what a
+   * refund is paid against and what a dispute over a payout is settled by. Read
+   * from the payload it is an identity any credential-holder chooses, so a
+   * caller could write their own money against somebody else's account — and
+   * the platform would have no row anywhere recording that it was asked to.
+   *
+   * Unlike an `agentId`, this one is not recoverable afterwards. A claim taken
+   * under the wrong name still leaves a claim and a pull request that a human
+   * can look at; a funding row is a promise to pay, and the promise is the
+   * damage.
+   *
+   * REQUIRED, for the reason `authenticate` is: an optional resolver would mean
+   * a surface that could fund a bounty AS ANYBODY, and the only signal that it
+   * could would be the shape of the wiring.
+   */
+  readonly resolveSponsor: (installationId: string) => Promise<OwnedSponsor | undefined>;
 }
 
 /**
@@ -90,8 +130,9 @@ const BOUNTY_CREATE = 'bounty.create' satisfies RegisteredActionId;
 const BOUNTY_LIST = 'bounty.list' satisfies RegisteredActionId;
 const BOUNTY_CLAIM = 'bounty.claim' satisfies RegisteredActionId;
 const BOUNTY_SUBMIT = 'bounty.submit' satisfies RegisteredActionId;
+const BOUNTY_FUND = 'bounty.fund' satisfies RegisteredActionId;
 
-/** One `{id}`-addressed transition: claim, then submit, in that order. */
+/** One `{id}`-addressed transition: claim, submit or fund. */
 type Transition = (
   dependencies: BountyRouteDependencies,
   request: HttpRequest,
@@ -103,6 +144,7 @@ type Transition = (
 const TRANSITIONS: readonly (readonly [RegExp, Transition])[] = [
   [/^\/api\/bounties\/([^/]+)\/claim$/, claim],
   [/^\/api\/bounties\/([^/]+)\/submit$/, submit],
+  [/^\/api\/bounties\/([^/]+)\/fund$/, fund],
 ];
 
 export function createBountyRoutes(
@@ -249,6 +291,61 @@ async function submit(
 }
 
 /**
+ * `POST /api/bounties/{id}/fund` — "I am putting money on this".
+ *
+ * The two identity fields in the command are BOTH filled from the credential's
+ * installation, and neither is read from the body. `sponsorUserId` is what the
+ * ledger says the money came from; `reportedBy` is what a repository owner
+ * reads when somebody disputes a payout. Leaving `reportedBy` to the caller
+ * while fixing `sponsorUserId` would close the column a machine reconciles and
+ * leave open the column a human believes.
+ *
+ * A body that names a sponsor is not ignored, it is REFUSED — 403 for every
+ * value that is not the caller's own, whether or not the named user exists. The
+ * answer is the same either way, so the route cannot be used to learn whether a
+ * user id is real, which is the property that makes a 403 safe here where the
+ * same status on a session id would be an oracle. And refusing rather than
+ * quietly substituting is the point of the check: a client whose idea of who it
+ * is has drifted is told so instead of watching a 200 come back for money
+ * attributed to somebody else.
+ */
+async function fund(
+  dependencies: BountyRouteDependencies,
+  request: HttpRequest,
+  caller: BountyCaller,
+  bountyId: string,
+): Promise<HttpResponse> {
+  // The body is checked before the store is asked anything, for the reason
+  // `ownedSession` checks a missing `sessionId` first: a request that was built
+  // wrong should not cost a query, and the caller is already authenticated by
+  // the time it arrives.
+  const amountCents = numberField(request.body, 'amountCents');
+  if (amountCents === undefined) {
+    return json(400, { error: 'body must carry an amountCents number' });
+  }
+  const named = stringField(request.body, 'sponsorUserId');
+  const sponsor = await dependencies.resolveSponsor(caller.installationId);
+  if (sponsor === undefined) {
+    // A credential whose installation has no owner cannot be attributed, and an
+    // unattributable contribution is worse than a refused one: it is a promise
+    // to pay that nobody can be paid.
+    return json(404, { error: 'no sponsor for this credential' });
+  }
+  if (named !== undefined && named !== sponsor.userId) {
+    return json(403, { error: 'a top-up is attributed to the credential, not to the body' });
+  }
+  return json(
+    200,
+    await dependencies.api.act(BOUNTY_FUND, {
+      bountyId,
+      amountCents,
+      sponsorUserId: sponsor.userId,
+      reportedBy: sponsor.login,
+    }),
+  );
+}
+
+/**
  * The caller's own agent, or the refusal that replaces it.
  *
  * A body with no usable `sessionId` is a 400 — a client that built the request
@@ -275,6 +372,24 @@ function stringField(body: unknown, name: string): string | undefined {
   }
   const value = (body as Record<string, unknown>)[name];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+/**
+ * A finite number, or undefined.
+ *
+ * `NaN` and the infinities are refused here rather than handed to the command.
+ * They are `typeof === 'number'`, so a shape check written the obvious way lets
+ * them through, and `Number.isInteger(NaN)` is `false` so the feature would
+ * refuse them too — but it refuses them as MALFORMED INPUT, which is a category
+ * the funding disposition deliberately does not cover, and a client told that
+ * about a value it computed rather than typed has nothing to fix.
+ */
+function numberField(body: unknown, name: string): number | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const value = (body as Record<string, unknown>)[name];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /**

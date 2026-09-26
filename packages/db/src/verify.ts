@@ -14,7 +14,12 @@ import type { Database } from './client.js';
 
 const PUBLIC_SCHEMA = 'public';
 const MONEY_FLOAT_TYPES: readonly string[] = ['numeric', 'real', 'double precision'];
-const MONEY_COLUMN_TABLES: readonly string[] = ['bounties', 'bounty_funds', 'payout_intents'];
+const MONEY_COLUMN_TABLES: readonly string[] = [
+  'bounties',
+  'bounty_funds',
+  'payout_intents',
+  'guild_treasury_entries',
+];
 // payout_intents.amount_cents is a STATED TARGET, not a stored total, and it is
 // still money: a float there loses a cent and the refund arithmetic in
 // docs/design/payout-rail.md section 3.1 stops reconciling. Listed so the
@@ -23,6 +28,7 @@ const MONEY_COLUMN_TABLES: readonly string[] = ['bounties', 'bounty_funds', 'pay
 const REQUIRED_MONEY_COLUMNS: readonly string[] = [
   'bounty_funds.amount_cents',
   'payout_intents.amount_cents',
+  'guild_treasury_entries.amount_cents',
 ];
 const EVENTS_SEQUENCE_TABLE = 'event_log';
 const EVENT_LOG_PROBE_TYPE = 'verify.probe';
@@ -51,6 +57,16 @@ const EXPECTED_PLATFORM_TABLES: readonly string[] = [
   'agent_stats',
   'achievements',
   'messages',
+  // ba-feature-guild-5g6. Six tables for teams, treasury and guild quests, and
+  // the one that matters most is the treasury ledger: a guild with a table
+  // missing here is a guild whose balance cannot be derived at all, because the
+  // balance IS a sum over those rows.
+  'guilds',
+  'guild_members',
+  'guild_work_log',
+  'guild_treasury_entries',
+  'guild_quests',
+  'guild_role_signals',
   'event_log',
   // The per-feature state slices the frozen Extension API promises. A missing
   // one means every feature that keeps state throws on the first read, and the
@@ -403,10 +419,68 @@ export function checkMoneyIsIntegerCents(snapshot: SchemaSnapshot): readonly str
     }
   }
 
-  if (columnNames(snapshot, 'bounties').includes('amount_cents')) {
-    failures.push(
-      'bounties.amount_cents stores a drifting scalar; the total must be derived from bounty_funds',
-    );
+  // The `bounties.amount_cents` scalar this function used to forbid here is
+  // forbidden by checkNoCachedTotals instead, and the message is byte-identical.
+  // Keeping both would report every violation twice, which trains a reader to
+  // skim past the one that matters.
+  return failures;
+}
+
+/**
+ * Scalars the guild feature must never grow, and what derives each one instead.
+ *
+ * `bounties.amount_cents` is already forbidden above, and it was forbidden
+ * because a stored total is right until the second funder arrives and then is
+ * right about nothing. The guild feature sits on the same money and the same
+ * scoreboard, so the same failure is available twice over: a cached treasury
+ * balance that disagrees with the entries behind it, and a cached quest counter
+ * that disagrees with the work log. Either one turns a guild's standing into a
+ * number nobody can reconstruct, and §10.4's no-pay-to-win rule is a claim
+ * about the economy being honest — which it cannot be while the score is
+ * stored and the evidence is not.
+ *
+ * Declared as data rather than as two hand-written blocks, because the block
+ * form is where a third table's rule would be forgotten. `derivedFrom` is in
+ * the message because an operator reading the failure needs to know what to
+ * read the number from instead.
+ */
+const FORBIDDEN_CACHED_TOTALS: readonly {
+  readonly table: string;
+  readonly columns: readonly string[];
+  readonly derivedFrom: string;
+}[] = [
+  {
+    table: 'bounties',
+    columns: ['amount_cents'],
+    derivedFrom: 'bounty_funds',
+  },
+  {
+    table: 'guilds',
+    // Any money-shaped column, not a named one: a balance called `treasury` or
+    // `funds` is the same defect wearing a different noun, and this check is
+    // the only thing standing between the two.
+    columns: ['amount_cents', 'balance_cents'],
+    derivedFrom: 'guild_treasury_entries',
+  },
+  {
+    table: 'guild_quests',
+    columns: ['progress'],
+    derivedFrom: 'guild_work_log',
+  },
+];
+
+export function checkNoCachedTotals(snapshot: SchemaSnapshot): readonly string[] {
+  const failures: string[] = [];
+  for (const rule of FORBIDDEN_CACHED_TOTALS) {
+    const present = columnNames(snapshot, rule.table);
+    for (const column of rule.columns) {
+      if (present.includes(column)) {
+        failures.push(
+          `${rule.table}.${column} stores a drifting scalar; the total must be derived from ` +
+            `${rule.derivedFrom}`,
+        );
+      }
+    }
   }
   return failures;
 }
@@ -588,6 +662,7 @@ export async function runSchemaVerification(database: Database): Promise<readonl
     ...checkUserIdOwnership(snapshot),
     ...checkCredentialStoresOnlyHashes(snapshot),
     ...checkMoneyIsIntegerCents(snapshot),
+    ...checkNoCachedTotals(snapshot),
     ...checkBattleParticipantIdentity(snapshot),
     ...checkBattleReplayHandle(snapshot),
   ];

@@ -64,6 +64,17 @@ export const FEATURE_TABLES = [
   'reputation_outcomes',
   'achievements',
   'messages',
+  // ba-feature-guild-5g6. Six tables, and the split is doing its job in the
+  // direction that has bitten before: a table in neither list belongs to no
+  // boundary, so nothing may migrate it and nothing asserts its invariants —
+  // and `checkNoCachedTotals`, which is the invariant the whole money design
+  // rests on, reads a table the verifier would otherwise not know about.
+  'guilds',
+  'guild_members',
+  'guild_work_log',
+  'guild_treasury_entries',
+  'guild_quests',
+  'guild_role_signals',
 ] as const;
 
 export type FeatureTable = (typeof FEATURE_TABLES)[number];

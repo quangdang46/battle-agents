@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { createBattleRoutes, type BattleRouteDependencies } from './battle-routes.js';
-import { createBountyRoutes } from './bounty-routes.js';
+import { createBountyRoutes, type BountyRouteDependencies } from './bounty-routes.js';
 import { createRoutes, type HttpRequest, type HttpResponse } from './routes.js';
 
 /**
@@ -103,12 +103,32 @@ function recordingApi(): { api: ApplicationApi; calls: Recorded[] } {
 
 const OWNED = { id: 'session-mine', agentId: 'agent-mine', status: 'active' };
 
-function dependencies(api: ApplicationApi): BattleRouteDependencies {
+function dependencies(api: ApplicationApi): BountyRouteDependencies {
   return {
     api,
     authenticate: async () => ({ installationId: 'installation-mine' }),
     resolveSession: async () => OWNED,
+    // Present because `BountyRouteDependencies` requires it, and used by no pair
+    // below: `/api/bounties/{id}/fund` is deliberately NOT one, because the
+    // sponsor a route records is the credential's and a `sponsorUserId` in a
+    // payload is not — a pair asserting the two agree would be asserting the
+    // hole, the same way the agentId pairs are absent for the same reason.
+    resolveSponsor: async () => ({ userId: 'user-mine', login: 'mine-person' }),
   };
+}
+
+/**
+ * The battle factory's own dependencies.
+ *
+ * Separate rather than one object widened to satisfy both, because
+ * `resolveSponsor` is BOUNTY-only — the sponsor a route records is the
+ * credential's, which battle has no notion of. Passing one object to both was an
+ * excess property on every battle pair, and a single shared shape is how a
+ * bounty-only requirement quietly becomes a battle requirement.
+ */
+function battleDependencies(api: ApplicationApi): BattleRouteDependencies {
+  const { resolveSponsor: _bountyOnly, ...shared } = dependencies(api);
+  return shared;
 }
 
 function call(
@@ -192,7 +212,7 @@ const PAIRS: readonly Pair[] = [
   },
   {
     label: 'POST /api/battles',
-    overRoute: (api) => createBattleRoutes(dependencies(api)),
+    overRoute: (api) => createBattleRoutes(battleDependencies(api)),
     request: {
       method: 'POST',
       path: '/api/battles',
@@ -207,7 +227,7 @@ const PAIRS: readonly Pair[] = [
   },
   {
     label: 'GET /api/battles',
-    overRoute: (api) => createBattleRoutes(dependencies(api)),
+    overRoute: (api) => createBattleRoutes(battleDependencies(api)),
     request: { method: 'GET', path: '/api/battles' },
     act: { action: 'battle.list', input: {} },
     expected: { id: 'battle.list', input: {} },
@@ -215,7 +235,7 @@ const PAIRS: readonly Pair[] = [
   },
   {
     label: 'POST /api/battles/{id}/join',
-    overRoute: (api) => createBattleRoutes(dependencies(api)),
+    overRoute: (api) => createBattleRoutes(battleDependencies(api)),
     request: { method: 'POST', path: '/api/battles/b-1/join', body: { sessionId: 'session-mine' } },
     act: { action: 'battle.join', input: { battleId: 'b-1', sessionId: 'session-mine' } },
     expected: { id: 'battle.join', input: { battleId: 'b-1', sessionId: 'session-mine' } },

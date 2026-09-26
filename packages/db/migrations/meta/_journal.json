@@ -141,6 +141,13 @@
       "when": 1790411410432,
       "tag": "0019_powerful_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790413014651,
+      "tag": "0020_guild_teams_treasury_quests",
+      "breakpoints": true
     }
   ]
 }

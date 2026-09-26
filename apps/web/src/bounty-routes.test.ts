@@ -11,6 +11,7 @@ import {
   createBountyRoutes,
   type BountyRouteDependencies,
   type OwnedSession,
+  type OwnedSponsor,
 } from './bounty-routes.js';
 import type { HttpRequest, HttpResponse } from './routes.js';
 
@@ -62,12 +63,14 @@ function apiRecording(): { api: ApplicationApi; calls: Recorded[] } {
           { name: 'bounty.list', description: 'lists bounties' },
           { name: 'bounty.claim', description: 'claims a bounty' },
           { name: 'bounty.submit', description: 'submits a pull request' },
+          { name: 'bounty.fund', description: 'records a sponsor commitment' },
         ],
         actionDefs: [
           action('bounty.create'),
           action('bounty.list'),
           action('bounty.claim'),
           action('bounty.submit'),
+          action('bounty.fund'),
         ],
       },
     ],
@@ -103,11 +106,28 @@ const OWNED: Readonly<Record<string, Readonly<Record<string, OwnedSession>>>> = 
   },
 };
 
+/**
+ * The humans behind each installation, keyed the way the real query is: by
+ * installation.
+ *
+ * A single-keyed fixture cannot tell "this installation belongs to somebody" from
+ * "nobody", and `installation-theirs` is the whole point — the test that matters
+ * here is the one where a second identity's own sponsor is what gets recorded,
+ * and a fixture holding only the caller's would let a route that ignored the
+ * installation entirely pass.
+ */
+const SPONSORS: Readonly<Record<string, OwnedSponsor>> = {
+  'installation-mine': { userId: 'user-mine', login: 'mine-person' },
+  'installation-theirs': { userId: 'user-theirs', login: 'theirs-person' },
+};
+
 interface Harness {
   readonly handle: (request: HttpRequest) => Promise<HttpResponse>;
   readonly calls: Recorded[];
   /** Every (sessionId, installationId) pair the ownership query was asked. */
   readonly lookups: { sessionId: string; installationId: string }[];
+  /** Every installation the sponsor query was asked about. */
+  readonly sponsorLookups: string[];
   readonly authenticated: number;
   readonly installationId: string;
 }
@@ -115,6 +135,7 @@ interface Harness {
 function harness(overrides: Partial<BountyRouteDependencies> = {}): Harness {
   const { api, calls } = apiRecording();
   const lookups: { sessionId: string; installationId: string }[] = [];
+  const sponsorLookups: string[] = [];
   let authenticated = 0;
   const installationId = 'installation-mine';
   const dependencies: BountyRouteDependencies = {
@@ -127,12 +148,17 @@ function harness(overrides: Partial<BountyRouteDependencies> = {}): Harness {
       lookups.push({ sessionId, installationId: caller });
       return OWNED[caller]?.[sessionId];
     },
+    resolveSponsor: async (caller) => {
+      sponsorLookups.push(caller);
+      return SPONSORS[caller];
+    },
     ...overrides,
   };
   return {
     handle: createBountyRoutes(dependencies),
     calls,
     lookups,
+    sponsorLookups,
     get authenticated() {
       return authenticated;
     },
@@ -341,6 +367,164 @@ describe('POST /api/bounties/{id}/submit', () => {
   });
 });
 
+describe('POST /api/bounties/{id}/fund', () => {
+  it('takes the sponsor from the caller installation, not from the body', async () => {
+    // The load-bearing assertion, and the reason this route exists. The body
+    // names somebody else in BOTH identity columns — the `users` row the ledger
+    // settles against and the name a human reads — and neither may reach the
+    // command. `bounty_funds.sponsor_user_id` is a promise to pay, so a
+    // credential-holder choosing it writes a debt onto somebody else's account.
+    const h = harness();
+
+    const response = await call(h.handle, {
+      path: '/api/bounties/b-1/fund',
+      body: {
+        amountCents: 20_000,
+        sponsorUserId: 'user-theirs',
+        reportedBy: 'theirs-person',
+      },
+    });
+
+    // Refused, not corrected: a client that has the wrong idea of who it is
+    // should be told, rather than handed a 200 for a contribution it did not
+    // make. The substitution case is the test below.
+    expect(response.status).toBe(403);
+    expect(h.calls).toEqual([]);
+  });
+
+  it('records the caller as the sponsor when the body names nobody', async () => {
+    // The other half, and the one an ordinary client hits. Ignoring a
+    // well-behaved body is not the same as trusting it: the value that lands in
+    // the ledger still came from the installation.
+    const h = harness();
+
+    const response = await call(h.handle, {
+      path: '/api/bounties/b-1/fund',
+      body: { amountCents: 20_000 },
+    });
+
+    expect(response.status).toBe(200);
+    expect(h.sponsorLookups).toEqual(['installation-mine']);
+    expect(h.calls).toEqual([
+      {
+        id: 'bounty.fund',
+        input: {
+          bountyId: 'b-1',
+          amountCents: 20_000,
+          sponsorUserId: 'user-mine',
+          reportedBy: 'mine-person',
+        },
+      },
+    ]);
+  });
+
+  it("refuses the second identity's name as firmly as a made-up one", async () => {
+    // The two answers must be byte-identical, or the route becomes an oracle for
+    // which user ids exist. A 403 that named which half was wrong would.
+    const h = harness();
+
+    const real = await call(h.handle, {
+      path: '/api/bounties/b-1/fund',
+      body: { amountCents: 1, sponsorUserId: 'user-theirs' },
+    });
+    const invented = await call(h.handle, {
+      path: '/api/bounties/b-1/fund',
+      body: { amountCents: 1, sponsorUserId: 'user-nobody-has-ever-heard-of' },
+    });
+
+    expect(real.status).toBe(403);
+    expect(invented).toEqual(real);
+  });
+
+  it("accepts the caller's own name in the body, so a client may say who it is", async () => {
+    // Not generosity. A client that reads its own id from somewhere and sends it
+    // must not be punished for it, or the fix teaches clients to stop sending
+    // the field rather than to send the right one.
+    const h = harness();
+
+    const response = await call(h.handle, {
+      path: '/api/bounties/b-1/fund',
+      body: { amountCents: 500, sponsorUserId: 'user-mine' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(h.calls[0]?.input).toMatchObject({ sponsorUserId: 'user-mine' });
+  });
+
+  it('takes the bounty id from the path, not from the body', async () => {
+    const h = harness();
+
+    await call(h.handle, {
+      path: '/api/bounties/b-from-path/fund',
+      body: { amountCents: 1, bountyId: 'b-from-body' },
+    });
+
+    expect(h.calls[0]?.input).toMatchObject({ bountyId: 'b-from-path' });
+  });
+
+  it('refuses a top-up whose installation has no owner, without funding', async () => {
+    // Fail-closed against a broken invariant rather than an everyday case: the
+    // real store cannot produce it, because `installations.user_id` is NOT NULL
+    // and a credential whose installation is deleted cascades away with it (a
+    // test in tests/integration found that out the hard way, and says so). An
+    // unattributable contribution is a promise to pay that nobody can be paid,
+    // so the route refuses rather than writes a row with a sponsor it does not
+    // have — which is the only behaviour that is safe if the schema ever moves.
+    const h = harness({ resolveSponsor: async () => undefined });
+
+    const response = await call(h.handle, {
+      path: '/api/bounties/b-1/fund',
+      body: { amountCents: 20_000 },
+    });
+
+    expect(response.status).toBe(404);
+    expect(h.calls).toEqual([]);
+  });
+
+  it('refuses a body with no amount, before asking who the sponsor is', async () => {
+    const h = harness();
+
+    const response = await call(h.handle, { path: '/api/bounties/b-1/fund', body: {} });
+
+    expect(response.status).toBe(400);
+    expect(h.calls).toEqual([]);
+    expect(h.sponsorLookups).toEqual([]);
+  });
+
+  it('refuses an amount that is not a number rather than passing NaN along', async () => {
+    // `typeof NaN === 'number'`, so the obvious shape check lets it through, and
+    // the feature refuses it as MALFORMED INPUT — a category the funding
+    // disposition does not cover and a client cannot act on.
+    for (const amountCents of ['20000', null, true, undefined]) {
+      const h = harness();
+
+      const response = await call(h.handle, {
+        path: '/api/bounties/b-1/fund',
+        body: { amountCents },
+      });
+
+      expect(response.status, `amountCents: ${String(amountCents)}`).toBe(400);
+      expect(h.calls).toEqual([]);
+    }
+  });
+
+  it('does not decide whether a bounty may be funded at all', async () => {
+    // The terminal/payable refusals belong to the feature, and a route that
+    // pre-judged them would be a second answer to a question the CLI and MCP
+    // cannot see. A bounty id that does not exist is therefore accepted here and
+    // refused downstream.
+    const h = harness();
+
+    const response = await call(h.handle, {
+      path: '/api/bounties/no-such-bounty/fund',
+      body: { amountCents: 20_000 },
+    });
+
+    expect(response.status).toBe(200);
+    expect(h.calls[0]?.input).toMatchObject({ bountyId: 'no-such-bounty' });
+  });
+});
+
 describe('the credential', () => {
   it('refuses every route on the surface, including the list', async () => {
     const paths = [
@@ -348,6 +532,7 @@ describe('the credential', () => {
       { method: 'GET', path: '/api/bounties' },
       { method: 'POST', path: '/api/bounties/b-1/claim', body: { sessionId: 'session-mine' } },
       { method: 'POST', path: '/api/bounties/b-1/submit', body: { sessionId: 'session-mine' } },
+      { method: 'POST', path: '/api/bounties/b-1/fund', body: { amountCents: 1 } },
     ];
     for (const request of paths) {
       const h = harness({

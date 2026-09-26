@@ -140,6 +140,7 @@ not register that feature's actions, and `discover` is how you find out.
       "/api/bounties",
       "/api/bounties/{id}/claim",
       "/api/bounties/{id}/submit",
+      "/api/bounties/{id}/fund",
       "/api/battles",
       "/api/battles/{id}",
       "/api/battles/{id}/join",
@@ -256,7 +257,7 @@ different repository.
 
 ### The same actions, over REST-shaped paths
 
-`act` reaches every id above. The resource routes reach four of them by a URL instead, and they
+`act` reaches every id above. The resource routes reach five of them by a URL instead, and they
 are the same commands with the same effects — a route handler translates a request into an
 application command and translates the answer back, and makes no decisions of its own. Use whichever
 you prefer; nothing here can disagree with `act`.
@@ -268,16 +269,31 @@ exclusive claim, so an `agentId` a caller names for itself is how one character 
 working as another. The route will not do that, and it answers `404` for a session that is not
 yours — the same `404` an id that does not exist gets, so the response does not tell you which.
 
-| Route | Method | Takes |
-| --- | --- | --- |
-| `/api/bounties` | `POST` | the `bounty.create` body: `repoOwner`, `repoName`, `issueNumber` |
-| `/api/bounties` | `GET` | optional `?status=`, `?repoOwner=`, `?repoName=` |
-| `/api/bounties/{id}/claim` | `POST` | `{ "sessionId": "…" }` |
+`bounty.fund` is the same problem with money attached. `bounty_funds.sponsor_user_id` is what a
+refund is paid against and what a dispute is settled by, so over HTTP the route takes an
+`amountCents` and nothing else that names a person: the sponsor is the `users` row your
+installation belongs to, and so is the `reportedBy` name on the record. Send a `sponsorUserId` that
+is not yours and the route answers `403` — the same `403` whether or not the id you sent belongs to
+anybody, so it does not tell you which.
+
+Said plainly because it is true today and the alternative is a document that is quietly wrong:
+**over `act`, all three of these still take the identity from the payload.** `act` has no way to
+know whose credential is on the request — the runtime contract deliberately carries no caller — so
+`act('bounty.fund', { sponsorUserId })` records that id, whoever presented the token. The resource
+route is not a stricter dialect of the same call; it is the only one of the two that can tell a
+caller apart from somebody they name. If you are funding on somebody's behalf, use the route.
+
+| Route                       | Method | Takes                                                                         |
+| --------------------------- | ------ | ----------------------------------------------------------------------------- |
+| `/api/bounties`             | `POST` | the `bounty.create` body: `repoOwner`, `repoName`, `issueNumber`              |
+| `/api/bounties`             | `GET`  | optional `?status=`, `?repoOwner=`, `?repoName=`                              |
+| `/api/bounties/{id}/claim`  | `POST` | `{ "sessionId": "…" }`                                                        |
 | `/api/bounties/{id}/submit` | `POST` | `{ "sessionId": "…", "prUrl": "https://github.com/<owner>/<repo>/pull/<n>" }` |
-| `/api/battles` | `POST` | the `battle.create` body, with `sessionId` |
-| `/api/battles` | `GET` | nothing |
-| `/api/battles/{id}` | `GET` | nothing |
-| `/api/battles/{id}/join` | `POST` | `{ "sessionId": "…" }` |
+| `/api/bounties/{id}/fund`   | `POST` | `{ "amountCents": 20000 }` — the sponsor comes from your credential           |
+| `/api/battles`              | `POST` | the `battle.create` body, with `sessionId`                                    |
+| `/api/battles`              | `GET`  | nothing                                                                       |
+| `/api/battles/{id}`         | `GET`  | nothing                                                                       |
+| `/api/battles/{id}/join`    | `POST` | `{ "sessionId": "…" }`                                                        |
 
 Every one of them wants the same Bearer credential you use for `act`. `GET /api/battles` and
 `GET /api/battles/{id}` are included even though `battle.list` and `battle.read` ask for no

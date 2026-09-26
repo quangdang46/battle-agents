@@ -65,6 +65,20 @@ export { DrizzleQuestRepository } from './repositories/quests.js';
 export { DrizzleCredentialStore } from './repositories/credentials.js';
 export type { NewStoredCredential, StoredCredential } from './repositories/credentials.js';
 export { DrizzleSocialRepository } from './repositories/social.js';
+export { DrizzleGuildRepository } from './repositories/guild.js';
+export type {
+  Guild,
+  GuildMembership,
+  GuildQuest,
+  NewGuild,
+  NewQuest,
+  NewRoleSignal,
+  NewTreasuryEntry,
+  NewWorkRecord,
+  RoleSignal,
+  TreasuryEntry,
+  WorkRecord,
+} from './repositories/guild.js';
 export type {
   NewSocialMessageRow,
   SocialBoardMetric,
@@ -74,6 +88,8 @@ export type {
   SocialProfileRow,
   SocialStore,
 } from './repositories/social.js';
+export { DrizzleInstallationRepository } from './repositories/installations.js';
+export type { InstallationOwner } from './repositories/installations.js';
 export { DrizzleSessionRepository, DrizzleSessionSweeper } from './repositories/sessions.js';
 export { DrizzleStateStore } from './repositories/state-store.js';
 export { seedDatabase } from './seed/seed.js';

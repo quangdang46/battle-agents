@@ -35,6 +35,32 @@ export function describeHttpFailure(error: unknown): HttpResponse {
   if (error instanceof UnknownActionError || error instanceof UnknownDomainError) {
     return { status: 404, body: { error: error.message } };
   }
+  if (isMalformedInput(error)) {
+    // 400, and the reason is that the fault is provably the caller's: the
+    // feature narrowed the payload, found a field that is not what it asked
+    // for, and said so. Every feature raises this one code and every one of
+    // them meant the same thing by it.
+    //
+    // It used to fall through to the 500 below, and that was a lie in the
+    // direction that costs the most: a client that sent a negative amount was
+    // told the platform was broken, so a client that retries a 500 retried a
+    // request that could never succeed, and the message it logged named
+    // something it had not done. Observed on `POST /api/act` with
+    // `bounty.fund` carrying `amountCents: -1`, which answered 500 with a body
+    // saying "refused its input: amount-negative".
+    //
+    // Named here rather than read off a `status` because no feature sets one, and
+    // that is the point: they are describing a value, and the transport is what
+    // knows what an unusable value is worth over HTTP.
+    const reason = rejectionOf(error);
+    return {
+      status: 400,
+      body: {
+        error: error instanceof Error ? error.message : String(error),
+        ...(reason === undefined ? {} : { reason }),
+      },
+    };
+  }
   const declined = declaredStatus(error);
   if (declined !== undefined) {
     return {
@@ -46,6 +72,42 @@ export function describeHttpFailure(error: unknown): HttpResponse {
     };
   }
   return { status: 500, body: { error: error instanceof Error ? error.message : String(error) } };
+}
+
+/**
+ * The one code every feature raises for a payload it would not accept.
+ *
+ * Spelled out rather than imported, for the reason the two branches above name
+ * classes rather than codes and the branch below reads a `status` instead of
+ * keeping a table: a transport that cannot import a feature still has to agree
+ * with all of them about what this word means, and a copy here is the one that
+ * can be checked by this repository's own tests rather than by a build order.
+ */
+const MALFORMED_INPUT = 'malformed-input';
+
+function isMalformedInput(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { readonly code?: unknown }).code === MALFORMED_INPUT
+  );
+}
+
+/**
+ * The feature's own machine-readable reason, when it sent one.
+ *
+ * `bountyInputRejected` attaches a `reason` and a shape string; a caller that
+ * only reads `error` has to parse a sentence to find out which field was wrong,
+ * and a client fixing a request should not have to do that.
+ */
+function rejectionOf(error: unknown): unknown {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  const { reason } = error as { readonly reason?: unknown };
+  return typeof reason === 'object' && reason !== null && !Array.isArray(reason)
+    ? reason
+    : undefined;
 }
 
 /**
