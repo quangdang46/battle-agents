@@ -183,7 +183,98 @@ export type AgentInputRejection =
   | { readonly reason: 'agent-id-empty' }
   | { readonly reason: 'session-id-not-a-string' }
   | { readonly reason: 'session-id-empty' }
-  | { readonly reason: 'reason-not-a-string' };
+  | { readonly reason: 'reason-not-a-string' }
+  | { readonly reason: 'installation-key-not-a-string' }
+  | { readonly reason: 'installation-key-empty' }
+  | { readonly reason: 'agent-name-not-a-string' }
+  | { readonly reason: 'harness-not-a-string' }
+  | { readonly reason: 'harness-empty' }
+  | { readonly reason: 'project-key-not-a-string' }
+  | AgentNameRejection;
+
+/**
+ * The handshake, as a caller sends it.
+ *
+ * `harness` is typed rather than a bare string because the protocol fixes the
+ * vocabulary: a harness this build does not know is a client and a server that
+ * disagree about what happened, and it is better refused at the door than stored.
+ */
+export interface CreateSessionInput {
+  readonly installationKey: string;
+  readonly ownerId: UserId;
+  readonly agentName: string;
+  readonly harness: Harness;
+  readonly projectKey?: string | undefined;
+}
+
+/**
+ * Why a `session.create` cannot be asked for, or undefined when it can.
+ *
+ * Validated from `unknown` for the same reason every other input here is: `act()`
+ * hands the payload through as a generic, so an annotation here would be a claim
+ * nothing checked. This is the one action that CREATES the row every other action
+ * then reads, so a field arriving as the wrong type would be written straight
+ * into the sessions table rather than refused somewhere downstream.
+ */
+export function whyCreateSessionIsRejected(input: unknown): AgentInputRejection | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return { reason: 'not-an-object' };
+  }
+  const { installationKey, ownerId, agentName, harness, projectKey } = input as {
+    readonly installationKey?: unknown;
+    readonly ownerId?: unknown;
+    readonly agentName?: unknown;
+    readonly harness?: unknown;
+    readonly projectKey?: unknown;
+  };
+
+  if (typeof installationKey !== 'string') {
+    return { reason: 'installation-key-not-a-string' };
+  }
+  if (installationKey.length === 0) {
+    return { reason: 'installation-key-empty' };
+  }
+  if (typeof ownerId !== 'string') {
+    return { reason: 'owner-id-not-a-string' };
+  }
+  if (ownerId.length === 0) {
+    return { reason: 'owner-id-empty' };
+  }
+  if (typeof agentName !== 'string') {
+    return { reason: 'agent-name-not-a-string' };
+  }
+  // The reserved and over-long name rules are the ones agent.register already
+  // applies. Reusing them rather than restating them is the point: a name the
+  // register would refuse must not become reachable by creating a session
+  // instead, or the rule is a suggestion with two doors.
+  const nameProblem = whyAgentNameIsRejected(agentName);
+  if (nameProblem !== undefined) {
+    return nameProblem;
+  }
+  if (typeof harness !== 'string') {
+    return { reason: 'harness-not-a-string' };
+  }
+  if (harness.length === 0) {
+    return { reason: 'harness-empty' };
+  }
+  // NOT checked against HARNESSES, on purpose. This domain already decided the
+  // question in `toHarness`: 'other' is the escape hatch so a character is never
+  // dropped because its harness is newer than the code reading it. A new coding
+  // agent ships an adapter before the domain grows an entry for it, and refusing
+  // its handshake would mean the newest adapters — the ones this repository is
+  // built to add — could not start a session at all.
+  // Absent is allowed — "no project context" is a real state, hello() types it
+  // as optional. Present-and-wrong is not: it would reach a project lookup that
+  // expects a key.
+  if (projectKey !== undefined && typeof projectKey !== 'string') {
+    return { reason: 'project-key-not-a-string' };
+  }
+  return undefined;
+}
+
+export function isCreateSessionInput(input: unknown): input is CreateSessionInput {
+  return whyCreateSessionIsRejected(input) === undefined;
+}
 
 /** Listing a person's characters. */
 export interface DescribeAgentsInput {

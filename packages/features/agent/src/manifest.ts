@@ -12,6 +12,7 @@
 export const AGENT_ACTION_IDS = [
   'agent.describe',
   'agent.read',
+  'session.create',
   'session.end',
   'session.heartbeat',
 ] as const;

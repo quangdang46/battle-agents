@@ -17,7 +17,8 @@
  */
 
 /** agent */
-export type AgentActionId = 'agent.describe' | 'agent.read' | 'session.end' | 'session.heartbeat';
+export type AgentActionId =
+  'agent.describe' | 'agent.read' | 'session.create' | 'session.end' | 'session.heartbeat';
 
 /** bounty */
 export type BountyActionId =
@@ -70,6 +71,7 @@ export type RegisteredActionId =
   | 'reputation.gate'
   | 'reputation.read'
   | 'reputation.tiers'
+  | 'session.create'
   | 'session.end'
   | 'session.heartbeat'
   | 'social.broadcast'
@@ -113,6 +115,7 @@ export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'reputation.gate',
   'reputation.read',
   'reputation.tiers',
+  'session.create',
   'session.end',
   'session.heartbeat',
   'social.broadcast',

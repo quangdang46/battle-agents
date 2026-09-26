@@ -5,12 +5,14 @@ import {
   agentInputRejected,
   DESCRIBE_AGENTS_SHAPE,
   describeRejection,
+  isCreateSessionInput,
   isDescribeAgentsInput,
   isEndSessionInput,
   isHeartbeatSessionInput,
   isReadAgentInput,
   READ_AGENT_SHAPE,
   SESSION_ACTION_SHAPE,
+  whyCreateSessionIsRejected,
   toHarness,
   whyAgentNameIsRejected,
   whyDescribeAgentsIsRejected,
@@ -27,7 +29,7 @@ import {
   type AgentRepository,
   type StoredAgent,
 } from './repository.js';
-import type { SessionRepository } from './hello.js';
+import { hello, type SessionRepository } from './hello.js';
 import { SESSION_END_REASONS, type SessionEndReason } from './session.js';
 
 export const AGENT_REGISTERED = 'agent.registered';
@@ -44,6 +46,7 @@ export const AGENT_READ = 'agent.read';
 export const AGENT_DESCRIBE = 'agent.describe';
 
 /** The two operations a run needs while it is going, and only while storage is wired. */
+export const SESSION_CREATE = 'session.create';
 export const SESSION_HEARTBEAT = 'session.heartbeat';
 export const SESSION_END = 'session.end';
 
@@ -227,6 +230,25 @@ function rejection(
  */
 function sessionActions(sessionRepository: SessionRepository) {
   return [
+    defineAction({
+      id: SESSION_CREATE,
+      permissions: [SESSION_CREATE],
+      run: async (input: unknown, context) => {
+        if (!isCreateSessionInput(input)) {
+          throw agentInputRejected(
+            SESSION_CREATE,
+            whyCreateSessionIsRejected(input) ?? { reason: 'not-an-object' },
+            SESSION_ACTION_SHAPE,
+          );
+        }
+        // `now` is the runtime's clock rather than a field the caller supplies.
+        // The caller's clock is exactly what a hostile or simply-skewed client
+        // would control, and this row decides whether a session is inside its
+        // resume grace window.
+        const result = await hello(sessionRepository, { ...input, now: context.now() });
+        return result;
+      },
+    }),
     defineAction({
       id: SESSION_HEARTBEAT,
       permissions: [SESSION_HEARTBEAT],

@@ -141,7 +141,9 @@ class InMemorySessionRepository {
   }): Promise<readonly never[]> {
     return [];
   }
-  async createSession(_input: {
+  /** The clock each row was stamped with, so a test can see whose clock won. */
+  readonly stampedAt: string[] = [];
+  async createSession(input: {
     agentId: string;
     installationId: string;
     projectId: string | null;
@@ -149,6 +151,7 @@ class InMemorySessionRepository {
   }): Promise<{ id: string }> {
     const id = `session-${this.#next++}`;
     this.rows.push({ id, status: 'active', reason: null });
+    this.stampedAt.push(input.now);
     return { id };
   }
   async markSessionActive(id: string, _now?: string): Promise<void> {
@@ -387,6 +390,122 @@ describe('what the feature offers', () => {
 });
 
 describe('driving a running session', () => {
+  it('creates a session the ingest route can then resolve', async () => {
+    // This is the action that makes POST /api/events reachable at all. Every
+    // other action in this describe reads a row this one creates, and the ingest
+    // route answers 404 for a session that does not exist — so before
+    // `session.create` existed there was no path from a network client to an
+    // accepted batch, on any harness.
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+
+    const created = await runtime.runAction('session.create', {
+      installationKey: 'laptop-1',
+      ownerId: 'user-1',
+      agentName: 'the-debugger',
+      harness: 'claude',
+    });
+
+    expect(created).toMatchObject({
+      sessionId: expect.any(String),
+      agentId: expect.any(String),
+      installationId: expect.any(String),
+    });
+    // The cast is what ba-vsd is about: runAction returns unknown, so a caller
+    // asserting anything about the reply must narrow it by hand. That is the gap
+    // the typing half of that bead exists to close, and it is still open.
+    const sessionId = (created as { readonly sessionId: string }).sessionId;
+    // The session the runtime reports must be one the repository can find, or
+    // the row and the answer disagree and the first batch 404s anyway.
+    expect(await store.heartbeat(sessionId, AT)).toBe('active');
+  });
+
+  it('refuses a handshake that cannot name a machine, a character, or a harness', async () => {
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+    const valid = {
+      installationKey: 'laptop-1',
+      ownerId: 'user-1',
+      agentName: 'the-debugger',
+      harness: 'claude',
+    };
+
+    for (const input of [
+      {},
+      null,
+      { ...valid, installationKey: 7 },
+      { ...valid, installationKey: '' },
+      { ...valid, ownerId: '' },
+      { ...valid, agentName: '' },
+      { ...valid, harness: '' },
+      { ...valid, harness: 3 },
+      // Absent is allowed — "no project context" is a real state. Present and
+      // the wrong type is not, because it reaches a lookup expecting a key.
+      { ...valid, projectKey: 9 },
+    ]) {
+      await expect(runtime.runAction('session.create', input)).rejects.toThrow(
+        /session\.create rejected/,
+      );
+    }
+  });
+
+  it('accepts a harness this build has never heard of', async () => {
+    // Refusing an unknown harness would mean the newest adapters — the ones this
+    // repository exists to add — could not start a session at all. The domain
+    // already decided this in toHarness: 'other' is the escape hatch so a
+    // character is never dropped because its harness is newer than the code
+    // reading it.
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+
+    const created = await runtime.runAction('session.create', {
+      installationKey: 'laptop-1',
+      ownerId: 'user-1',
+      agentName: 'the-newcomer',
+      harness: 'a-coding-agent-shipped-last-week',
+    });
+
+    expect(created).toMatchObject({ sessionId: expect.any(String) });
+  });
+
+  it('stamps the row with the runtime clock rather than the one supplied', async () => {
+    // The row decides whether a LATER session is inside its resume grace
+    // window, so a caller-supplied clock would let a client decide its own
+    // continuity. `now` in the payload is not a field — it is something the
+    // action overwrites, and this is the assertion that it does.
+    const store = new InMemorySessionRepository();
+    const { runtime } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+
+    await runtime.runAction('session.create', {
+      installationKey: 'laptop-1',
+      ownerId: 'user-1',
+      agentName: 'the-debugger',
+      harness: 'claude',
+      now: '1999-01-01T00:00:00.000Z',
+    });
+
+    expect(store.stampedAt).toEqual([AT]);
+    expect(store.stampedAt).not.toContain('1999-01-01T00:00:00.000Z');
+  });
+
+  // Resume-versus-new is NOT asserted here. The double in this file returns []
+  // from findResumableSessions unconditionally, so the branch is structurally
+  // undemonstrable, and an assertion that passes because the double cannot
+  // reach it is the failure this repository keeps meeting. hello() owns the
+  // decision and hello.test.ts covers it three times, grace boundary included.
+
   it('heartbeats a live session and refuses one that is not running', async () => {
     const store = new InMemorySessionRepository();
     const { runtime } = harnessWith({
@@ -455,6 +574,7 @@ describe('driving a running session', () => {
 
     // Absent rather than registered-and-throwing: `discover` is how a caller
     // finds out, and a host with no session store genuinely has no sessions.
+    expect(runtime.actions()).not.toContain('session.create');
     expect(runtime.actions()).not.toContain('session.heartbeat');
     expect(runtime.actions()).not.toContain('session.end');
     expect(runtime.actions()).toContain('agent.describe');
