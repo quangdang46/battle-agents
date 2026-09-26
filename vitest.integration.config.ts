@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-import { workspaceSourceAliases } from './vitest.shared.js';
+import { jsxSourceTransform, workspaceSourceAliases } from './vitest.shared.js';
 
 /**
  * Stage: integration. Requires a live Postgres (the compose `postgres` service).
@@ -12,6 +12,7 @@ import { workspaceSourceAliases } from './vitest.shared.js';
  */
 export default defineConfig({
   resolve: { alias: workspaceSourceAliases() },
+  ...jsxSourceTransform(),
   test: {
     name: 'integration',
     include: ['tests/integration/**/*.test.ts'],

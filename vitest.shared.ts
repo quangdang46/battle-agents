@@ -61,3 +61,31 @@ export function workspaceSourceAliases(): PackageAlias[] {
   }
   return aliases;
 }
+
+/**
+ * JSX in a test, which nothing here could do before.
+ *
+ * Vite reads the nearest tsconfig for its TypeScript options, and
+ * `apps/web/tsconfig.json` sets `jsx: "preserve"` because that is the value
+ * Next.js's own SWC transform expects. So the stages handed every `.tsx` file to
+ * the transformer with the JSX still in it, and the transform failed with
+ * "the content contains invalid JS syntax... make sure to not set jsx to
+ * preserve". `esbuild: { jsx: 'automatic' }` does not override it — Vite 8
+ * transforms with oxc, and the tsconfig is read per file with nothing above it
+ * to override.
+ *
+ * Measured rather than assumed: a probe that rendered a `.tsx` component passed
+ * once and then failed with the cache cleared, which is the shape of a check
+ * that was green for a reason nobody could name. `oxc.jsx` is the override that
+ * held, and `{ runtime: 'automatic' }` is its TYPED form: the string
+ * `'react-jsx'` runs and does not typecheck, because Vite's `oxc.jsx` is
+ * `'preserve' | JsxOptions` and that spelling is in neither. The root typecheck
+ * reads these config files, so an untyped override would have been a red gate
+ * introduced by the same commit that fixed a green one.
+ *
+ * It applies only to `.jsx`/`.tsx`; a `.ts` file is untouched, so no existing
+ * test changes behaviour.
+ */
+export function jsxSourceTransform() {
+  return { oxc: { jsx: { runtime: 'automatic' as const } } };
+}

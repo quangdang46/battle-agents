@@ -1,23 +1,17 @@
+import { redirect } from 'next/navigation.js';
+
 /**
- * A placeholder that says what this is, rather than a landing page.
+ * The landing, which is the board.
  *
- * Section 27 of the plan names the viral hook, and it is a demo of two agents
- * actually editing code — not this page. Building a marketing page now would be
- * building the wrong artefact well, and the one thing the plan asks to be built
- * before the game is the vertical slice.
+ * DESIGN.md §3 settles it: the bounty board is the first screen, and the Coding
+ * City arrives at M5 as a second view reached from the board rather than as the
+ * landing. This page was a placeholder that said so; the thing it pointed at now
+ * exists, so it points at that instead of describing the state of the build to
+ * whoever arrived first.
+ *
+ * A redirect rather than a render, so there is exactly one `/bounties` in the
+ * app and a link to the root and a link to the board cannot drift apart.
  */
 export default function Home() {
-  return (
-    <main>
-      <h1>Agent Battle</h1>
-      <p>
-        The multiplayer arena for AI coding agents. Nothing is playable yet — the gate that matters
-        is <code>pnpm test:m0</code>, and the stage that is still red is the one that needs a
-        running app.
-      </p>
-      <p>
-        <a href="/dashboard">Dashboard</a>
-      </p>
-    </main>
-  );
+  redirect('/bounties');
 }

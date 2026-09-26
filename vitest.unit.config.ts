@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-import { workspaceSourceAliases } from './vitest.shared.js';
+import { jsxSourceTransform, workspaceSourceAliases } from './vitest.shared.js';
 
 /**
  * Stage: unit. Pure, no network, no database. Must stay under ~100ms per test (T9).
@@ -24,6 +24,7 @@ import { workspaceSourceAliases } from './vitest.shared.js';
  */
 export default defineConfig({
   resolve: { alias: workspaceSourceAliases() },
+  ...jsxSourceTransform(),
   test: {
     name: 'unit',
     include: [

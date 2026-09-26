@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-import { workspaceSourceAliases } from './vitest.shared.js';
+import { jsxSourceTransform, workspaceSourceAliases } from './vitest.shared.js';
 
 /**
  * Stage: e2e. Requires the full stack: web + Postgres + auth.
@@ -9,6 +9,7 @@ import { workspaceSourceAliases } from './vitest.shared.js';
  */
 export default defineConfig({
   resolve: { alias: workspaceSourceAliases() },
+  ...jsxSourceTransform(),
   test: {
     name: 'e2e',
     include: ['tests/e2e/**/*.test.ts'],
