@@ -128,34 +128,7 @@ export interface GameRuntimeDependencies {
   readonly worldStore: DrizzleWorldRepository;
 }
 
-/**
- * How a gate is evaluated, stated here rather than imported from progression.
- *
- * `world` needs to know whether a character has reached a level, and the level
- * lives on the `agents` row, which is infrastructure rather than a feature — so
- * neither of these two closures depends on progression being INSTALLED. That is
- * not tidiness, it is the removal test: it strips a feature by deleting the
- * lines that construct it, and an import of `meetsGate` from
- * `@battle-agents/progression` on this file would leave `world`'s call
- * referencing a name the strip had just removed, so removing progression would
- * break the build for a feature that has nothing to do with it. Measured — that
- * is exactly the failure it produced the first time.
- *
- * The comparison is the definition of a gate and the LEVEL CURVE is
- * progression's, which is the part that is a policy rather than an arithmetic.
- * `world` still contains no comparison of its own: it receives this as a port
- * and a test asserts the refusal came from the function it was handed.
- */
-const gate = (level: number, requiredLevel: number): boolean => level >= requiredLevel;
-
-/** A character's level, or 1 for a character who has never earned any. */
-function levelReader(dependencies: GameRuntimeDependencies) {
-  return async (agentId: string): Promise<number> =>
-    (await dependencies.progressionRepository.find(agentId))?.level ?? 1;
-}
-
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
-  const levelOf = levelReader(dependencies);
   return createRuntime({
     // One feature per line, each line the whole call. scripts/removal-test.sh
     // deletes a feature by stripping the line that constructs it, so folding
@@ -201,7 +174,7 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       // One line, because the removal test strips a feature by deleting the line
       // that constructs it. `levelOf` and `gate` are hoisted above for exactly
       // that reason, and for the one above theirs.
-      worldFeature({ repository: dependencies.worldStore, levelOf, gate }),
+      worldFeature({ repository: dependencies.worldStore, levelOf: async (id: string) => (await dependencies.progressionRepository.find(id))?.level ?? 1, gate: (level: number, required: number): boolean => level >= required }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

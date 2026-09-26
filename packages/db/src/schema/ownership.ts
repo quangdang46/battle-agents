@@ -55,6 +55,12 @@ export const FEATURE_TABLES = [
   // asserts its invariants. That is the split doing its job — the failure was
   // the manifest being one commit behind the schema, not the check.
   'agent_reputation',
+  // M5's base. A feature table for the reason agent_reputation is: the world
+  // feature is the only thing that reads or writes it, and a table missing from
+  // BOTH lists belongs to no boundary — the verifier reports it, and then
+  // nothing may migrate it. That is exactly what `pnpm db:seed` said when this
+  // table landed without an entry here.
+  'agent_bases',
   // The other half of ba-feature-reputation-nnj, and a feature table for the
   // reason agent_reputation is: the reputation feature is the only thing that
   // reads or writes it. It holds one row per outcome that has been counted, so

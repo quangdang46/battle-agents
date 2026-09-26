@@ -304,6 +304,21 @@ strip_workspace_wiring() {
     perl -0pi -e 's/^\s*"\@battle-agents\/'"${feature_name}"'"\s*:\s*"workspace:\*[^"]*",?\r?\n//mg' "${package_json}"
   [ -f "${tsconfig}" ] &&
     perl -0pi -e 's/^\s*"\@battle-agents\/'"${feature_name}"'"\s*:\s*\[[^\]]*\],?\r?\n//mg' "${tsconfig}"
+  # …and then the comma the entry LEAVED behind, which is the one case the
+  # pattern above cannot see. It removes the entry together with its own
+  # trailing comma, so removing any entry but the LAST leaves valid JSON — and
+  # removing the last one leaves the previous entry's comma with nothing after
+  # it, which JSON rejects, and `tsc` never gets far enough to report a
+  # coupling that does not exist.
+  #
+  # This is the same false failure the comment above this function records
+  # having been fixed once already, arriving for the other end of the list: a
+  # feature whose tsconfig path sorts last (`world`) is unremovable, and the
+  # failure names a parse error rather than the real cause. A comma directly
+  # before a closing brace is always wrong in JSON, so matching that is narrow
+  # and cannot damage a valid file.
+  [ -f "${tsconfig}" ] &&
+    perl -0pi -e 's/,\r?\n([ \t]*\})/$1/g' "${tsconfig}"
 }
 
 # A guard nobody has seen fail is not a guard, and this one had never been seen
