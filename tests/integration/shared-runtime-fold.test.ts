@@ -62,9 +62,16 @@ describe('the app publishes on one bus', () => {
   it('returns the same shared runtime to every caller', async () => {
     requireDatabase();
 
-    expect(await sharedRuntime()).toBe(await sharedRuntime());
-    expect(sharedApi()).toBe(sharedApi());
-    expect(sharedEventGateway()).toBe(sharedEventGateway());
+    // Resolved ONCE per side before comparison. Awaiting inside the assertion
+    // compares two distinct Promises, which are never the same object however
+    // stable the runtime behind them is — a failure that says nothing about the
+    // thing being tested.
+    const first = await sharedRuntime();
+    const second = await sharedRuntime();
+    expect(first).toBe(second);
+    expect(first.database).toBe(second.database);
+    expect(await sharedApi()).toBe(await sharedApi());
+    expect(await sharedEventGateway()).toBe(await sharedEventGateway());
   });
 
   it('reuses one pool rather than opening one per caller', async () => {

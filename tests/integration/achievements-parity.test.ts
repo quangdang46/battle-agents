@@ -5,7 +5,9 @@ import {
   createInMemoryEventBus,
   createRuntime,
   InMemoryStateStore,
+  type GameFeature,
   type Runtime,
+  type StateStore,
 } from '@battle-agents/core';
 import { createMcpServer } from '@battle-agents/mcp-server';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +16,7 @@ import { createRoutes, type HttpRequest } from '../../apps/web/src/routes.js';
 import type {
   AchievementsRepository,
   AwardedAchievement,
+  RecordedRow,
 } from '../../packages/features/achievements/src/index.js';
 
 /**
@@ -47,9 +50,43 @@ const AGENT = '11111111-1111-1111-1111-111111111111';
 /** What the catalogue and the sheet answer with, held in memory. */
 class Ledger implements AchievementsRepository {
   readonly rows: AwardedAchievement[] = [];
+  /**
+   * What the feature is meant to read, and NOT a stub returning nothing.
+   *
+   * The rules derive a badge by counting recorded outcomes, so a history that
+   * answers [] can never award one — and the parity test below awards by
+   * EMITTING, on the assumption that reaching the feature is the thing under
+   * test. With an empty history that emission went nowhere and the test failed
+   * on a double that could not represent the store.
+   */
+  #store: StateStore;
+  constructor(store: StateStore) {
+    this.#store = store;
+  }
 
-  async history(): Promise<readonly never[]> {
-    return [];
+  /**
+   * A PROJECTION READER over the state store, not a listener.
+   *
+   * The first version of this double observed the bus, which is one step too
+   * late and can never work: `emit` runs handlers BEFORE it publishes, and the
+   * rules read this port while the handler is running. A bus-observing double is
+   * therefore always empty at the moment it is asked, and the badge is never
+   * awarded. The feature's own suite hit the same wall and answered it with a
+   * store-backed reader.
+   */
+  async history(agentId: string, eventTypes: readonly string[]): Promise<readonly RecordedRow[]> {
+    return (this.#store as InMemoryStateStore)
+      .recorded()
+      .filter((event) => eventTypes.includes(event.type))
+      .filter((event) => namedAgentIdOf(event) === agentId)
+      .map((event, index) => ({
+        sequence: index + 1,
+        type: event.type,
+        sessionId: null,
+        actorId: event.actorId,
+        occurredAt: event.occurredAt,
+        payload: (event.payload ?? {}) as Readonly<Record<string, unknown>>,
+      }));
   }
 
   async list(agentId: string): Promise<readonly AwardedAchievement[]> {
@@ -63,13 +100,36 @@ class Ledger implements AchievementsRepository {
   }
 }
 
-function runtimeWith(repository: AchievementsRepository): Runtime {
+function runtimeWith(repository: AchievementsRepository, store: InMemoryStateStore): Runtime {
   return createRuntime({
-    extensions: [achievementsFeature({ repository })],
-    store: new InMemoryStateStore(),
+    // The widening feature is what makes this test possible at all, and its
+    // absence is the second half of why the badge was missing. `bounty.completed`
+    // belongs to the bounty feature, so achievements cannot declare it, and the
+    // registry allows one owner per persisted type. Without something widening
+    // the filter the event is never PERSISTED, and a reader that reads the store
+    // has nothing to read. This is a real constraint of the real system, not a
+    // test artefact — which is why the feature's own suite carries the same
+    // shape.
+    extensions: [achievementsFeature({ repository }), widenPersistedTypes()],
+    store,
     bus: createInMemoryEventBus(),
     now: () => NOW,
   });
+}
+
+/**
+ * Stands in for the bounty feature, which owns `bounty.completed` in the real
+ * build. Reacting to an event is not owning it, and this one only declares the
+ * persisted type so the row survives to be read.
+ */
+function widenPersistedTypes(): GameFeature {
+  return { id: 'widen-bounty-completed', persistedEvents: ['bounty.completed'] };
+}
+
+function namedAgentIdOf(event: { readonly payload?: unknown }): string | undefined {
+  const payload = event.payload as Readonly<Record<string, unknown>> | undefined;
+  const named = payload?.['agentId'];
+  return typeof named === 'string' ? named : undefined;
 }
 
 /** The same bridge http-cli-parity.test.ts uses: no network, no server. */
@@ -171,8 +231,9 @@ describe('the same award command on all three surfaces', () => {
     // awards first, so a route that dropped the body, a client that spelled the
     // path differently, or a projection that only ran on one of the three would
     // show up as a different answer rather than as three identical empty ones.
-    const repository = new Ledger();
-    const runtime = runtimeWith(repository);
+    const store = new InMemoryStateStore();
+    const repository = new Ledger(store);
+    const runtime = runtimeWith(repository, store);
     await runtime.emit({
       type: 'bounty.completed',
       occurredAt: NOW,
