@@ -28,6 +28,7 @@ import {
 
 const NOW = '2026-09-24T12:00:00.000Z';
 const AGENT = 'agent-1';
+const SESSION = 'session-1';
 
 /** A store held in memory, so the handler path is tested without a database. */
 class InMemoryProgressionRepository implements ProgressionRepository {
@@ -102,6 +103,25 @@ function outcomeEvent(
   };
 }
 
+/**
+ * An event as `toGameEvent` in `apps/web/src/event-routes.ts` really builds it
+ * from a harness batch: the WHOLE AgentEvent becomes the payload, and the
+ * session's agent goes on the envelope.
+ *
+ * Deliberately not a second spelling of `outcomeEvent`. This is the other
+ * producer, and the two differ in the field the award depends on — see the test
+ * that uses it. A helper that quietly filled in `agentId` would make the
+ * distinction invisible, which is the distinction the test exists to make.
+ */
+function ingestedEvent(type: string, extra: Record<string, unknown> = {}): GameEvent {
+  return {
+    type,
+    occurredAt: NOW,
+    actorId: AGENT,
+    payload: { type, sessionId: SESSION, at: NOW, ...extra },
+  };
+}
+
 describe('experience arrives because something happened', () => {
   it('awards for a bounty completion and records it', async () => {
     const { runtime, repository } = harness();
@@ -129,6 +149,30 @@ describe('experience arrives because something happened', () => {
     await runtime.emit(outcomeEvent('bounty.completed', null));
 
     expect(repository.rows.size).toBe(0);
+  });
+
+  it('pays a harness event, whose payload names a session and never an agent', async () => {
+    // Every other test in this file builds its event with a payload carrying
+    // `agentId`, and that is the shape a FEATURE emits. A harness does not send
+    // it: `testPassedEventSchema` is `baseEvent('test.passed')` — `type`,
+    // `sessionId`, `at` — so the agent is nowhere in the payload, and
+    // `toGameEvent` puts it on the envelope's `actorId` instead.
+    //
+    // So `agentIdOf` has a second branch, reading the agent off the envelope
+    // when the payload names a session, and that branch had no test at all. It
+    // could have been deleted and every other test here would still pass, while
+    // a real agent stopped being paid for passing its tests — a hundred XP, on
+    // the one outcome in this file a working harness produces routinely.
+    const { runtime, repository } = harness();
+
+    await runtime.emit(ingestedEvent('test.passed', { suite: 'unit', count: 42 }));
+
+    // Credited to the agent, not to the session: the row is keyed on the agent
+    // and the level is what the rest of the game reads.
+    expect(repository.rows.get(AGENT)?.xp).toBe(OUTCOMES['test.passed'].xp);
+    expect(repository.rows.has(SESSION), 'the session was credited as if it were an agent').toBe(
+      false,
+    );
   });
 
   it('accumulates across many outcomes', async () => {
