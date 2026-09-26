@@ -2,7 +2,7 @@ import { agentFeature } from '@battle-agents/agent';
 import { bountyFeature } from '@battle-agents/bounty';
 import { battleFeature } from '@battle-agents/battle';
 import { achievementsFeature } from '@battle-agents/achievements';
-import { meetsGate, progressionFeature } from '@battle-agents/progression';
+import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { reputationFeature } from '@battle-agents/reputation';
 import { socialFeature } from '@battle-agents/social';
@@ -128,7 +128,34 @@ export interface GameRuntimeDependencies {
   readonly worldStore: DrizzleWorldRepository;
 }
 
+/**
+ * How a gate is evaluated, stated here rather than imported from progression.
+ *
+ * `world` needs to know whether a character has reached a level, and the level
+ * lives on the `agents` row, which is infrastructure rather than a feature — so
+ * neither of these two closures depends on progression being INSTALLED. That is
+ * not tidiness, it is the removal test: it strips a feature by deleting the
+ * lines that construct it, and an import of `meetsGate` from
+ * `@battle-agents/progression` on this file would leave `world`'s call
+ * referencing a name the strip had just removed, so removing progression would
+ * break the build for a feature that has nothing to do with it. Measured — that
+ * is exactly the failure it produced the first time.
+ *
+ * The comparison is the definition of a gate and the LEVEL CURVE is
+ * progression's, which is the part that is a policy rather than an arithmetic.
+ * `world` still contains no comparison of its own: it receives this as a port
+ * and a test asserts the refusal came from the function it was handed.
+ */
+const gate = (level: number, requiredLevel: number): boolean => level >= requiredLevel;
+
+/** A character's level, or 1 for a character who has never earned any. */
+function levelReader(dependencies: GameRuntimeDependencies) {
+  return async (agentId: string): Promise<number> =>
+    (await dependencies.progressionRepository.find(agentId))?.level ?? 1;
+}
+
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
+  const levelOf = levelReader(dependencies);
   return createRuntime({
     // One feature per line, each line the whole call. scripts/removal-test.sh
     // deletes a feature by stripping the line that constructs it, so folding
@@ -171,19 +198,10 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
         matchMs: 900_000,
       }),
       achievementsFeature({ repository: dependencies.achievementsRepository }),
-      // The composition root is the ONE layer allowed to see two features, and
-      // this is the reason it exists: world needs to know a character's level
-      // and progression owns that, and the two are siblings that must never
-      // import each other. So the level read and the gate are supplied HERE,
-      // and world contains no arithmetic of its own — a second copy of
-      // `level >= required` would be a second answer to a question one feature
-      // already owns.
-      worldFeature({
-        repository: dependencies.worldStore,
-        levelOf: async (agentId: string) =>
-          (await dependencies.progressionRepository.find(agentId))?.level ?? 1,
-        gate: meetsGate,
-      }),
+      // One line, because the removal test strips a feature by deleting the line
+      // that constructs it. `levelOf` and `gate` are hoisted above for exactly
+      // that reason, and for the one above theirs.
+      worldFeature({ repository: dependencies.worldStore, levelOf, gate }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,
