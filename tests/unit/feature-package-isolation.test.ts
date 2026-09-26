@@ -100,7 +100,7 @@ describe('feature packages do not carry each other', () => {
   it('keeps each feature out of its siblings’ identifiers', () => {
     const offenders: string[] = [];
 
-    for (const [feature, siblings] of Object.entries(OWNED)) {
+    for (const [feature] of Object.entries(OWNED)) {
       const foreign = Object.entries(OWNED)
         .filter(([name]) => name !== feature)
         .flatMap(([, ids]) => ids);
