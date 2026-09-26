@@ -25,6 +25,14 @@ const STAGE_CONFIGS: readonly string[] = [
   'vitest.unit.config.ts',
   'vitest.integration.config.ts',
   'vitest.e2e.config.ts',
+  // The two milestone configs, and this list is not optional bookkeeping. Plan
+  // section 40's 2026-09-24 amendment moved the bounty-claim and replay-render
+  // assertions out of the M0 smoke and into `pnpm test:m2` / `pnpm test:m4`, and
+  // those suites live in directories no M0 config matched. A test file there was
+  // therefore claimed by nothing, which is the failure this file exists for —
+  // reported as green rather than as a failure, because nothing was run.
+  'vitest.m2.config.ts',
+  'vitest.m4.config.ts',
 ];
 
 const TEST_ROOTS: readonly string[] = ['tests', 'packages', 'apps', 'drizzle', 'scripts'];

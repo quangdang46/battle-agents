@@ -58,6 +58,7 @@ readonly CANONICAL_STAGES=(
   docs
   watchlist-claims
   pooled-driver
+  asset-licenses
   license
   e2e-smoke
 )
@@ -93,6 +94,7 @@ readonly OWNER_LICENSE="ba-license-hygiene-qy7"
 readonly OWNER_MOLTBOOK="ba-moltbook-verification-0zc"
 readonly OWNER_DOCS="ba-contributor-onboarding-tc9"
 readonly OWNER_WATCHLIST="ba-watchlist-space-molt-5v4"
+readonly OWNER_ASSETS="ba-asset-shortlist-x2a"
 readonly OWNER_POOLED_DRIVER="ba-neon-cloud-deploy-zn4"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
 readonly OWNER_CONTRACT="ba-contract-extension-api-w29"
@@ -687,6 +689,17 @@ run_stage_pooled_driver() {
   run_delegated pooled-driver "$OWNER_POOLED_DRIVER" script:check:pooled-driver
 }
 
+run_stage_asset_licenses() {
+  # Per-pack asset licences, separate from the vendored SOURCE licences
+  # check-licenses.sh covers. An asset pack is third-party art with its own
+  # licence file, and a copyleft pack sitting in an MIT repository contaminates
+  # it — so the two are never inferred from one another. The rule with teeth is
+  # that the licence RECORDED IN THE SHORTLIST matches the text actually shipped
+  # beside the pack: a file merely existing is not verification, and a pack
+  # relicensed upstream between selection and merge still has a LICENSE.txt.
+  run_delegated asset-licenses "$OWNER_ASSETS" script:check:assets
+}
+
 run_stage_license() {
   run_delegated license "$OWNER_LICENSE" file:scripts/check-licenses.sh script:check:licenses
 }
@@ -718,6 +731,7 @@ run_stage() {
     docs) run_stage_docs ;;
     watchlist-claims) run_stage_watchlist_claims ;;
     pooled-driver) run_stage_pooled_driver ;;
+    asset-licenses) run_stage_asset_licenses ;;
     license) run_stage_license ;;
     e2e-smoke) run_stage_e2e_smoke ;;
     *) fail "no runner registered for stage '$1'" ;;

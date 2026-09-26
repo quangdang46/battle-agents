@@ -139,17 +139,14 @@ function toRoute(file: string, apiRoot: string): MountedRoute {
   const relativeDir = relative(apiRoot, file)
     .replace(/route\.ts$/, '')
     .split(/[\\/]/);
-  const segments = relativeDir
-    .join('/')
-    .split('/')
-    .filter((segment) => segment !== '')
-    .map((segment) =>
-      segment.startsWith('[...')
-        ? `{${segment.slice(4, -1)}}`
-        : segment.startsWith('[') && segment.endsWith(']')
-          ? `{${segment.slice(1, -1)}}`
-          : segment,
-    );
+  const rawSegments = relativeDir.filter((segment) => segment !== '');
+  const segments = rawSegments.map((segment) =>
+    segment.startsWith('[...')
+      ? `{${segment.slice(4, -1)}}`
+      : segment.startsWith('[') && segment.endsWith(']')
+        ? `{${segment.slice(1, -1)}}`
+        : segment,
+  );
   const source = readFileSync(file, 'utf8');
   const methods = [...source.matchAll(new RegExp(ROUTE_METHOD.source, 'gm'))]
     .map((match) => (match[1] ?? '').toLowerCase())
@@ -157,7 +154,15 @@ function toRoute(file: string, apiRoot: string): MountedRoute {
   return {
     path: `/api/${segments.join('/')}`,
     methods: [...new Set(methods)].sort(),
-    catchAll: segments.some((segment) => segment.startsWith('{')),
+    // Read off the RAW segment, because the rendering above erases the
+    // distinction this field exists to draw: `[...all]` and `[id]` both become
+    // `{something}`. The previous check ran on the rendered form and so
+    // reported every parameterised route as a catch-all — `/api/sessions/{id}/
+    // heartbeat` and all four of the bounty and battle `{id}` routes included —
+    // which is false, and it let them skip the "every route is accounted for"
+    // check in protocol-docs.test.ts entirely. The comment on the field said
+    // "matches a prefix rather than a whole path" and the code said otherwise.
+    catchAll: rawSegments.some((segment) => segment.startsWith('[...')),
   };
 }
 

@@ -69,6 +69,76 @@ services:
       - m0-test-runner-node-modules:/workspace/node_modules
       - m0-test-runner-pnpm-store:/root/.local/share/pnpm/store
 
+  # Plan section 40's 2026-09-24 amendment, run as a stage set of its own: bounty
+  # is M2 and replay is M4, so `pnpm test:m2` and `pnpm test:m4` exist and are not
+  # folded into the M0 smoke. The command is the repository's own script, not a
+  # CI-only re-implementation of it, exactly as the service above is.
+  m2-test-runner:
+    image: node:22-bookworm-slim
+    profiles:
+      - test
+    working_dir: /workspace
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        corepack enable
+        pnpm install --frozen-lockfile
+        exec bash scripts/test-m2.sh
+    environment:
+      # The milestone runtime reads its own knobs, named the way test-m0.sh reads
+      # M0_STAGES and M0_RESUME, so the in-container tell is M2_IN_CONTAINER here
+      # and M4_IN_CONTAINER below. Both resolve through `pipeline_env`, which
+      # derives the prefix from PIPELINE_ID rather than enumerating them.
+      M2_IN_CONTAINER: '1'
+      M2_PG_HOST: postgres-test
+      M2_PG_PORT: '5432'
+      DATABASE_URL: postgres://postgres:postgres@postgres-test:5432/battle_test
+      CI: 'true'
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+      - m0-test-runner-node-modules:/workspace/node_modules
+      - m0-test-runner-pnpm-store:/root/.local/share/pnpm/store
+
+  # Section 17.2's load test runs HERE, as a stage of this pipeline: "add load
+  # test simulating 100x20 ev/s before M4", and section 40 repeats it as a pre-M4
+  # gate rather than an M0 one. A stage of the M4 pipeline is a pre-M4 gate.
+  m4-test-runner:
+    image: node:22-bookworm-slim
+    profiles:
+      - test
+    working_dir: /workspace
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        corepack enable
+        pnpm install --frozen-lockfile
+        exec bash scripts/test-m4.sh
+    environment:
+      M4_IN_CONTAINER: '1'
+      M4_PG_HOST: postgres-test
+      M4_PG_PORT: '5432'
+      DATABASE_URL: postgres://postgres:postgres@postgres-test:5432/battle_test
+      # Where the load harness writes its numbers, so the CI job can upload the
+      # gate's evidence. A workflow step that copies a file nothing writes is a
+      # comment with a `cp` in it; the harness writes this only when asked, and a
+      # local `bash scripts/test-m4.sh` leaves no file behind.
+      LOAD_REPORT: /tmp/load-report.txt
+      CI: 'true'
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+      - m0-test-runner-node-modules:/workspace/node_modules
+      - m0-test-runner-pnpm-store:/root/.local/share/pnpm/store
+
 volumes:
   postgres-test-data:
   m0-test-runner-node-modules:

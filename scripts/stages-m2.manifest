@@ -1,0 +1,41 @@
+# The set of pipeline stages that must run for the M2 gate to mean anything.
+#
+# Plan section 40, amended 2026-09-24: "The bounty-claim and replay-render
+# assertions are NOT M0: bounty is M2 and replay is M4, so asserting them in the
+# M0 smoke made `pnpm test:m0` impossible to pass before M2 and M4 were complete.
+# They move to `pnpm test:m2` and `pnpm test:m4` respectively."
+#
+# So this file is where the bounty assertions went, and the size of it is the
+# point. Five stages, of which three are the database a milestone assertion needs
+# to talk to and two are M2 itself. It is not a smaller copy of the M0 manifest:
+# a milestone pipeline that re-runs the M0 stage set asserts nothing the M0 gate
+# has not already asserted, and a milestone pipeline that asserts a LATER
+# milestone's surface cannot go green before that milestone exists. Both mistakes
+# have been made in this repository's plan, in writing, and the amendment above is
+# the record of the first.
+#
+# scripts/check-stage-manifest.sh asserts this manifest, CANONICAL_STAGES in
+# test-m2.sh, and test-m2.sh's run_stage dispatch all agree. Same three-way check
+# as M0 and for the same reason: a stage added in one place only is a gate nobody
+# runs.
+#
+# The three shared stages are named here rather than inherited, deliberately. A
+# milestone runner that said "M0's stages, plus mine" would inherit M0's set the
+# day somebody edited it, and the value of this pipeline is that it is a
+# different set.
+compose
+migrations
+seed
+# `bounty-loop` is section 27's M2 DoD in full: a bounty on real GitHub
+# coordinates, claimed through the protocol, submitted with a PR, completed by a
+# SIGNED merge webhook, with XP and reputation awarded and the trail left in the
+# log for a reader with no session. Named as one stage over one file rather than
+# a directory glob, so a new test dropped into tests/m2 is not in the pipeline by
+# accident — see run_milestone_tests in scripts/lib/pipeline.sh.
+bounty-loop
+# `payout-stub` is the other half of the same sentence: "with real money rail
+# stubbed (record intent, no real payout until 17.5 resolved — mark clearly in UI
+# 'payout: manual/sandbox')". Split from bounty-loop because it settles a
+# different claim — a loop that completes is not a loop that moved no money — and
+# because a red stage has to name which of the two broke.
+payout-stub

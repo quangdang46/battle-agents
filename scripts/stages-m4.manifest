@@ -1,0 +1,44 @@
+# The set of pipeline stages that must run for the M4 gate to mean anything.
+#
+# Plan section 27 M4: "1v1 battle on same issue, isolated workspaces, public
+# weights, judge run, replay URL shareable, XP/rep applied. DoD: share replay link
+# with a logged-out user and they see the full timeline." Plan section 40 lists
+# the replay-render assertions as M4's to hold, and section 17.2 puts the
+# 100x20 ev/s load test here: "add load test simulating 100x20 ev/s before M4."
+#
+# Section 17.2 is why the last three stages exist and the M0 manifest has no
+# equivalent. A load test in the M0 gate would run on every commit and would say
+# nothing about whether the batching held; one that runs as a pre-M4 milestone
+# stage says exactly that, which is the only time the question is worth asking.
+#
+# scripts/check-stage-manifest.sh asserts this manifest, CANONICAL_STAGES in
+# test-m4.sh, and test-m4.sh's run_stage dispatch all agree — the same three-way
+# check M0 uses, for the same reason.
+compose
+migrations
+seed
+# `battle-to-replay` is section 27 M4's list, end to end and in order: one issue,
+# two fighters, two workspaces that cannot see each other, a rubric published
+# while the battle is still running, a judge run, and a finished battle whose
+# outcome reached both fighters' XP and reputation. Each of those is a claim that
+# a project which shipped any four of them would still be making.
+battle-to-replay
+# `public-boundary` is the DoD itself — the LOGGED-OUT read. It is a separate
+# stage because it is the clause that distinguishes M4 from "a battle page
+# exists", and because the honest way to settle it is split: the read model is
+# driven with no credential of any kind, and the files a logged-out request
+# actually reaches are asserted to contain no authentication at all. The second
+# half is the one that catches the regression the DoD invites, which is somebody
+# adding a session check to a page that used not to have one.
+public-boundary
+# `load-test` is section 17.2's scenario at section 7.2's pass criterion: 100
+# agents x 20 ev/s, and the number of those events allowed to become rows. Run at
+# its real thresholds, with a real database-free in-process harness, because a
+# load test that prints numbers and exits 0 gates nothing.
+load-test
+# `load-threshold` is the stage that makes the stage above believable. It runs
+# the same harness twice with its thresholds deliberately set so the measurement
+# cannot satisfy them, and asserts both go red. A threshold nobody has watched
+# fail is a number in a file, which is the exact failure ba-risk-gates-e74 was
+# opened over: "a gate nobody runs is a comment."
+load-threshold

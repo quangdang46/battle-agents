@@ -197,6 +197,37 @@ const FORBIDDEN = [
   },
 ];
 
+/**
+ * The rule the layer pairs above cannot express, because it is about the ROUTE
+ * an import takes rather than the layers it connects.
+ *
+ * Every entry in `FORBIDDEN` is a question about direction: may this layer
+ * depend on that one. None of them is a question about the public surface, and
+ * that gap was demonstrable rather than theoretical. An adapter may depend on
+ * `core`, so nothing fired when the template's parser reached for
+ * `'../../../core/src/runtime.js'` — a file in a package that is frozen, read
+ * past its own barrel, resolving to a legal layer. `pnpm architecture` reported
+ * "no violations" for exactly that edit, and the guarantee the plan makes in
+ * section 23, that an adapter imports core and protocol and nothing else, was
+ * being kept by the convention that people import packages by name.
+ *
+ * So the answer is a rule on the specifier form, checked only after the layer
+ * rules have declined. That ordering is what keeps this additive: a relative
+ * import that already breaks a layer rule is still reported under that rule, so
+ * no existing fixture changes which rule it trips and every layer rule keeps
+ * being proved by the fixture that was written for it. What is left is exactly
+ * the case with no other name attached — a legal dependency taken illegally.
+ *
+ * The tree agrees: there is no cross-package relative import outside
+ * `dependency-rules.test.ts`'s own fixture, so this is green on the day it is
+ * added rather than a rule that needs a migration.
+ */
+const CROSS_PACKAGE_RELATIVE_RULE = {
+  name: 'no-cross-package-relative-import',
+  reason:
+    'Reach another package by its name, not by its path. A relative import into a different package bypasses that package’s public surface, which is the surface its contract and its version are published through; a file nobody agreed to freeze becomes a dependency that no manifest records and no release note mentions (plan sections 16 and 23).',
+};
+
 /* ── content rules ──
  *
  * Everything above is about EDGES: which package may import which. A content
@@ -579,6 +610,22 @@ function checkImports({ files, packages }) {
             reason: rule.reason,
           }),
         );
+        continue;
+      }
+
+      // The layer pairs all declined, so the dependency itself is legal. What
+      // is left to ask is whether it was taken through the other package's
+      // source tree, which no layer question covers.
+      if (specifier.startsWith('.')) {
+        violations.push(
+          buildViolation({
+            rule: CROSS_PACKAGE_RELATIVE_RULE.name,
+            from: file.path,
+            to: target,
+            specifier,
+            reason: CROSS_PACKAGE_RELATIVE_RULE.reason,
+          }),
+        );
       }
     }
   }
@@ -596,6 +643,7 @@ function formatReport(violations) {
 module.exports = {
   FORBIDDEN,
   CONTENT_RULES,
+  CROSS_PACKAGE_RELATIVE_RULE,
   UNRESOLVED_RULE,
   UNRESOLVED_WORKSPACE_IMPORT,
   LAYERS,

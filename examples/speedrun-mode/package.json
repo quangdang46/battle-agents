@@ -1,0 +1,23 @@
+{
+  "name": "speedrun-mode",
+  "version": "0.1.0",
+  "description": "An out-of-tree battle-agents game feature: a speedrun mode scored on wall-clock time. Exists to be the acceptance test for the public extension surface.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@battle-agents/core": "^0.1.0",
+    "@battle-agents/protocol": "^0.1.0"
+  }
+}

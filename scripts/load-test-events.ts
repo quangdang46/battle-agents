@@ -18,7 +18,24 @@
  * Run it: `pnpm load:events` (defaults: 100 agents, 20 ev/s each, 5 seconds).
  * Override with env: LOAD_AGENTS, LOAD_EVENTS_PER_SECOND, LOAD_SECONDS,
  * LOAD_MAX_SUBSCRIBERS (how many SSE subscribers to attach and drain).
+ *
+ * ## It gates, and on which numbers
+ *
+ * The three numbers above are a printout. A load test that reports and exits 0
+ * is the "a gate nobody runs is a comment" failure with a performance harness
+ * attached, which is how this one sat for a while: implemented, referenced by
+ * `pnpm load:events`, and wired into no gate. It is a stage of `pnpm test:m4`
+ * now, which is what §17.2 asks for ("a pre-M4 gate, not M0") and what §40
+ * repeats.
+ *
+ * The thresholds are in scripts/load-thresholds.ts, with the arithmetic that
+ * chose them, and the stage asserts two things this file cannot assert about
+ * itself: that the defaults are the ones in that module, and that each gate goes
+ * red when the measurement cannot meet it. `tests/m4/load-threshold.test.ts`
+ * runs this harness for real, twice, with the thresholds set so it must fail.
  */
+
+import { writeFileSync } from 'node:fs';
 
 import { createInMemoryEventBus, InMemoryStateStore, createRuntime } from '@battle-agents/core';
 import type { GameEvent } from '@battle-agents/core';
@@ -29,6 +46,7 @@ import { EventBuffer, readBatchLimits } from '../apps/web/src/event-batch.js';
 import { createEventRoutes, type EventCaller } from '../apps/web/src/event-routes.js';
 import { EventStreamHub, type GameSnapshot } from '../apps/web/src/event-stream.js';
 import type { HttpRequest, HttpResponse } from '../apps/web/src/routes.js';
+import { thresholdBreaches, thresholdsFromEnv } from './load-thresholds.js';
 
 // ── configuration, all from env with the plan's defaults ─────────────────────
 
@@ -62,6 +80,10 @@ function nonNegativeInt(raw: string | undefined, fallback: number): number {
 // The same configuration the server would read, so a tuning pass on the env vars
 // moves the harness and the server together.
 const limits = readBatchLimits(process.env);
+
+// The gates, not the scenario. See scripts/load-thresholds.ts for why the ratio
+// and the rate are two separate numbers with two separate jobs.
+const thresholds = thresholdsFromEnv(process.env);
 
 // ── the telemetry plane, in memory ──────────────────────────────────────────
 
@@ -216,26 +238,36 @@ async function main(): Promise<void> {
   const rows = store.recorded().length;
   const deltas = counters.reduce((sum, counted) => sum + counted.deltas, 0);
 
-  console.log('── event ingest load test ──────────────────────────────────────────');
-  console.log(
+  // Built as data, printed at the end, and optionally written to a file — because
+  // the CI job uploads this report as the gate's evidence and a workflow that
+  // copies a file nothing writes is a comment with a `cp` in it.
+  const report = [
+    '── event ingest load test ──────────────────────────────────────────',
     `  agents                 ${AGENTS} x ${EVENTS_PER_SECOND} ev/s for ${SECONDS}s simulated (${ticks} ticks of ${limits.flushIntervalMs}ms)`,
-  );
-  console.log(`  replayed in            ${elapsedSeconds.toFixed(2)}s wall clock`);
-  console.log(
+    `  replayed in            ${elapsedSeconds.toFixed(2)}s wall clock`,
     `  limits                 flush ${limits.flushIntervalMs}ms / batch ${limits.maxBatchEvents} / reject >${limits.maxRejectEvents} / retry-after ${limits.retryAfterSeconds}s`,
-  );
-  console.log(`  events generated       ${generated}`);
-  console.log(`  events accepted        ${accepted}`);
-  console.log(`  events refused (413)   ${refused}`);
-  console.log(`  batches sent           ${batches} (largest ${largestBatch})`);
-  console.log(
+    `  events generated       ${generated}`,
+    `  events accepted        ${accepted}`,
+    `  events refused (413)   ${refused}`,
+    `  batches sent           ${batches} (largest ${largestBatch})`,
     `  rows written           ${rows}  (${((rows / Math.max(1, generated)) * 100).toFixed(1)}% of generated)`,
-  );
-  console.log(`  deltas delivered       ${deltas}  (${subscribers.length} subscriber(s))`);
-  console.log(
+    `  deltas delivered       ${deltas}  (${subscribers.length} subscriber(s))`,
     `  throughput             ${Math.round(generated / Math.max(elapsedSeconds, 0.001))} ev/s generated, ${Math.round(accepted / Math.max(elapsedSeconds, 0.001))} ev/s accepted`,
-  );
-  console.log('───────────────────────────────────────────────────────────────────');
+    // The gates, printed. A threshold that only exists in a source file cannot be
+    // read off a run, so a green run cannot be told apart from a run whose
+    // thresholds had been loosened by an environment variable — which is the hole
+    // `thresholdsFromEnv` opens on purpose.
+    // tests/m4/load-threshold.test.ts reads these two numbers back and asserts
+    // they are the published defaults.
+    `  thresholds             rows <= ${thresholds.maxRowRatioPercent}% of generated, generated >= ${thresholds.minGeneratedEventsPerSecond} ev/s`,
+    '───────────────────────────────────────────────────────────────────',
+  ];
+  for (const line of report) console.log(line);
+
+  const reportPath = process.env['LOAD_REPORT'];
+  if (reportPath !== undefined && reportPath !== '') {
+    writeFileSync(reportPath, `${report.join('\n')}\n`);
+  }
 
   // The two claims this harness exists to make falsifiable, as process exit codes
   // so it can be a gate and not just a printout.
@@ -264,6 +296,16 @@ async function main(): Promise<void> {
     );
     failed = true;
   }
+
+  // The §7.2 pass criterion, as a number with a rationale rather than a
+  // structural inequality. The check above is a different claim — the filter is
+  // not filtering AT ALL — and it stays a separate line so a future retune of
+  // the ratio ceiling cannot quietly delete the catastrophic-failure message.
+  for (const breach of thresholdBreaches({ generated, rows, elapsedSeconds }, thresholds)) {
+    console.error(`  ${breach.message}`);
+    failed = true;
+  }
+
   if (!failed) {
     console.log('  OK: transient events reached subscribers without reaching the store.');
   }

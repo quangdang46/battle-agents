@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_BATTLE_WEIGHTS, type BattleWeights } from '@battle-agents/battle';
 import { agents, installations, sessions, users } from '@battle-agents/db';
 
-import { closeSharedRuntime, sharedRuntime } from '../../apps/web/src/shared-runtime.js';
+import { sharedRuntime } from '../../apps/web/src/shared-runtime.js';
 
 /**
  * Plan §17.4: the judge weights are published PER MATCH, and that is both a

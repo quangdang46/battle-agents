@@ -6,7 +6,7 @@
  * changes, and that is the claim the plan makes and this package exists to
  * make true.
  *
- * Read README.md in this directory first. It is the checklist, and the two
+ * Read README.md in the package root first. It is the checklist, and the two
  * items people most often get wrong on a first adapter — tool-name
  * normalisation and consent gating — are the two the modules here exist to
  * model.

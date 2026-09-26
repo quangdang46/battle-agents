@@ -59,6 +59,7 @@ interface LayerContract {
   readonly FORBIDDEN: readonly { readonly name: string }[];
   readonly CONTENT_RULES: readonly { readonly name: string }[];
   readonly UNRESOLVED_RULE: { readonly name: string; readonly reason: string };
+  readonly CROSS_PACKAGE_RELATIVE_RULE: { readonly name: string; readonly reason: string };
   readonly checkContent: (input: CheckContentInput) => readonly Violation[];
   readonly checkImports: (input: CheckImportsInput) => readonly Violation[];
   readonly discoverWorkspacePackages: (repoRoot: string) => readonly WorkspacePackage[];
@@ -140,6 +141,16 @@ const FIXTURE_FILES: readonly SourceFile[] = [
   sourceFile('packages/core/src/contracts.ts', ['@battle-agents/protocol']),
   sourceFile('packages/adapters/claude/src/hooks.ts', ['@battle-agents/bounty']),
   sourceFile('packages/adapters/codex/src/index.ts', ['@battle-agents/protocol']),
+  // A legal dependency taken illegally. An adapter MAY depend on core, so no
+  // layer rule has anything to say; but it is core's barrel that is the
+  // published surface, and this line walks past it into the file underneath.
+  // Planting this exact import in the template's parser left `pnpm
+  // architecture` reporting "no violations", which is the whole reason the
+  // rule exists.
+  sourceFile('packages/adapters/amp/src/watcher.ts', ['../../../core/src/runtime.js']),
+  // The same route taken from a feature, so the rule is not a rule about
+  // adapters. A feature reaching into core's source is the identical defect.
+  sourceFile('packages/features/battle/src/hostile.ts', ['../../../core/src/registry.js']),
   // The two adapter-adapter routes the rule has to catch, one per resolution
   // path. A workspace specifier is resolved through the package table, and a
   // relative one through the file list, so a rule that only handled the first
@@ -247,6 +258,16 @@ const EXPECTED_FIXTURE_VIOLATIONS = [
     specifier: '../../../../apps/web/src/event-batch.js',
   },
   {
+    rule: 'no-cross-package-relative-import',
+    from: 'packages/adapters/amp/src/watcher.ts',
+    specifier: '../../../core/src/runtime.js',
+  },
+  {
+    rule: 'no-cross-package-relative-import',
+    from: 'packages/features/battle/src/hostile.ts',
+    specifier: '../../../core/src/registry.js',
+  },
+  {
     rule: 'no-core-import-of-outer-layers',
     from: 'packages/core/src/registry.ts',
     specifier: '@battle-agents/quest',
@@ -329,6 +350,11 @@ describe('layering rule engine', () => {
     const expectedRules = new Set([
       ...contract.FORBIDDEN.map((rule) => rule.name),
       contract.UNRESOLVED_RULE.name,
+      // Not in FORBIDDEN because it is not a layer pair: it fires only after
+      // every layer rule has declined, so it has to be listed here separately
+      // or this assertion would call its absence a completeness rather than
+      // notice that a rule stopped firing.
+      contract.CROSS_PACKAGE_RELATIVE_RULE.name,
     ]);
     // The content rules are declared in the same file and asserted here rather
     // than in a describe block of their own, because the failure this catches is

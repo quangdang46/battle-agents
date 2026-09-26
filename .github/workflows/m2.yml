@@ -1,0 +1,70 @@
+# The M2 milestone gate — plan section 27, section 40's 2026-09-24 amendment.
+#
+#   "The bounty-claim and replay-render assertions are NOT M0: bounty is M2 and
+#    replay is M4 ... They move to `pnpm test:m2` and `pnpm test:m4`."
+#
+# This job exists because that amendment moved a DoD into a command, and a DoD
+# with no command that settles it is a claim rather than a gate. The stage set is
+# scripts/stages-m2.manifest; the script is scripts/test-m2.sh; both are the
+# repository's own, and this job runs that file as the compose `m2-test-runner`
+# service — the same file, the same image and the same exit code that a
+# contributor gets from `bash scripts/test-m2.sh`. That is the whole content of
+# the local/CI parity contract; a workflow that re-implemented the stage list in
+# YAML would be a second definition of what must run, and §40 records what
+# happens to those.
+#
+# The job activates the test profile and runs the runner service directly rather
+# than `docker compose up`, for the reason the m0 job records: that is what
+# starts only the services the pipeline needs (postgres-test) instead of standing
+# up the whole application stack.
+
+name: m2
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: m2-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-m2:
+    name: pnpm test:m2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the M2 milestone pipeline in the compose test-runner image
+        run: |
+          docker compose -f compose.yaml -f compose.test.yaml --profile test \
+            run --rm --name m2-run m2-test-runner
+
+      # The markers are the gate's own record of what it ran, and they carry a
+      # fingerprint of the code they describe so a stale pass cannot be uploaded
+      # and read as a real one. Collected even on failure, which is the only
+      # moment anybody looks for them.
+      - name: Collect the per-stage markers
+        if: always()
+        run: |
+          mkdir -p m2-stage-markers
+          docker compose -f compose.yaml -f compose.test.yaml \
+            cp m2-run:/workspace/.tmp/m2-stages/. m2-stage-markers
+
+      - name: Upload the per-stage markers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-stage-markers
+          path: m2-stage-markers
+          if-no-files-found: ignore
+
+      - name: Tear down the test stack
+        if: always()
+        run: |
+          docker compose -f compose.yaml -f compose.test.yaml --profile test down --volumes --remove-orphans
