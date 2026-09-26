@@ -127,7 +127,7 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
       socialRepository: new DrizzleSocialRepository(dependencies.database),
       bountyRepository: new DrizzleBountyRepository(dependencies.database),
       payoutIntentStore: new DrizzlePayoutIntentStore(dependencies.database),
-      battleRepository: new DrizzleBattleRepository(dependencies.database),
+      battleStore: new DrizzleBattleRepository(dependencies.database),
       achievementsRepository: new DrizzleAchievementsRepository(dependencies.database),
     });
 

@@ -89,7 +89,7 @@ export async function sharedRuntime(): Promise<SharedRuntime> {
     socialRepository: new DrizzleSocialRepository(database),
     bountyRepository: new DrizzleBountyRepository(database),
     payoutIntentStore: new DrizzlePayoutIntentStore(database),
-    battleRepository: new DrizzleBattleRepository(database),
+    battleStore: new DrizzleBattleRepository(database),
     achievementsRepository: new DrizzleAchievementsRepository(database),
   });
 

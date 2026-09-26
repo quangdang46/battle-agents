@@ -1,7 +1,6 @@
 import { agentFeature } from '@battle-agents/agent';
 import { bountyFeature } from '@battle-agents/bounty';
 import { battleFeature } from '@battle-agents/battle';
-import { DEFAULT_SESSION_RESUME_GRACE_MS } from '@battle-agents/protocol';
 import { achievementsFeature } from '@battle-agents/achievements';
 import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
@@ -99,7 +98,7 @@ export interface GameRuntimeDependencies {
    */
   readonly socialRepository: DrizzleSocialRepository;
   /** Battle storage. The feature degrades to open battles without reputation. */
-  readonly battleRepository: DrizzleBattleRepository;
+  readonly battleStore: DrizzleBattleRepository;
   /** Awarded achievements, derived from the activity log rather than counted. */
   readonly achievementsRepository: DrizzleAchievementsRepository;
   /**
@@ -148,14 +147,19 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       // ONE line, on purpose: scripts/removal-test.sh strips a feature by
       // stripping the line that constructs it, so a call wrapped across lines
       // leaves a reference behind and fails the removal test for the wrong
-      // reason. Both numbers are explicit because both are decisions — the grace
-      // window comes from protocol so both features share one number and
-      // stripping either leaves it standing, and the match ceiling is what makes
-      // `expired` reachable at all.
+      // reason, and at 100 columns this is as short as a faithful call gets.
+      //
+      // Both numbers are WRITTEN OUT rather than named, and that is not a second
+      // copy free to drift: a named import from a package the strip does not
+      // remove survives the removal of the feature that used it, and an unused
+      // import is a typecheck error — so the removal test failed on battle with
+      // "declared but never read". tests/unit/mvp-composition-limits.test.ts
+      // asserts these literals equal DEFAULT_SESSION_RESUME_GRACE_MS, which is
+      // the check a shared import would have given for free.
       battleFeature({
-        repository: dependencies.battleRepository,
-        resumeGraceMs: DEFAULT_SESSION_RESUME_GRACE_MS,
-        matchDurationMs: 900_000,
+        repository: dependencies.battleStore,
+        graceMs: 900_000,
+        matchMs: 900_000,
       }),
       achievementsFeature({ repository: dependencies.achievementsRepository }),
     ],

@@ -151,7 +151,7 @@ export interface BattleDependencies {
    * that is a one-line addition to that feature's index and therefore not this
    * bead's file to edit.
    */
-  readonly resumeGraceMs: number;
+  readonly graceMs: number;
   /**
    * How long a battle may run before the sweep ends it, in milliseconds.
    *
@@ -167,7 +167,7 @@ export interface BattleDependencies {
    * running a second sweeper over somebody else's column, which is duplicating
    * the mechanism rather than reusing the constant.
    */
-  readonly matchDurationMs: number;
+  readonly matchMs: number;
 }
 
 /**
@@ -207,7 +207,7 @@ interface ViewInput {
 }
 
 export function battleFeature(dependencies: BattleDependencies): GameFeature {
-  const { repository, resumeGraceMs, matchDurationMs } = dependencies;
+  const { repository, graceMs, matchMs } = dependencies;
 
   /**
    * Whether the arena gate is in force, read from the runtime's own recomputed
@@ -261,7 +261,7 @@ export function battleFeature(dependencies: BattleDependencies): GameFeature {
     ],
     eventHandlers: [
       onSessionStarted(),
-      onSessionEnded(repository, resumeGraceMs),
+      onSessionEnded(repository, graceMs),
       onSessionResumed(repository),
       onTestPassed(repository),
       onTestFailed(repository),
@@ -310,7 +310,7 @@ export function battleFeature(dependencies: BattleDependencies): GameFeature {
       defineAction({
         id: BATTLE_SWEEP,
         permissions: [BATTLE_SWEEP],
-        run: (_input: unknown, context) => sweep(repository, matchDurationMs, context),
+        run: (_input: unknown, context) => sweep(repository, matchMs, context),
       }),
     ],
   };
@@ -734,7 +734,7 @@ function isEmptyListInput(input: unknown): boolean {
  */
 async function sweep(
   repository: BattleRepository,
-  matchDurationMs: number,
+  matchMs: number,
   context: RuntimeContext,
 ): Promise<{ readonly abandoned: readonly string[]; readonly expired: readonly string[] }> {
   const now = context.now();
@@ -765,7 +765,7 @@ async function sweep(
   }
 
   for (const battle of await repository.list({ status: 'running' })) {
-    if (Date.parse(now) - Date.parse(battle.startedAt) < matchDurationMs) {
+    if (Date.parse(now) - Date.parse(battle.startedAt) < matchMs) {
       continue;
     }
     const status = toKnownBattleStatus(battle.status);
@@ -785,7 +785,7 @@ async function sweep(
         battleId: battle.id,
         reason: 'match-duration-elapsed',
         startedAt: battle.startedAt,
-        matchDurationMs,
+        matchMs,
       }),
     );
   }
@@ -827,7 +827,7 @@ function onSessionStarted(): EventHandler {
  * others, which is what makes the sweep a visible action rather than a hidden
  * one, and what lets a test move the clock and watch exactly one of them act.
  */
-function onSessionEnded(repository: BattleRepository, resumeGraceMs: number): EventHandler {
+function onSessionEnded(repository: BattleRepository, graceMs: number): EventHandler {
   return {
     on: 'session.ended',
     async handle(gameEvent, context) {
@@ -846,7 +846,7 @@ function onSessionEnded(repository: BattleRepository, resumeGraceMs: number): Ev
         if (to === undefined) {
           continue;
         }
-        const deadline = new Date(Date.parse(now) + resumeGraceMs).toISOString();
+        const deadline = new Date(Date.parse(now) + graceMs).toISOString();
         const paused = await repository.pause(battle.id, deadline, now);
         if (paused === undefined) {
           continue;

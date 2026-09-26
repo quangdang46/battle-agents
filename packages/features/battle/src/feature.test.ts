@@ -275,7 +275,7 @@ async function harness(
   bus.subscribe((event) => events.push(event));
 
   const features: GameFeature[] = [
-    battleFeature({ repository: store, resumeGraceMs: 15 * MINUTE, matchDurationMs: 15 * MINUTE }),
+    battleFeature({ repository: store, graceMs: 15 * MINUTE, matchMs: 15 * MINUTE }),
   ];
   if (options.degraded !== true) {
     features.push(reputationProviding(options.trust ?? 10_000));
