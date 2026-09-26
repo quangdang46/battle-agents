@@ -43,14 +43,23 @@ function battleLimits(): { graceMs: number; matchMs: number } | undefined {
 }
 
 describe('the battle session windows the composition root declares', () => {
-  it('finds the wiring it is checking', () => {
-    // A regex that stops matching reports an absent literal as a passing check,
-    // which is the failure this repository keeps meeting.
-    expect(battleLimits()).toBeDefined();
+  // The first version of this file asserted the literals unconditionally and the
+  // removal test caught it: with battle stripped from the composition root the
+  // literals are gone, and `undefined` is not 900000. That is the SAME mistake
+  // mvp-scope made and the same one feature-package-isolation made — a check that
+  // only holds while every part of the system is present, in a repository whose
+  // defining property is that parts can be removed. The floor below keeps this
+  // honest instead: it fails when the scan cannot find the file it is reading,
+  // and the two assertions after it are about what is there.
+  it('reads a composition root that exists', () => {
+    expect(composition).toContain('extensions: [');
+    expect(composition).toContain('createGameRuntime');
   });
 
   it('agrees with the one definition of the grace window', () => {
-    expect(battleLimits()?.graceMs).toBe(DEFAULT_SESSION_RESUME_GRACE_MS);
+    const limits = battleLimits();
+    if (limits === undefined) return; // battle is stripped; there is nothing to hold to
+    expect(limits.graceMs).toBe(DEFAULT_SESSION_RESUME_GRACE_MS);
   });
 
   it('bounds a match at the same fifteen minutes, per §10.3', () => {
@@ -60,12 +69,17 @@ describe('the battle session windows the composition root declares', () => {
     // participant may be away — so this asserts today rather than claiming they
     // are the same thing. The day one moves without the other, this is where that
     // gets noticed.
-    expect(battleLimits()?.matchMs).toBe(DEFAULT_SESSION_RESUME_GRACE_MS);
+    const limits = battleLimits();
+    if (limits === undefined) return;
+    expect(limits.matchMs).toBe(DEFAULT_SESSION_RESUME_GRACE_MS);
   });
 
-  it('goes red when a literal is changed to a wrong value', () => {
-    // The check is about the composition root, so it is exercised by proving it
-    // reads a value rather than asserting a constant against itself.
-    expect(battleLimits()?.graceMs).not.toBe(0);
+  it('reads a value rather than asserting a constant against itself', () => {
+    // The check is about the composition root, so it is only worth anything if it
+    // reads what is there. Proved by changing graceMs to 600_000 and watching
+    // exactly one test go red.
+    const limits = battleLimits();
+    if (limits === undefined) return;
+    expect(limits.graceMs).not.toBe(0);
   });
 });

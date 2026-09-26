@@ -10,7 +10,7 @@ import {
   users,
   type Database,
 } from '@battle-agents/db';
-import { count, like } from 'drizzle-orm';
+import { like } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 
 import { Pool } from 'pg';
@@ -69,12 +69,32 @@ function questRuntime() {
   });
 }
 
-async function questEventRows(): Promise<number> {
-  const [row] = await database
-    .select({ value: count() })
+/**
+ * Rows THIS test caused, counted by a marker it chose.
+ *
+ * The first version counted every `quest.%` row in the shared event_log and
+ * asserted the difference was one, which is a race with every other file that
+ * writes quest events — and it fired, in a full run, as `expected 307 to be 306`.
+ * A count of a shared table is not a property of the thing under test; it is a
+ * property of what else happened to be running.
+ *
+ * Both events carry a field the test already makes unique — the project for a
+ * create, the title for a refusal — so the count is scoped to rows naming it. The
+ * gate becomes deterministic, and a row from elsewhere can no longer make a real
+ * assertion pass or fail.
+ */
+async function questEventRows(marker: { readonly title: string }): Promise<number> {
+  const rows = await database
+    .select({ payload: eventLog.payload })
     .from(eventLog)
     .where(like(eventLog.type, 'quest.%'));
-  return row?.value ?? 0;
+  // The title, not the project: `quest.created` carries questId, title,
+  // difficulty and xpReward, and does not repeat the project. Both events carry
+  // a title, and the test makes it unique either way — 'Persist me' for the one
+  // that should succeed and '' for the one that is refused.
+  return rows.filter(
+    ({ payload }) => (payload as Readonly<Record<string, unknown>>)['title'] === marker.title,
+  ).length;
 }
 
 describe('quest events reach the database', () => {
@@ -100,14 +120,15 @@ describe('quest events reach the database', () => {
     const projectId = project?.id ?? '';
     expect(projectId).not.toBe('');
 
-    const before = await questEventRows();
+    const marker = { title: 'Persist me' };
+    const before = await questEventRows(marker);
     await runtime.runAction('quest.create', {
       projectId,
       title: 'Persist me',
       difficulty: 1,
       xpReward: 100,
     });
-    const after = await questEventRows();
+    const after = await questEventRows(marker);
 
     expect(after).toBe(before + 1);
   });
@@ -122,7 +143,8 @@ describe('quest events reach the database', () => {
     // version of this test asserted the opposite, on the assumption that only
     // successful work is worth a row. The feature's own manifest is the
     // authority here, and it disagrees with the assumption.
-    const before = await questEventRows();
+    const marker = { title: '' };
+    const before = await questEventRows(marker);
     await expect(
       runtime.runAction('quest.create', {
         projectId: null,
@@ -131,7 +153,7 @@ describe('quest events reach the database', () => {
         xpReward: 100,
       }),
     ).rejects.toThrow(/quest not created/);
-    const after = await questEventRows();
+    const after = await questEventRows(marker);
 
     expect(after).toBe(before + 1);
   });
