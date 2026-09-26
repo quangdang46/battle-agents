@@ -8,9 +8,9 @@ Paths are `apps/web/public/assets/<pack>/`, per §19.
 
 ## The shortlist
 
-| Pack            | Source                                                    | Licence | Style                                | Role                                       |
-| --------------- | --------------------------------------------------------- | ------- | ------------------------------------ | ------------------------------------------ |
-| tiny-swords-cc0 | agent-quest `client/public/assets/themes/tiny-swords-cc0` | CC0-1.0 | 16×16 fantasy pixel, limited palette | V0 characters, terrain, buildings, effects |
+| Pack            | Source                                                                                              | Licence | Style                                                                    | Role                                       |
+| --------------- | --------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------ | ------------------------------------------ |
+| tiny-swords-cc0 | [Pixel Frog, Tiny Swords update 010](https://pixelfrog-assets.itch.io/tiny-swords), via agent-quest | CC0-1.0 | fantasy pixel, 64px tile grid; frames are source-scale sheets, not 16×16 | V0 characters, terrain, buildings, effects |
 
 ## What this table is and is not
 
@@ -18,7 +18,21 @@ Paths are `apps/web/public/assets/<pack>/`, per §19.
 licences go missing.** A sentence saying "we use CC0 packs" survives a pack being relicensed
 upstream; a row with a licence cell does not.
 
-**The style column is a DECLARATION, not a finding.** Plan §14 makes style consistency the actual
+**The style column was a CLAIM until it was measured, and it was wrong.** The first
+row said "16×16 fantasy pixel" because plan §25 says "16×16@3x placeholders" —
+but that sentence is about the programmatic sprite FACTORY that stands in until
+art exists, not about this pack. Reading the PNG headers: 205 files, none
+unparseable, and the sizes are 64×64, 128×128, 192×192 and larger source sheets
+(83 tiles at 64×64, 30 icons at 64×64, buildings at 128×192 and 320×256). The row
+now says what the pack actually is, with the upstream attributed rather than only
+the path it was copied from.
+
+That is the failure this table exists to prevent, committed in the table itself: a
+style nobody had looked at, written down as though someone had. §14 makes
+style consistency the selection criterion, and the first row did not meet the
+standard the file sets for the rows after it.
+
+**The style column is a DECLARATION that has to be looked at, not a finding.** Plan §14 makes style consistency the actual
 selection criterion — a perfect set of individually excellent packs in five visual styles reads as
 an amateur project instantly — and **no script in this repository can judge whether five packs look
 like one game.** Writing a "style lint" would be worse than none, because it would claim to check
