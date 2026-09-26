@@ -17,6 +17,7 @@
  */
 
 import { isRepositoryCoordinates, type RepositoryCoordinates } from './domain.js';
+import { BOUNTY_MODES, DEFAULT_BOUNTY_MODE, isKnownBountyMode } from './modes.js';
 
 /**
  * Every way this feature refuses a payload, or undefined when it accepts one.
@@ -46,7 +47,8 @@ export type BountyRejection =
   | { readonly reason: 'reported-by-empty' }
   | { readonly reason: 'pr-url-not-a-github-pull-request' }
   | { readonly reason: 'pr-url-wrong-repository' }
-  | { readonly reason: 'status-not-a-known-status' };
+  | { readonly reason: 'status-not-a-known-status' }
+  | { readonly reason: 'mode-not-a-known-bounty-mode' };
 
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -56,6 +58,18 @@ function asObject(value: unknown): Record<string, unknown> | undefined {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+/**
+ * The value as a string, or `''` when it is not one.
+ *
+ * `'not-a-mode'` is as good as `'speed'` for a rejection, which is why this is a
+ * narrowing helper rather than an assertion. `isKnownBountyMode` wants a string
+ * because its argument is a database column; the payload it guards is `unknown`,
+ * and a value of the wrong type fails the same check either way.
+ */
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : 'not-a-string';
 }
 
 /** An ISO 8601 instant, or nothing. `Date.parse` accepting a bare word is the risk. */
@@ -120,6 +134,15 @@ export function whyCreateIsRejected(input: unknown): BountyRejection | undefined
   }
   if (draft['expiresAt'] !== undefined && !isInstant(draft['expiresAt'])) {
     return { reason: 'expires-at-not-an-instant' };
+  }
+  // A mode that IS sent is held to the taxonomy; a mode that is absent is not a
+  // rejection, because the default is the build's answer rather than a value the
+  // creator got wrong. Checking it here rather than at claim time is the point of
+  // the field: a bounty whose mode was never checked would carry a promise the
+  // platform made on its own, and the refusal would arrive to an agent as a
+  // surprise about a bounty whose creator was never asked.
+  if (draft['mode'] !== undefined && !isKnownBountyMode(asString(draft['mode']))) {
+    return { reason: 'mode-not-a-known-bounty-mode' };
   }
   return undefined;
 }
@@ -341,7 +364,9 @@ export function parsePullRequestUrl(
 export const BOUNTY_CREATE_SHAPE =
   'A create takes a repoOwner and repoName that are GitHub owner/repository names, a positive ' +
   'whole issueNumber, and optionally a currency, an array of non-empty requirement strings, an ' +
-  'ISO expiresAt and a mode.';
+  `ISO expiresAt and a mode, one of ${BOUNTY_MODES.join(', ')}. A mode names the rule that ` +
+  'decides the bounty — which pull request wins — and not the shape of a match; only ' +
+  `${DEFAULT_BOUNTY_MODE} can be claimed by this build.`;
 
 export const BOUNTY_FUND_SHAPE =
   'A funding takes a bountyId, a whole number of amountCents that is not negative, a ' +

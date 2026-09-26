@@ -51,17 +51,33 @@ export const PAYOUT_INTENT_MODES = ['intent-only'] as const;
 export const DEFAULT_CURRENCY = 'USD';
 
 /**
- * The mode a bounty resolves work under.
+ * The modes a bounty resolves work under.
  *
- * Free text with a default and no CHECK, deliberately, and the reason is a bead
- * boundary rather than a preference: the mode and tier taxonomy belongs to
- * ba-bounty-modes-tiers-seasons-62l, and a CHECK constraint here would be this
- * bead defining half that enum — which the bead's own brief calls a duplication
- * bug. What the lifecycle needs is one question, "is claiming exclusive", and
- * the feature answers it for every value it does not recognise rather than
- * assuming a vocabulary only half of which exists.
+ * A COPY of the feature's list, and the reason it is a copy rather than an
+ * import is the same one `PAYOUT_INTENT_STATES` above gives: infrastructure may
+ * not import the layer that consumes it. What changed is that the duplication is
+ * now BOUNDED — the taxonomy this file used to decline to have half of belongs to
+ * ba-bounty-modes-tiers-seasons-62l and exists in
+ * packages/features/bounty/src/modes.ts, and
+ * tests/unit/bounty-mode-vocabulary.test.ts fails the build if the two lists ever
+ * disagree. Free text with no CHECK was a reasonable interim while the taxonomy
+ * did not exist and the feature answered for every value it did not recognise; it
+ * stopped being reasonable the moment there was a real list to disagree with.
+ *
+ * The CHECK below is the reason the list is written down at all. A bounty mode
+ * that names a resolution rule nobody implemented is a row whose claim has to be
+ * refused, and a mode that is not even in the list is a row nothing can interpret
+ * — so the database is where a fifth value is turned away, before a feature with
+ * no case for it reads one.
  */
-export const DEFAULT_BOUNTY_MODE = 'race';
+export const BOUNTY_MODES = [
+  'first-valid',
+  'maintainer-picks',
+  'best-validated',
+  'single-pr',
+] as const;
+
+export const DEFAULT_BOUNTY_MODE: (typeof BOUNTY_MODES)[number] = 'first-valid';
 
 export const bounties = pgTable(
   'bounties',
@@ -116,6 +132,14 @@ export const bounties = pgTable(
     // decided by the feature reading the row, not by the database refusing it.
     index('bounties_pr_url_idx').on(table.prUrl),
     check('bounties_issue_number_positive', sql`${table.issueNumber} > 0`),
+    // Spelled out rather than interpolated from BOUNTY_MODES above, because a
+    // drizzle `check` takes a SQL expression and building one by string
+    // interpolation is how a migration and a schema file start disagreeing. The
+    // test named in BOUNTY_MODES's comment compares this list to the feature's.
+    check(
+      'bounties_mode_known',
+      sql`${table.mode} IN ('first-valid', 'maintainer-picks', 'best-validated', 'single-pr')`,
+    ),
   ],
 );
 

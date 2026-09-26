@@ -3,22 +3,31 @@ import type { GameEvent, Runtime } from '@battle-agents/core';
 import { describe, expect, it } from 'vitest';
 
 import {
+  allocateProRata,
+  BOUNTY_ACTION_IDS,
   BOUNTY_CLAIM,
   BOUNTY_COMPLETED,
   BOUNTY_CREATE,
   BOUNTY_EXPIRE,
   BOUNTY_FUND,
+  BOUNTY_FUNDING_REFUSED,
   BOUNTY_LIST,
   BOUNTY_SUBMIT,
   bountyFeature,
+  FUNDING_REFUSALS,
+  FUNDING_REFUSAL_DISPOSITIONS,
   GITHUB_PULL_REQUEST_MERGED,
+  markPending,
+  NO_MONEY_WAS_TAKEN,
   PULL_REQUEST_MERGED_OUTCOME,
+  REFUND_DISPOSITIONS,
   type BountyRepository,
   type BountySummary,
   type NewStoredBounty,
   type PayoutIntent,
   type PayoutIntentStore,
   type StoredBounty,
+  type StoredFund,
 } from './index.js';
 
 const NOW = '2026-09-26T12:00:00.000Z';
@@ -49,7 +58,7 @@ const PR_URL = `https://github.com/${REPO}/${REPO_NAME}/pull/${PR}`;
  */
 class InMemoryBountyRepository implements BountyRepository {
   readonly rows = new Map<string, StoredBounty>();
-  readonly funds = new Map<string, { readonly amountCents: number; readonly at: string }[]>();
+  readonly funds = new Map<string, StoredFund[]>();
   nextId = 1;
   /** Set by a test to make a claim lose, the way a concurrent claim would. */
   claimWins = true;
@@ -96,6 +105,25 @@ class InMemoryBountyRepository implements BountyRepository {
 
   async findByPrUrl(prUrl: string): Promise<StoredBounty | undefined> {
     return [...this.rows.values()].find((row) => row.prUrl === prUrl);
+  }
+
+  /**
+   * Writes a mode straight onto the row, for the rows no create can produce.
+   *
+   * Not part of `BountyRepository` — the real store has no such method, because
+   * the real `bounties_mode_known` CHECK is what stops a mode arriving from
+   * outside. This exists so a test can stand up the two rows the CHECK makes
+   * unreachable through the API: a row written before the taxonomy existed, and
+   * a row from a build that has since added a mode this one has never heard of.
+   * A test that reached those states by loosening the guard would be testing its
+   * own loosening.
+   */
+  forceMode(bountyId: string, mode: string): void {
+    const row = this.rows.get(bountyId);
+    if (row === undefined) {
+      throw new Error(`no bounty ${bountyId} to set a mode on`);
+    }
+    this.rows.set(bountyId, { ...row, mode });
   }
 
   async claim(bountyId: string, agentId: string, now: string): Promise<StoredBounty | undefined> {
@@ -149,21 +177,39 @@ class InMemoryBountyRepository implements BountyRepository {
     amountCents: number,
     now: string,
   ): Promise<{ readonly totalCents: number; readonly fundedAt: string }> {
-    void sponsorUserId;
     const rows = this.funds.get(bountyId) ?? [];
-    rows.push({ amountCents, at: now });
+    // The sponsor is kept, not discarded. An earlier version of this double threw
+    // it away, which meant the feature's per-sponsor attribution could have been
+    // empty and every attribution assertion would still have passed — the double
+    // was the reason the property was untestable rather than unproved.
+    rows.push({ sponsorUserId, amountCents, createdAt: now });
     this.funds.set(bountyId, rows);
     const bounty = this.rows.get(bountyId);
     if (bounty !== undefined) {
       this.#put(bountyId, {
         rewardCents: rows.reduce((total, row) => total + row.amountCents, 0),
-        fundedAt: rows[0]?.at ?? null,
+        fundedAt: rows[0]?.createdAt ?? null,
       });
     }
     return {
       totalCents: rows.reduce((total, row) => total + row.amountCents, 0),
-      fundedAt: rows[0]?.at ?? now,
+      fundedAt: rows[0]?.createdAt ?? now,
     };
+  }
+
+  /**
+   * Sorted, as the real store sorts, because the order is the contract.
+   *
+   * The harness clock is constant, so every row in a test shares one
+   * `createdAt` and the sort is decided entirely by stability — which is
+   * exactly the case the real store's `id` tiebreak exists for. Pinning the order
+   * here means a test that depends on who is "earliest" depends on the store's
+   * promise rather than on insertion order leaking through.
+   */
+  async fundsFor(bountyId: string): Promise<readonly StoredFund[]> {
+    return [...(this.funds.get(bountyId) ?? [])]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((row) => ({ ...row }));
   }
 
   #put(bountyId: string, changes: Partial<StoredBounty>): StoredBounty {
@@ -190,6 +236,7 @@ function harness(): {
   repository: InMemoryBountyRepository;
   payouts: InMemoryPayoutIntents;
   seen: GameEvent[];
+  store: InMemoryStateStore;
   act: <T>(id: string, input: unknown) => Promise<T>;
 } {
   const repository = new InMemoryBountyRepository();
@@ -197,9 +244,10 @@ function harness(): {
   const bus = createInMemoryEventBus();
   const seen: GameEvent[] = [];
   bus.subscribe((entry) => seen.push(entry));
+  const store = new InMemoryStateStore();
   const runtime = createRuntime({
     extensions: [bountyFeature({ repository, payouts })],
-    store: new InMemoryStateStore(),
+    store,
     bus,
     now: () => NOW,
   });
@@ -208,6 +256,10 @@ function harness(): {
     repository,
     payouts,
     seen,
+    // Handed back so a test can tell "was emitted" from "was written down". The
+    // bus fires for every event and the store only for the ones the feature
+    // declared persisted, and the refusal is only evidence if it is the second.
+    store,
     // A cast at ONE place, in the test's own harness. `runAction` is generic in
     // both directions and the compiler cannot see through the wrapper, so
     // without it every call site in this file would need one — and a cast on
@@ -343,18 +395,25 @@ describe('a claim is exclusive', () => {
   });
 
   it('refuses the second claim whatever mode the bounty carries', async () => {
-    // The mode taxonomy belongs to a sibling bead, so this feature stores a
-    // string and does not know the vocabulary. A mode it has never seen must
-    // not be read as permission for two solvers: work paid twice is the failure
-    // a mode taxonomy is not allowed to introduce.
+    // A mode this feature has never seen must not be read as permission for two
+    // solvers: work paid twice is the failure a mode taxonomy is not allowed to
+    // introduce. That claim is still true, but it can no longer be set up
+    // through `bounty.create`, which holds a supplied mode to the taxonomy
+    // (packages/features/bounty/src/modes.ts) and refuses anything outside it.
+    //
+    // The row is written onto the store directly instead, which is how a mode
+    // this build cannot name actually arrives: a row written before the
+    // taxonomy existed, or by a build that has since added one. Constructing it
+    // through the door it comes through is the difference between testing the
+    // behaviour and testing the setup.
     for (const mode of ['race', 'cooperative', 'anything-written-by-hand']) {
-      const { act } = harness();
+      const { act, repository } = harness();
       const created = await act<BountySummary>(BOUNTY_CREATE, {
         repoOwner: REPO,
         repoName: REPO_NAME,
         issueNumber: ISSUE,
-        mode,
       });
+      await repository.forceMode(created.id, mode);
       await act(BOUNTY_FUND, {
         bountyId: created.id,
         amountCents: 20_000,
@@ -536,6 +595,10 @@ describe('a merge completes the bounty exactly once', () => {
     const row = h.repository.rows.get(bountyId);
     h.repository.rows.set(bountyId, { ...(row as StoredBounty), status: 'claimed' });
 
+    // Asserted on the DISPOSITION rather than on the old wording, because the
+    // sentence is not the contract and a future edit to it must not be able to
+    // leave this green. `already-payable` and the statement that nothing was
+    // taken are the two facts a sponsor is owed; the prose around them is not.
     await expect(
       h.act(BOUNTY_FUND, {
         bountyId,
@@ -543,7 +606,14 @@ describe('a merge completes the bounty exactly once', () => {
         sponsorUserId: SPONSOR,
         reportedBy: 'sponsor-person',
       }),
-    ).rejects.toThrow(/is already pending; a payable bounty cannot take more money/);
+    ).rejects.toMatchObject({
+      code: FUNDING_REFUSALS.payable,
+      status: 409,
+      refusal: {
+        disposition: FUNDING_REFUSAL_DISPOSITIONS.alreadyPayable,
+        notice: expect.stringContaining(NO_MONEY_WAS_TAKEN),
+      },
+    });
   });
 });
 
@@ -722,5 +792,459 @@ describe('the whole slice, in order, with no database', () => {
     expect(listed[0]?.payout.state).toBe('pending');
     expect(listed[0]?.payout.sandbox).toBe(true);
     expect([...h.payouts.rows.values()][0]?.state).toBe('pending');
+  });
+});
+
+/* ─────────────────── open funding: more than one sponsor ─────────────────── */
+
+const ALICE = 'user-alice';
+const BOB = 'user-bob';
+const CAROL = 'user-carol';
+
+/** Creates a bounty and funds it from the named sponsors, in order. */
+async function stacked(
+  h: ReturnType<typeof harness>,
+  amounts: readonly { readonly sponsor: string; readonly cents: number }[],
+): Promise<BountySummary> {
+  const created = await h.act<BountySummary>(BOUNTY_CREATE, {
+    repoOwner: REPO,
+    repoName: REPO_NAME,
+    issueNumber: ISSUE,
+  });
+  let latest = created;
+  for (const entry of amounts) {
+    latest = await h.act<BountySummary>(BOUNTY_FUND, {
+      bountyId: created.id,
+      amountCents: entry.cents,
+      sponsorUserId: entry.sponsor,
+      reportedBy: `${entry.sponsor}-person`,
+    });
+  }
+  return latest;
+}
+
+describe('anyone may fund, and a stack is the sum of the rows', () => {
+  it('takes money from three people who do not own the repository', async () => {
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 20_000 },
+      { sponsor: BOB, cents: 5_000 },
+      { sponsor: CAROL, cents: 10_000 },
+    ]);
+
+    // The mechanic, and the sum rather than a scalar. Asserting the total alone
+    // would pass for a stored column that a later funding forgot to update, so
+    // the total and the three rows are asserted together: the total has to be
+    // EXACTLY these three numbers.
+    expect(bounty.rewardCents).toBe(35_000);
+    expect(bounty.funds).toEqual([
+      { sponsorUserId: ALICE, amountCents: 20_000, createdAt: NOW },
+      { sponsorUserId: BOB, amountCents: 5_000, createdAt: NOW },
+      { sponsorUserId: CAROL, amountCents: 10_000, createdAt: NOW },
+    ]);
+    expect(bounty.funds.reduce((total, fund) => total + fund.amountCents, 0)).toBe(
+      bounty.rewardCents,
+    );
+  });
+
+  it('carries the whole stack on a read, not only on the write that made it', async () => {
+    // The failure this guards is a store that is correct and a product that
+    // cannot see it. Attribution that exists on the response of `fund` and not
+    // on `list` is a bounty board where a second sponsor is invisible and the
+    // only caller who can see them is the one who just paid.
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 20_000 },
+      { sponsor: BOB, cents: 5_000 },
+    ]);
+
+    const listed = await h.act<readonly BountySummary[]>(BOUNTY_LIST, { status: 'open' });
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.funds).toEqual(bounty.funds);
+    expect(listed[0]?.rewardCents).toBe(25_000);
+  });
+
+  it('keeps a repeat sponsor as two contributions rather than merging them', async () => {
+    // The rows are the ledger, and a sponsor topping up twice has two entries in
+    // it. Collapsing them would lose the order the largest-remainder residue is
+    // paid out in, which is the one thing the refund arithmetic depends on.
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 1_000 },
+      { sponsor: ALICE, cents: 500 },
+    ]);
+
+    expect(bounty.funds).toHaveLength(2);
+    expect(bounty.rewardCents).toBe(1_500);
+  });
+});
+
+describe('a top-up is refused once the money is payable, and the refusal is recorded', () => {
+  it('turns a stranger away from a completed bounty and leaves a row saying so', async () => {
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 20_000 },
+      { sponsor: BOB, cents: 5_000 },
+    ]);
+    await h.act(BOUNTY_CLAIM, { bountyId: bounty.id, agentId: AGENT });
+    await h.act(BOUNTY_SUBMIT, { bountyId: bounty.id, agentId: AGENT, prUrl: PR_URL });
+    await h.runtime.emit(mergeDelivery());
+
+    await expect(
+      h.act(BOUNTY_FUND, {
+        bountyId: bounty.id,
+        amountCents: 7_000,
+        sponsorUserId: CAROL,
+        reportedBy: 'carol-person',
+      }),
+    ).rejects.toMatchObject({ code: FUNDING_REFUSALS.terminal });
+
+    // The attempt is on the record, and WRITTEN DOWN rather than merely
+    // announced. Payout-rail section 4.2 settles a dispute out of the log, and a
+    // sponsor who was told "refused" with nothing in the log is a sponsor who
+    // cannot find out why. Asserting against the bus would pass for an event
+    // that is emitted and thrown away, which is the defect this whole
+    // persistence claim exists to rule out — and it did: removing the event from
+    // `persistedEvents` left every bus-level assertion in this file green.
+    const recorded = h.store.recorded().filter((entry) => entry.type === BOUNTY_FUNDING_REFUSED);
+    expect(recorded).toHaveLength(1);
+    expect(payloadOf(recorded[0])).toMatchObject({
+      bountyId: bounty.id,
+      sponsorUserId: CAROL,
+      amountCents: 7_000,
+      reason: FUNDING_REFUSALS.terminal,
+      disposition: FUNDING_REFUSAL_DISPOSITIONS.bountyFinished,
+      bountyStatus: 'completed',
+      // The log row answers the question the exception answers, in the same
+      // words. Payout-rail section 4.2 settles a dispute out of the log, and a
+      // reader there who is not told their money never left them has to assume
+      // the worst.
+      notice: expect.stringContaining(NO_MONEY_WAS_TAKEN),
+    });
+
+    // And nothing was taken. The sum of the funding rows is what the existing
+    // sponsors are owed, so a refused contribution must not appear in it.
+    const after = await h.act<readonly BountySummary[]>(BOUNTY_LIST, {});
+    expect(after[0]?.rewardCents).toBe(25_000);
+    expect(after[0]?.funds).toHaveLength(2);
+  });
+
+  it('names the payable state rather than the status when the lifecycle is not the reason', async () => {
+    // Reached the way the payout rail reaches it: the intent is `pending` while
+    // the status is not terminal. A completed bounty is refused by the lifecycle
+    // rule above, so the payable rule on its own has to be set up directly —
+    // otherwise a green test here could be passing on the wrong refusal.
+    const h = harness();
+    const bounty = await stacked(h, [{ sponsor: ALICE, cents: 20_000 }]);
+    await h.act(BOUNTY_CLAIM, { bountyId: bounty.id, agentId: AGENT });
+    h.payouts.rows.set(
+      bounty.id,
+      markPending({
+        bountyId: bounty.id,
+        amountCents: 20_000,
+        reportedBy: 'maintainer-person',
+        now: LATER,
+      }),
+    );
+
+    await expect(
+      h.act(BOUNTY_FUND, {
+        bountyId: bounty.id,
+        amountCents: 7_000,
+        sponsorUserId: BOB,
+        reportedBy: 'bob-person',
+      }),
+    ).rejects.toMatchObject({ code: FUNDING_REFUSALS.payable });
+
+    const refused = h.store.recorded().filter((entry) => entry.type === BOUNTY_FUNDING_REFUSED);
+    expect(payloadOf(refused[0])).toMatchObject({
+      reason: FUNDING_REFUSALS.payable,
+      disposition: FUNDING_REFUSAL_DISPOSITIONS.alreadyPayable,
+      bountyStatus: 'claimed',
+      sponsorUserId: BOB,
+      // The status says `claimed` and the payout says `pending`, and they are
+      // recorded separately on purpose: a reader deciding whether the work is
+      // done needs the payout's word for it, and conflating the two is how a
+      // refusal ends up explaining itself with the wrong evidence.
+      payoutState: 'pending',
+    });
+    const after = await h.act<readonly BountySummary[]>(BOUNTY_LIST, {});
+    expect(after[0]?.rewardCents).toBe(20_000);
+    expect(after[0]?.funds).toHaveLength(1);
+  });
+});
+
+describe('a solver having started is not a reason to refuse a stranger money', () => {
+  // The answer to the open question in docs/design/payout-rail.md section 7 —
+  // "whether sponsors stack on bounties the solver has already claimed". The
+  // boundary is the MERGE, because that is what moves the intent off `funded`:
+  // claim and submit leave it alone, so a bounty a solver is working on can still
+  // be funded, and the refund arithmetic is identical either way.
+  //
+  // This test can fail. It is the guard on a decision that a future contributor
+  // could reasonably get backwards by reading "claimed" as "the work is already
+  // done, lock it".
+  it('still takes a top-up on a claimed bounty and on a submitted one', async () => {
+    const h = harness();
+    const bounty = await stacked(h, [{ sponsor: ALICE, cents: 20_000 }]);
+    await h.act(BOUNTY_CLAIM, { bountyId: bounty.id, agentId: AGENT });
+
+    const afterClaim = await h.act<BountySummary>(BOUNTY_FUND, {
+      bountyId: bounty.id,
+      amountCents: 5_000,
+      sponsorUserId: BOB,
+      reportedBy: 'bob-person',
+    });
+    expect(afterClaim.status).toBe('claimed');
+    expect(afterClaim.rewardCents).toBe(25_000);
+
+    await h.act(BOUNTY_SUBMIT, { bountyId: bounty.id, agentId: AGENT, prUrl: PR_URL });
+    const afterSubmit = await h.act<BountySummary>(BOUNTY_FUND, {
+      bountyId: bounty.id,
+      amountCents: 10_000,
+      sponsorUserId: CAROL,
+      reportedBy: 'carol-person',
+    });
+    expect(afterSubmit.status).toBe('submitted');
+    expect(afterSubmit.rewardCents).toBe(35_000);
+    expect(afterSubmit.funds.map((entry) => entry.sponsorUserId)).toEqual([ALICE, BOB, CAROL]);
+    // Nobody who funded after the claim is lost when the work is done.
+    expect(afterSubmit.payout.refund.totalCents).toBe(0);
+  });
+});
+
+describe('a cancelled bounty states where the sponsors money went', () => {
+  it('owes every sponsor back exactly what they put in, and the shares add up', async () => {
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 20_000 },
+      { sponsor: BOB, cents: 5_000 },
+      { sponsor: CAROL, cents: 10_000 },
+    ]);
+    const expired = await h.act<BountySummary>(BOUNTY_EXPIRE, { bountyId: bounty.id });
+
+    const { refund } = expired.payout;
+    expect(refund.disposition).toBe(REFUND_DISPOSITIONS.owedInFull);
+    expect(refund.totalCents).toBe(35_000);
+    expect(refund.shares).toEqual([
+      { sponsorUserId: ALICE, amountCents: 20_000 },
+      { sponsorUserId: BOB, amountCents: 5_000 },
+      { sponsorUserId: CAROL, amountCents: 10_000 },
+    ]);
+    expect(refund.shares.reduce((total, share) => total + share.amountCents, 0)).toBe(35_000);
+    // The 90-day window was already being computed with no reader. It now has
+    // one, and a sponsor can see the date their record stops being evidence.
+    expect(refund.deadline).not.toBeNull();
+    expect(refund.deadline).toBe(expired.payout.windows.refundUnclaimedDays);
+  });
+
+  it('refuses to decide when a solver had started, and says who decides', async () => {
+    // Payout-rail section 3.2 and 4.1: the repository owner decides, the platform
+    // holds the evidence. Returning an allocation here would be the platform
+    // adjudicating a dispute its own design doc reserves to a human, so `shares`
+    // is empty while `totalCents` still reports what is unspent.
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 20_000 },
+      { sponsor: BOB, cents: 5_000 },
+    ]);
+    await h.act(BOUNTY_CLAIM, { bountyId: bounty.id, agentId: AGENT });
+    const expired = await h.act<BountySummary>(BOUNTY_EXPIRE, { bountyId: bounty.id });
+
+    expect(expired.payout.refund.disposition).toBe(REFUND_DISPOSITIONS.ownerDecides);
+    expect(expired.payout.refund.totalCents).toBe(25_000);
+    expect(expired.payout.refund.shares).toEqual([]);
+  });
+
+  it('owes a completed bounty nothing back, because the money is the solvers', async () => {
+    const h = harness();
+    const bounty = await stacked(h, [
+      { sponsor: ALICE, cents: 20_000 },
+      { sponsor: BOB, cents: 5_000 },
+    ]);
+    await h.act(BOUNTY_CLAIM, { bountyId: bounty.id, agentId: AGENT });
+    await h.act(BOUNTY_SUBMIT, { bountyId: bounty.id, agentId: AGENT, prUrl: PR_URL });
+    await h.runtime.emit(mergeDelivery());
+
+    const listed = await h.act<readonly BountySummary[]>(BOUNTY_LIST, { status: 'completed' });
+    expect(listed[0]?.payout.refund.disposition).toBe(REFUND_DISPOSITIONS.notApplicable);
+    expect(listed[0]?.payout.refund.totalCents).toBe(0);
+    // Still carrying the stack, because a solver asking who funded the work they
+    // did is a question the answer to which should not expire with the bounty.
+    expect(listed[0]?.funds).toHaveLength(2);
+  });
+});
+
+/* ───────────────────────────── the refund arithmetic ───────────────────────────── */
+
+describe('splitting a refund', () => {
+  const stack = [
+    { sponsorUserId: ALICE, amountCents: 20_000 },
+    { sponsorUserId: BOB, amountCents: 5_000 },
+    { sponsorUserId: CAROL, amountCents: 10_000 },
+  ];
+  const totalOf = (shares: readonly { readonly amountCents: number }[]): number =>
+    shares.reduce((sum, share) => sum + share.amountCents, 0);
+
+  it('gives back exactly what it was given, for every amount from zero to the whole', () => {
+    // The property the whole ledger rests on, swept rather than sampled. A sweep
+    // is the point: a hand-picked table of round numbers is the shape of a test
+    // that passes while the rounding rule is wrong for the amounts nobody tried.
+    for (let cents = 0; cents <= 35_000; cents += 1) {
+      const shares = allocateProRata(stack, cents);
+      expect(totalOf(shares)).toBe(cents);
+      expect(shares).toHaveLength(stack.length);
+      // No sponsor is dropped or invented: the rows are the ledger.
+      expect(shares.map((share) => share.sponsorUserId)).toEqual([ALICE, BOB, CAROL]);
+    }
+  });
+
+  it('never returns a cent more than a sponsor put in', () => {
+    for (let cents = 0; cents <= 35_000; cents += 137) {
+      allocateProRata(stack, cents).forEach((share, index) => {
+        expect(share.amountCents).toBeGreaterThanOrEqual(0);
+        expect(share.amountCents).toBeLessThanOrEqual(
+          (stack[index] as { amountCents: number }).amountCents,
+        );
+      });
+    }
+  });
+
+  it('gives the leftover cent to the earliest contributor, not to the biggest', () => {
+    // Largest-remainder makes this a rule rather than an iteration accident. 1
+    // cent out of 35_000 floors every share to zero, so whoever is first takes
+    // the residue — and "first" is funding order, which is why the store sorts.
+    const shares = allocateProRata(
+      [
+        { sponsorUserId: ALICE, amountCents: 20_000 },
+        { sponsorUserId: BOB, amountCents: 5_000 },
+        { sponsorUserId: CAROL, amountCents: 10_000 },
+      ],
+      1,
+    );
+    expect(shares).toEqual([
+      { sponsorUserId: ALICE, amountCents: 1 },
+      { sponsorUserId: BOB, amountCents: 0 },
+      { sponsorUserId: CAROL, amountCents: 0 },
+    ]);
+  });
+
+  it('refuses a refund larger than the money in, and one that is not whole cents', () => {
+    // A refund bigger than the total is a debt nobody owes, and a float is how a
+    // cent goes missing between the funds and the refunds. Both throw rather than
+    // clamping, because a clamped refund silently pays somebody the wrong amount.
+    expect(() => allocateProRata(stack, 35_001)).toThrow(/exceeds the 35000 cents funded/);
+    expect(() => allocateProRata(stack, -1)).toThrow(/whole number of cents/);
+    expect(() => allocateProRata(stack, 1.5)).toThrow(/whole number of cents/);
+  });
+
+  it('keeps a zero-contribution sponsor on the ledger', async () => {
+    // `amountCents: 0` is a legal funding row: the guard refuses negatives, not
+    // zeroes. Dropping the row from the allocation would make "who was refunded"
+    // stop matching "who funded", and the reconciliation would need a special
+    // case for exactly the sponsor nobody remembers.
+    const shares = allocateProRata(
+      [
+        { sponsorUserId: ALICE, amountCents: 0 },
+        { sponsorUserId: BOB, amountCents: 1_000 },
+      ],
+      1_000,
+    );
+    expect(shares).toEqual([
+      { sponsorUserId: ALICE, amountCents: 0 },
+      { sponsorUserId: BOB, amountCents: 1_000 },
+    ]);
+  });
+});
+
+/* ─────────────────────── funding is open; awarding is not ─────────────────────── */
+
+describe('funding is open to anyone, and nothing else is', () => {
+  it('exposes no action a caller could award or complete a bounty with', async () => {
+    // The second half of the authorization rule, and the half that is structural.
+    // Funding being open is a product pillar (plan 11.2); awarding staying closed
+    // is why the product is not a way to pay strangers. There is no transport,
+    // capability or input that reaches a completion — the only writer of
+    // `completed` is the merge handler, which is fed by a GitHub delivery and
+    // correlates on a pull request URL in the bounty's OWN repository.
+    //
+    // A list assertion rather than a comment, because the failure it guards
+    // against is exactly the kind that arrives as a feature: someone adds
+    // `bounty.complete` because the CLI needs a way to close a bounty by hand.
+    // This goes red the moment that id appears, and the fix has to be a GitHub
+    // state check rather than a permission on the new action.
+    const ids: readonly string[] = BOUNTY_ACTION_IDS;
+    for (const name of ids) {
+      expect(name).not.toMatch(/award|complete|pay|settle|dispute/);
+    }
+
+    // And the mechanism, not just the absence: a merge for a DIFFERENT
+    // repository's pull request completes nothing on this bounty, so a caller
+    // cannot nominate somebody else's PR as the paying one.
+    const h = harness();
+    const bounty = await stacked(h, [{ sponsor: ALICE, cents: 20_000 }]);
+    await h.act(BOUNTY_CLAIM, { bountyId: bounty.id, agentId: AGENT });
+    await h.act(BOUNTY_SUBMIT, { bountyId: bounty.id, agentId: AGENT, prUrl: PR_URL });
+
+    await h.runtime.emit(mergeDelivery({ repository: `${REPO}/some-other-repo`, pullRequest: PR }));
+    const after = await h.act<readonly BountySummary[]>(BOUNTY_LIST, { status: 'submitted' });
+    expect(after).toHaveLength(1);
+    expect(after[0]?.status).toBe('submitted');
+    // Still a target, not a payment: a bounty nobody could close by fiat.
+    expect(after[0]?.payout.state).toBe('funded');
+    expect(after[0]?.payout.sandbox).toBe(true);
+  });
+
+  it('records no sponsor at create, so the first funder is a third party by construction', async () => {
+    // The boundary between a single-sponsor bounty and a co-funded one is a
+    // parameter rather than a fork, and it is a parameter of ONE LINE: `create`
+    // stores no sponsor, so the funding row is the only place a sponsor ever
+    // appears. There is no owner-only path for a third-party bounty to diverge
+    // from, which is the two-copies-drift failure the design warns about —
+    // there is only the one path, and this asserts the field that makes it one.
+    const h = harness();
+    const created = await h.act<BountySummary>(BOUNTY_CREATE, {
+      repoOwner: REPO,
+      repoName: REPO_NAME,
+      issueNumber: ISSUE,
+    });
+
+    expect(created.sponsorUserId).toBeNull();
+    expect(created.funds).toEqual([]);
+    expect(created.rewardCents).toBe(0);
+
+    // Bob, who does not own the repository and did not open the issue, funds it.
+    const funded = await h.act<BountySummary>(BOUNTY_FUND, {
+      bountyId: created.id,
+      amountCents: 5_000,
+      sponsorUserId: BOB,
+      reportedBy: 'bob-person',
+    });
+    // The sponsor is on the funding row and nowhere else. A second funder now has
+    // somewhere to go that is not the first funder's identity.
+    expect(funded.sponsorUserId).toBeNull();
+    expect(funded.funds).toEqual([{ sponsorUserId: BOB, amountCents: 5_000, createdAt: NOW }]);
+  });
+
+  it('refuses a top-up that names no sponsor at all, rather than writing an unattributed row', async () => {
+    // The pay rail's own rule — every fact is somebody's claim — applied to the
+    // row that decides who gets money back. A funding row with a blank sponsor
+    // would be a ledger entry nobody can be paid from and nobody can be traced
+    // to, and `fundsFor` would happily return it.
+    const h = harness();
+    const bounty = await stacked(h, [{ sponsor: ALICE, cents: 20_000 }]);
+
+    await expect(
+      h.act(BOUNTY_FUND, {
+        bountyId: bounty.id,
+        amountCents: 1_000,
+        sponsorUserId: '   ',
+        reportedBy: 'nobody',
+      }),
+    ).rejects.toMatchObject({ code: 'malformed-input' });
+
+    const after = await h.act<readonly BountySummary[]>(BOUNTY_LIST, {});
+    expect(after[0]?.funds).toHaveLength(1);
+    expect(after[0]?.rewardCents).toBe(20_000);
   });
 });

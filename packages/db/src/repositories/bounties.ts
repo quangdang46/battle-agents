@@ -71,6 +71,20 @@ export interface NewStoredBounty {
   readonly now: string;
 }
 
+/**
+ * One funding row, as the feature's port declares it.
+ *
+ * A copy rather than an import from the feature, for the reason the rest of this
+ * file is: infrastructure may not import the layer that consumes it, so the
+ * conformance between this and `StoredFund` is checked by the assignment at the
+ * composition root rather than by a type that would have to cross layers to exist.
+ */
+export interface StoredFund {
+  readonly sponsorUserId: string;
+  readonly amountCents: number;
+  readonly createdAt: string;
+}
+
 export interface BountyFilter {
   readonly status?: string;
   readonly repoOwner?: string;
@@ -272,6 +286,34 @@ export class DrizzleBountyRepository {
       throw new Error(`funding wrote a row for bounty ${bountyId}, which then was not found`);
     }
     return { totalCents: stored.rewardCents, fundedAt: stored.fundedAt ?? now };
+  }
+
+  /**
+   * The funding rows, in funding order.
+   *
+   * The sort is the contract rather than a display preference. A refund's
+   * largest-remainder residue goes to the earliest contributor, so the store owns
+   * what "earliest" means: two readers that each ordered the rows their own way
+   * would hand the leftover cent to different people for the same bounty. The
+   * `id` tiebreak exists because `created_at` has microsecond resolution and two
+   * sponsors funding in the same transaction can share it, and an unstable order
+   * is the residue rule picking a coin toss.
+   */
+  async fundsFor(bountyId: string): Promise<readonly StoredFund[]> {
+    const rows = await this.#database
+      .select({
+        sponsorUserId: bountyFunds.sponsorUserId,
+        amountCents: bountyFunds.amountCents,
+        createdAt: bountyFunds.createdAt,
+      })
+      .from(bountyFunds)
+      .where(eq(bountyFunds.bountyId, bountyId))
+      .orderBy(asc(bountyFunds.createdAt), asc(bountyFunds.id));
+    return rows.map((row) => ({
+      sponsorUserId: row.sponsorUserId,
+      amountCents: row.amountCents,
+      createdAt: row.createdAt.toISOString(),
+    }));
   }
 
   async #move(

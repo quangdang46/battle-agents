@@ -127,6 +127,20 @@
       "when": 1790406134645,
       "tag": "0017_nosy_gressill",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790410000000,
+      "tag": "0018_bounty_mode_vocabulary",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790411410432,
+      "tag": "0019_powerful_patch",
+      "breakpoints": true
     }
   ]
 }

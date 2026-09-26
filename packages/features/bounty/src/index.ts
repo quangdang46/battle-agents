@@ -6,6 +6,7 @@ export {
   BOUNTY_EXPIRE,
   BOUNTY_EXPIRED,
   BOUNTY_FUND,
+  BOUNTY_FUNDING_REFUSED,
   BOUNTY_LIST,
   BOUNTY_PAYOUT_FUNDED,
   BOUNTY_SUBMIT,
@@ -18,6 +19,7 @@ export {
   BOUNTY_STATUSES,
   BOUNTY_TRANSITIONS,
   describePayout,
+  describeRefund,
   forRepository,
   GITHUB_WEB_ORIGIN,
   isRepositoryCoordinates,
@@ -36,6 +38,21 @@ export type {
   PayoutNotice,
   RepositoryCoordinates,
 } from './domain.js';
+export { allocateProRata, REFUND_DISPOSITIONS, REFUND_NOTICES } from './refund.js';
+export type { RefundDisposition, RefundFund, RefundNotice, RefundShare } from './refund.js';
+export {
+  fundingRefused,
+  fundingRefusedError,
+  FUNDING_REFUSAL_DISPOSITIONS,
+  FUNDING_REFUSALS,
+  NO_MONEY_WAS_TAKEN,
+} from './funding.js';
+export type {
+  FundingRefusal,
+  FundingRefusalDisposition,
+  FundingRefusalReason,
+  FundingRefusedError,
+} from './funding.js';
 export {
   BOUNTY_CREATE_SHAPE,
   BOUNTY_EXPIRE_SHAPE,
@@ -71,6 +88,18 @@ export {
   readMergeDelivery,
 } from './merge.js';
 export type { MergeDelivery, MergeOutcomeEvent, MergeOutcomeInput } from './merge.js';
+export {
+  BOUNTY_MODES,
+  BOUNTY_MODE_RULES,
+  bountyModeRule,
+  canHonourMode,
+  DEFAULT_BOUNTY_MODE,
+  describeBountyMode,
+  isKnownBountyMode,
+  toKnownBountyMode,
+  unplayableModes,
+} from './modes.js';
+export type { BountyMode, BountyModeRule, ClaimantCount } from './modes.js';
 export { BOUNTY_ACTION_IDS } from './manifest.js';
 export type { BountyActionId, BountyActionTypes } from './manifest.js';
 export {
@@ -108,6 +137,7 @@ export type {
   BountyStorageFailure,
   NewStoredBounty,
   StoredBounty,
+  StoredFund,
 } from './repository.js';
 export { DISPUTE_WINDOWS, MIN_BOUNTY_CENTS, windowClosesAt, windowIsOpen } from './rules.js';
 export type { DisputeWindow } from './rules.js';

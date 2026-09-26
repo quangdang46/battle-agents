@@ -16,6 +16,13 @@
  */
 
 import { needsSandboxBanner, type PayoutState } from './payout.js';
+import {
+  allocateProRata,
+  REFUND_DISPOSITIONS,
+  REFUND_NOTICES,
+  type RefundFund,
+  type RefundNotice,
+} from './refund.js';
 import { windowClosesAt, type DisputeWindow } from './rules.js';
 
 /* ───────────────────────────── statuses ───────────────────────────── */
@@ -253,6 +260,16 @@ export interface PayoutNotice {
   readonly notice: string;
   /** The four payout-rail windows, as deadlines from the instants this bounty has. */
   readonly windows: Readonly<Record<DisputeWindow, string | null>>;
+  /**
+   * What a sponsor is owed back, which is never nothing to say.
+   *
+   * A fourth question alongside the other three, and the reason it is here rather
+   * than behind a call is that `refundUnclaimedDays` was already being computed
+   * with no reader: a deadline nobody is shown is a promise the product appears to
+   * make and does not keep. A surface that has the notice cannot forget the
+   * disposition of a co-funded bounty that expired.
+   */
+  readonly refund: RefundNotice;
 }
 
 export const SANDBOX_NOTICE =
@@ -276,6 +293,21 @@ export function describePayout(
     readonly reportedAt: string | null;
     readonly cancelledAt: string | null;
   },
+  /**
+   * Required rather than optional, and the requirement is the point.
+   *
+   * An optional argument here would let a caller build a `PayoutNotice` for a
+   * co-funded bounty that had expired and report no refund at all, which is the
+   * exact shape of the defect `needsSandboxBanner` was written against: a rule
+   * that is only correct on the paths somebody remembered to call it. Every
+   * caller has to hand over the status, the claimant and the funding rows, and
+   * therefore has to think about where the money went.
+   */
+  funding: {
+    readonly status: BountyStatus;
+    readonly claimedAgentId: string | null;
+    readonly funds: readonly RefundFund[];
+  },
 ): PayoutNotice {
   // `funded` rather than `none` whenever money is attached, because a bounty
   // with a reward and no recorded intent is a funded bounty whose funding was
@@ -293,6 +325,95 @@ export function describePayout(
       openDisputeDays: windowClosesAt('openDisputeDays', instants.reportedAt),
       refundUnclaimedDays: windowClosesAt('refundUnclaimedDays', instants.cancelledAt),
     },
+    refund: describeRefund({
+      status: funding.status,
+      funds: funding.funds,
+      cancelledAt: instants.cancelledAt,
+      claimedAgentId: funding.claimedAgentId,
+    }),
+  };
+}
+
+/**
+ * The disposition of the money on a bounty that ended without paying it.
+ *
+ * A function rather than a lookup because the answer depends on three facts that
+ * vary independently, and a table keyed on one of them would have to encode the
+ * others as hidden assumptions. What it decides is only ever the platform's own
+ * business: the contested case is referred to the repository owner and comes back
+ * with no allocation, because payout-rail section 4.1 settles that question and
+ * this function's job is to obey the settlement rather than to have an opinion.
+ *
+ * The payout STATE is deliberately not an input. A `completed` bounty is not
+ * refundable whether the transfer was reported or not — the money is owed to the
+ * solver, and a sponsor is not out of pocket in either case — so accepting the
+ * state here would have suggested it could change the answer.
+ *
+ * `claimedAgentId` is the input that is not obviously about money. It is what
+ * separates "cancelled before anybody worked on it", which the platform can
+ * settle, from "cancelled after a solver started", which it cannot — and the
+ * status alone cannot tell those apart, because a claim is never released in this
+ * lifecycle.
+ */
+export function describeRefund(input: {
+  readonly status: BountyStatus;
+  readonly funds: readonly RefundFund[];
+  readonly cancelledAt: string | null;
+  readonly claimedAgentId: string | null;
+}): RefundNotice {
+  const totalCents = input.funds.reduce((total, fund) => total + fund.amountCents, 0);
+  const deadline = windowClosesAt('refundUnclaimedDays', input.cancelledAt);
+  const nothing: RefundNotice = {
+    disposition: REFUND_DISPOSITIONS.notApplicable,
+    totalCents: 0,
+    shares: [],
+    deadline: null,
+    notice: REFUND_NOTICES.nothingOutstanding,
+  };
+
+  if (totalCents === 0 || !isTerminalBounty(input.status)) {
+    return nothing;
+  }
+  if (input.status === 'completed') {
+    // Paid, or payable and unreported. Either way the money is owed to the solver
+    // rather than returned to a sponsor, and payout-rail section 1.1 makes
+    // staying at `pending` the correct outcome when nobody reports — so treating
+    // it as not-yet-refundable is the honest reading rather than a pessimistic one.
+    return nothing;
+  }
+  if (input.status !== 'expired' || input.cancelledAt === null) {
+    // Disputed, or a terminal status this build cannot date. The owner decides.
+    // `totalCents` is reported even though `shares` is empty: how much is unspent
+    // is not in dispute, only its disposition is.
+    return {
+      disposition: REFUND_DISPOSITIONS.ownerDecides,
+      totalCents,
+      shares: [],
+      deadline,
+      notice: REFUND_NOTICES.ownerDecides,
+    };
+  }
+  if (input.claimedAgentId !== null) {
+    // Cancelled after a solver started: payout-rail section 3.2, the contested
+    // case. Referred rather than answered.
+    return {
+      disposition: REFUND_DISPOSITIONS.ownerDecides,
+      totalCents,
+      shares: [],
+      deadline,
+      notice: REFUND_NOTICES.ownerDecides,
+    };
+  }
+  // Cancelled before any solver started. Every sponsor is owed exactly what they
+  // put in, so the allocation is the identity — but it goes through the same
+  // arithmetic a partial refund uses, because a full refund and a partial one
+  // must not be two code paths that can disagree about the sum.
+  return {
+    disposition: REFUND_DISPOSITIONS.owedInFull,
+    totalCents,
+    shares: allocateProRata(input.funds, totalCents),
+    deadline,
+    notice: REFUND_NOTICES.owedInFull,
   };
 }
 
@@ -303,5 +424,25 @@ export function describePayout(
  * step: a summary is a thing that drifts from the thing it summarises, and the
  * drift in this feature would be a reward amount or a link that stopped being
  * the real one.
+ *
+ * `funds` lives here rather than on `Bounty` because it is not part of the stored
+ * record — it is a read, assembled by the summary builder alongside the payout
+ * notice. Putting it on `Bounty` would have made the row mapper invent an empty
+ * list, and an empty list on a co-funded bounty is a lie that typechecks.
  */
-export type BountySummary = Bounty & { readonly payout: PayoutNotice };
+export type BountySummary = Bounty & {
+  /**
+   * Every sponsor's contribution, in funding order.
+   *
+   * Present on the value rather than behind a call, because a refund is
+   * arithmetic on rows (payout-rail.md section 3.1) and a caller that had to ask
+   * for the rows separately could render the total and omit the attribution. A
+   * co-funded bounty whose second sponsor is invisible is the drift the design
+   * warns about, one layer up: correct arithmetic nobody can see.
+   *
+   * `rewardCents` is the sum of these, and a value that disagrees with them is
+   * the bug rather than the truth.
+   */
+  readonly funds: readonly RefundFund[];
+  readonly payout: PayoutNotice;
+};

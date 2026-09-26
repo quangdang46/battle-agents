@@ -32,7 +32,14 @@ import {
   whyFundIsRejected,
   whyListIsRejected,
   whySubmitIsRejected,
+  type FundBountyInput,
 } from './input.js';
+import {
+  canHonourMode,
+  DEFAULT_BOUNTY_MODE,
+  describeBountyMode,
+  toKnownBountyMode,
+} from './modes.js';
 import {
   BOUNTY_COMPLETED,
   GITHUB_PULL_REQUEST_MERGED,
@@ -50,6 +57,7 @@ import {
   type PayoutIntentStore,
   type PayoutState,
 } from './payout.js';
+import { fundingRefused, fundingRefusedError, FUNDING_REFUSALS } from './funding.js';
 import { DISPUTE_WINDOWS, MIN_BOUNTY_CENTS, windowIsOpen } from './rules.js';
 import type { BountyRepository, StoredBounty } from './repository.js';
 
@@ -61,6 +69,26 @@ export const BOUNTY_SUBMITTED = 'bounty.submitted';
 export const BOUNTY_EXPIRED = 'bounty.expired';
 /** Recorded when a sponsor commits money. The spelling lives in payout.ts. */
 export const BOUNTY_PAYOUT_FUNDED = 'bounty.payout_funded';
+/**
+ * Recorded when a sponsor was refused, so the refusal is not silent.
+ *
+ * Persisted, and that is the whole reason it exists. Payout-rail section 4.2
+ * says the log is what settles a dispute, and a sponsor told "refused" whose
+ * attempt left no trace has nothing to show the repository owner and nothing for
+ * this platform to answer with. It is the third fact the rail writes that is not
+ * a state — a bounty has no `refused` status, and adding one would be a claim
+ * that the platform decided something about the money rather than declining to
+ * accept it.
+ *
+ * The payload carries the amount ATTEMPTED and a `reason`, never a `funded` or a
+ * `totalCents`, so nothing downstream can read this row as money that landed. No
+ * funding row is written and no payout intent is touched: the sum of
+ * `bounty_funds` is what the sponsors are owed, and a refused contribution is
+ * not part of it.
+ */
+export const BOUNTY_FUNDING_REFUSED = 'bounty.funding_refused';
+
+export { FUNDING_REFUSALS } from './funding.js';
 
 /* ───────────────────────────── actions ───────────────────────────── */
 
@@ -96,6 +124,7 @@ export function bountyFeature(dependencies: BountyDependencies): GameFeature {
       BOUNTY_EXPIRED,
       BOUNTY_COMPLETED,
       PULL_REQUEST_MERGED_OUTCOME,
+      BOUNTY_FUNDING_REFUSED,
     ],
     capabilities: [
       { name: BOUNTY_CREATE, description: 'Put a reward on a real GitHub issue.' },
@@ -171,12 +200,14 @@ async function create(
     issueUrl: issueUrlFor(coordinates, input.issueNumber),
     currency: input.currency?.trim() || DEFAULT_CURRENCY,
     requirements: (input.requirements ?? []).map((requirement) => requirement.trim()),
-    // 'race' is the default rather than a declared constant on purpose: the
-    // mode taxonomy belongs to ba-bounty-modes-tiers-seasons-62l, and a constant
-    // named RACE_MODE here would be this bead claiming half that enum. What it
-    // needs is a stored value, and the claim path treats every value it does
-    // not recognise as exclusive.
-    mode: input.mode?.trim() || 'race',
+    // The default, not a guess. `first-valid` is the one mode the claim and
+    // merge path can keep, so a bounty nobody labelled is one this build can
+    // resolve — and a creator that DOES label it is held to the taxonomy, which
+    // `whyCreateIsRejected` is what checks. The mode is stored from creation
+    // rather than defaulted on first use, because a mode added later means every
+    // live row needs a backfill and the backfill silently picks a claim policy
+    // for bounties whose sponsor chose none.
+    mode: input.mode?.trim() || DEFAULT_BOUNTY_MODE,
     // Null on purpose, and it is the only null-looking decision in this create.
     // A sponsor attaches through `bounty.fund`, which writes a funding row, and
     // the total and the refund arithmetic are per row. Putting a sponsor here
@@ -198,7 +229,7 @@ async function create(
       mode: summary.mode,
     }),
   );
-  return withPayout(payouts, summary);
+  return withPayout(repository, payouts, summary);
 }
 
 const DEFAULT_CURRENCY = 'USD';
@@ -220,7 +251,7 @@ async function list(
     ...(input.repoOwner === undefined ? {} : { repoOwner: input.repoOwner }),
     ...(input.repoName === undefined ? {} : { repoName: input.repoName }),
   });
-  return Promise.all(stored.map((row) => withPayout(payouts, toBounty(row))));
+  return Promise.all(stored.map((row) => withPayout(repository, payouts, toBounty(row))));
 }
 
 async function claim(
@@ -266,6 +297,27 @@ async function claim(
     );
   }
 
+  // A mode this build knows and cannot keep is refused HERE, and not resolved as
+  // if it were `first-valid`. Those are the two answers that look alike to the
+  // caller and are not alike at all: under `maintainer-picks` the sponsor
+  // promised to choose among several, so a first-come-first-served claim does
+  // not merely disappoint, it sends an agent to do work another agent's pull
+  // request is about to beat. An unrecognised mode is deliberately NOT this
+  // branch and keeps the older exclusive reading, because a value nobody can
+  // name has no promise attached to it to keep.
+  const storedMode = toKnownBountyMode(current.mode);
+  if (storedMode !== undefined && !canHonourMode(storedMode)) {
+    throw Object.assign(
+      new Error(
+        `bounty ${current.id} resolves under ${describeBountyMode(storedMode)}, and this build ` +
+          'cannot keep that claim: it holds one claimant per bounty, so a mode decided by ' +
+          'comparing several is refused rather than quietly resolved as a race. No other mode ' +
+          'can be taken until the store can hold more than one holder.',
+      ),
+      { code: 'bounty-mode-not-playable' },
+    );
+  }
+
   const claimed = await repository.claim(input.bountyId, input.agentId, context.now());
   if (claimed === undefined) {
     // A lost race, not a missing row. The two answers stay distinct because they
@@ -291,7 +343,7 @@ async function claim(
       mode: summary.mode,
     }),
   );
-  return withPayout(payouts, summary);
+  return withPayout(repository, payouts, summary);
 }
 
 async function submit(
@@ -372,7 +424,7 @@ async function submit(
       issueUrl: summary.issueUrl,
     }),
   );
-  return withPayout(payouts, summary);
+  return withPayout(repository, payouts, summary);
 }
 
 async function fund(
@@ -390,7 +442,7 @@ async function fund(
   }
   const current = await require(repository, input.bountyId);
   if (isTerminalBounty(toKnownStatus(current.status))) {
-    throw new Error(`bounty ${current.id} is ${current.status} and cannot be funded`);
+    throw await refuseFunding(context, input, current, FUNDING_REFUSALS.terminal);
   }
 
   const previous = await payouts.currentFor(input.bountyId);
@@ -401,14 +453,16 @@ async function fund(
   // from the column to the row. A second sponsor tops the same state up; the
   // state that cannot be topped up is a payable one, because money cannot be
   // added to something a solver is already owed.
+  //
+  // Which is `pending`, and `pending` is set by the MERGE. So the answer to
+  // payout-rail section 7's open question — may a sponsor stack on a bounty a
+  // solver has already claimed? — is yes, and the boundary is the merge rather
+  // than the claim or the submit. `claimedAgentId` and `prUrl` being set is no
+  // evidence either way: a solver's work is not a reason to refuse a stranger
+  // money, and the refund arithmetic is the same whether the funds arrive before
+  // or after it.
   if (previous !== undefined && previous.state !== 'funded') {
-    throw Object.assign(
-      new Error(
-        `bounty ${input.bountyId} is already ${previous.state}; a payable bounty cannot take ` +
-          'more money',
-      ),
-      { code: 'payout-illegal-transition' },
-    );
+    throw await refuseFunding(context, input, current, FUNDING_REFUSALS.payable, previous.state);
   }
   const intent = declareFunding({
     bountyId: input.bountyId,
@@ -455,7 +509,7 @@ async function fund(
       reportedBy: input.reportedBy,
     }),
   );
-  return withPayout(payouts, summary);
+  return withPayout(repository, payouts, summary);
 }
 
 async function expire(
@@ -481,7 +535,7 @@ async function expire(
   await context.runtime.emit(
     event(context, BOUNTY_EXPIRED, { bountyId: summary.id, status: summary.status }),
   );
-  return withPayout(payouts, summary);
+  return withPayout(repository, payouts, summary);
 }
 
 /* ───────────────────────────── the merge handler ───────────────────────────── */
@@ -644,30 +698,102 @@ function toBounty(row: StoredBounty): Bounty {
 }
 
 /**
- * Attaches the payout notice.
+ * Attaches the payout notice and the funding rows.
  *
  * Every action that returns a bounty goes through here, which is what makes
- * `needsSandboxBanner` a production caller rather than a tested function with no
- * caller. There is no path out of this feature that hands a caller a bounty
- * without the question of whether the money moved attached to it, and a surface
- * cannot render the reward without rendering the notice because the notice is
- * part of the value it was given.
+ * `needsSandboxBanner` and `describeRefund` production callers rather than tested
+ * functions with no caller. There is no path out of this feature that hands a
+ * caller a bounty without the question of whether the money moved attached to it,
+ * and without who put it there — and a surface cannot render the reward or the
+ * refund without rendering the notices, because they are part of the value it was
+ * given.
+ *
+ * The funds are read HERE and not by the callers, for the reason the reads above
+ * are here: one place decides what a summary costs, and no action can forget. The
+ * alternative — each action reading its own rows — is six chances to attach a
+ * total to no attribution, which is the defect this whole file exists to prevent.
  */
-async function withPayout(payouts: PayoutIntentStore, bounty: Bounty): Promise<BountySummary> {
-  const intent = await payouts.currentFor(bounty.id);
+async function withPayout(
+  repository: BountyRepository,
+  payouts: PayoutIntentStore,
+  bounty: Bounty,
+): Promise<BountySummary> {
+  const [intent, funds] = await Promise.all([
+    payouts.currentFor(bounty.id),
+    repository.fundsFor(bounty.id),
+  ]);
   const state: PayoutState | 'none' = intent?.state ?? 'none';
   return {
     ...bounty,
-    payout: describePayout(bounty.rewardCents, state, {
-      fundedAt: bounty.fundedAt,
-      completedAt: bounty.mergedAt,
-      // The intent's own instant, and only once it is actually reported: before
-      // `recorded` nobody has claimed a transfer happened, so there is no dispute
-      // deadline to compute from one.
-      reportedAt: intent !== undefined && intent.state === 'recorded' ? intent.recordedAt : null,
-      cancelledAt: bounty.expiredAt,
-    }),
+    funds,
+    payout: describePayout(
+      bounty.rewardCents,
+      state,
+      {
+        fundedAt: bounty.fundedAt,
+        completedAt: bounty.mergedAt,
+        // The intent's own instant, and only once it is actually reported: before
+        // `recorded` nobody has claimed a transfer happened, so there is no dispute
+        // deadline to compute from one.
+        reportedAt: intent !== undefined && intent.state === 'recorded' ? intent.recordedAt : null,
+        cancelledAt: bounty.expiredAt,
+      },
+      {
+        status: bounty.status,
+        claimedAgentId: bounty.claimedAgentId,
+        funds,
+      },
+    ),
   };
+}
+
+/**
+ * Records a top-up that was turned away, and returns the error that says so.
+ *
+ * Returning the error rather than throwing it is what lets the caller `throw
+ * await refuseFunding(...)`: the event is emitted and AWAITED before the caller
+ * is told, so the row exists by the time anyone hears about the refusal. A
+ * refusal that is announced first and recorded later is a refusal a crash can
+ * lose, and this is the one event in the feature whose absence is invisible to
+ * everyone who was not looking.
+ *
+ * The one value built here is written to BOTH places a sponsor can meet it: the
+ * thrown error and the log row. Two hand-written copies of that sentence would
+ * be how somebody is told their money is safe at the moment of the refusal and
+ * something vaguer when they read the log a week later, which is the failure
+ * payout-rail section 4.2's "if the log cannot settle a dispute, the design is
+ * incomplete" is about.
+ */
+async function refuseFunding(
+  context: RuntimeContext,
+  input: FundBountyInput,
+  current: StoredBounty,
+  reason: (typeof FUNDING_REFUSALS)[keyof typeof FUNDING_REFUSALS],
+  /** The payout state, when the reason is about the payout rather than the status. */
+  payoutState?: PayoutState,
+): Promise<Error> {
+  const refusal = fundingRefused(reason);
+  await context.runtime.emit(
+    event(context, BOUNTY_FUNDING_REFUSED, {
+      bountyId: input.bountyId,
+      sponsorUserId: input.sponsorUserId,
+      amountCents: input.amountCents,
+      reason: refusal.reason,
+      disposition: refusal.disposition,
+      notice: refusal.notice,
+      bountyStatus: current.status,
+      // The state the intent was actually in, rather than the status. On a
+      // `submitted` bounty the two disagree, and a reader deciding whether the
+      // work is done needs the payout's word for it, not the lifecycle's.
+      ...(payoutState === undefined ? {} : { payoutState }),
+    }),
+  );
+  return fundingRefusedError(
+    refusal,
+    `bounty ${current.id} is ${current.status} and cannot be funded` +
+      (payoutState === undefined ? '' : `; its payout is already ${payoutState}`) +
+      '.',
+  );
 }
 
 function event(context: RuntimeContext, type: string, payload: Record<string, unknown>): GameEvent {

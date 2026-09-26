@@ -1,0 +1,20 @@
+-- 0019. Only the column default. See below for what this file used to contain
+-- and why that was a second copy rather than a harmless extra statement.
+--
+-- drizzle-kit generated this against a development database where
+-- 0018_bounty_mode_vocabulary.sql had not been applied, so it saw
+-- bounties_mode_known as a constraint it had yet to create and emitted it a
+-- second time. Applying this file after 0018 therefore failed with "constraint
+-- already exists" — and it did so as a SEED failure, three stages downstream of
+-- the cause, which is the shape of error this repository keeps paying for.
+--
+-- The CHECK is not repeated here. It is in 0018, and it is in the schema source
+-- at packages/db/src/schema/features/bounty.ts, so `db:generate` will not
+-- recreate it: the two agree, and the mismatch that produced this file was
+-- between the FILES and the DATABASE, not between the files and each other.
+--
+-- Generating a migration against a database that is behind the journal is the
+-- general hazard here, and it is the same class as everything else in this
+-- repository's gate work: an artifact generated from a state nobody checked is
+-- an artifact that can disagree with the thing it describes.
+ALTER TABLE "bounties" ALTER COLUMN "mode" SET DEFAULT 'first-valid';

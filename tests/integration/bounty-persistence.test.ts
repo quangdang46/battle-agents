@@ -5,6 +5,7 @@ import type { BountySummary, PayoutIntent } from '@battle-agents/bounty';
 import {
   agents,
   bounties,
+  bountyFunds,
   closeDatabasePool,
   createDatabase,
   DrizzleBountyRepository,
@@ -262,5 +263,71 @@ describe('a bounty is completed exactly once, by the state transition', () => {
     // The claim window runs from the FIRST funding, not the latest, so a late
     // sponsor cannot keep a bounty available forever.
     expect(afterSecond.fundedAt).toBe(afterFirst.fundedAt);
+  });
+
+  it('reads three sponsors back in funding order, and a cancelled stack still adds up', async () => {
+    // The unit suite proves the feature refuses in the right places; this proves
+    // the real ORDER BY and the real aggregate agree with it, because those are
+    // the two things a hand-written double would have got right by construction.
+    //
+    // Ordering is not cosmetic. A refund's largest-remainder residue goes to the
+    // earliest contributor, so if the store and the arithmetic disagreed about
+    // "earliest" the same bounty would hand a leftover cent to a different person
+    // depending on who asked. Three rows rather than two because the third is
+    // what makes an ordering distinguishable from an accident of two.
+    const alice = await fixture();
+    const bob = await fixture();
+    const carol = await fixture();
+    const { run } = runtime();
+    const slug = randomUUID().slice(0, 8);
+
+    const created = (await run('bounty.create', {
+      repoOwner: 'battle-agents',
+      repoName: `stack-${slug}`,
+      issueNumber: 11,
+    })) as BountySummary;
+
+    let latest = created;
+    for (const [sponsor, cents, who] of [
+      [alice.userId, 20_000, 'alice'],
+      [bob.userId, 5_000, 'bob'],
+      [carol.userId, 10_000, 'carol'],
+    ] as const) {
+      latest = (await run('bounty.fund', {
+        bountyId: created.id,
+        amountCents: cents,
+        sponsorUserId: sponsor,
+        reportedBy: `${who}-person`,
+      })) as BountySummary;
+    }
+
+    expect(latest.rewardCents).toBe(35_000);
+    expect(latest.funds.map((fund) => [fund.sponsorUserId, fund.amountCents])).toEqual([
+      [alice.userId, 20_000],
+      [bob.userId, 5_000],
+      [carol.userId, 10_000],
+    ]);
+
+    // Cancelling must not swallow the stack, and the shares the platform states
+    // must be the sum of the rows rather than a second total that can drift from
+    // them. `expired` is reachable from `open`, so no agent is needed.
+    const expired = (await run('bounty.expire', { bountyId: created.id })) as BountySummary;
+    expect(expired.payout.refund.totalCents).toBe(35_000);
+    expect(expired.payout.refund.shares).toEqual([
+      { sponsorUserId: alice.userId, amountCents: 20_000 },
+      { sponsorUserId: bob.userId, amountCents: 5_000 },
+      { sponsorUserId: carol.userId, amountCents: 10_000 },
+    ]);
+    expect(
+      expired.payout.refund.shares.reduce((total, share) => total + share.amountCents, 0),
+    ).toBe(expired.rewardCents);
+
+    // And the underlying rows are still the ledger, three of them, untouched by
+    // the refund statement the platform just made about them.
+    const rows = await database
+      .select({ sponsorUserId: bountyFunds.sponsorUserId, amountCents: bountyFunds.amountCents })
+      .from(bountyFunds)
+      .where(eq(bountyFunds.bountyId, created.id));
+    expect(rows).toHaveLength(3);
   });
 });

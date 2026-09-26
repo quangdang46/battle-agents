@@ -175,4 +175,30 @@ export interface BountyRepository {
     amountCents: number,
     now: string,
   ): Promise<{ readonly totalCents: number; readonly fundedAt: string }>;
+
+  /**
+   * Every sponsor's contribution to a bounty, in the order the money arrived.
+   *
+   * The read that makes the funding rows usable rather than merely correct. A
+   * store can enforce `rewardCents = SUM(funds)` all day and the attribution is
+   * still invisible one layer up, which is where a refund breaks: section 3.1 of
+   * the payout rail is arithmetic on rows, and a feature that cannot ask for the
+   * rows cannot do it, cannot show a sponsor their own share, and cannot tell two
+   * co-sponsors apart.
+   *
+   * ORDER IS PART OF THE CONTRACT, not a convenience. The residue of a rounded
+   * refund goes to the earliest contributor, so "earliest" has to mean the same
+   * thing to the store, to this read and to the arithmetic — otherwise the same
+   * bounty hands a different cent to a different person depending on who asked.
+   * Funding order, with the row id breaking ties within one instant.
+   */
+  fundsFor(bountyId: string): Promise<readonly StoredFund[]>;
+}
+
+/** One funding row, as the store holds it. */
+export interface StoredFund {
+  readonly sponsorUserId: string;
+  readonly amountCents: number;
+  /** ISO instant. Funding order is read from this and the row id. */
+  readonly createdAt: string;
 }
