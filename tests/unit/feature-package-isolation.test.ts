@@ -83,6 +83,7 @@ const OWNED: Readonly<Record<string, readonly string[]>> = {
     'validateSkeleton',
     'drawList',
   ],
+  world: ['WORLD_ACTION_IDS', 'BUILDINGS', 'buildingFor', 'gateRefusal', 'worldFeature'],
 };
 
 /** Same technique as scaffold.test.ts, and the same reason for it. */

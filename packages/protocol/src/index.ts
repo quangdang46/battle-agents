@@ -139,6 +139,7 @@ export {
   QUEST_EVENTS,
   SESSION_EVENTS,
   SOCIAL_EVENTS,
+  WORLD_EVENTS,
 } from './event-names.js';
 
 export { PROTOCOL_VERSION, protocolVersionSchema } from './version.js';
@@ -176,5 +177,6 @@ export type {
   RegisteredActionId,
   ReputationActionId,
   SocialActionId,
+  WorldActionId,
 } from './generated/action-ids.js';
 export { isRegisteredActionId, REGISTERED_ACTION_IDS } from './generated/action-ids.js';

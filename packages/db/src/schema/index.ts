@@ -12,3 +12,4 @@ export * from './features/progression.js';
 export * from './features/reputation.js';
 export * from './features/quest.js';
 export * from './features/social.js';
+export * from './features/world.js';

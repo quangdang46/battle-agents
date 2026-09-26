@@ -59,6 +59,9 @@
       "path": "packages/features/social"
     },
     {
+      "path": "packages/features/world"
+    },
+    {
       "path": "packages/adapters/_template"
     },
     {

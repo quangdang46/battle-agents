@@ -9,6 +9,7 @@ import {
   DrizzleBountyRepository,
   DrizzleCredentialStore,
   DrizzlePayoutIntentStore,
+  DrizzleWorldRepository,
   DrizzleProgressionRepository,
   DrizzleQuestRepository,
   DrizzleReputationRepository,
@@ -127,6 +128,7 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
       socialRepository: new DrizzleSocialRepository(dependencies.database),
       bountyRepository: new DrizzleBountyRepository(dependencies.database),
       payoutIntentStore: new DrizzlePayoutIntentStore(dependencies.database),
+      worldStore: new DrizzleWorldRepository(dependencies.database),
       battleStore: new DrizzleBattleRepository(dependencies.database),
       achievementsRepository: new DrizzleAchievementsRepository(dependencies.database),
     });

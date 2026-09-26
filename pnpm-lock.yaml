@@ -95,6 +95,9 @@ importers:
       '@battle-agents/social':
         specifier: workspace:*
         version: link:../../packages/features/social
+      '@battle-agents/world':
+        specifier: workspace:*
+        version: link:../../packages/features/world
       better-auth:
         specifier: ^1.3.34
         version: 1.7.5(drizzle-kit@0.31.11)(drizzle-orm@0.45.3(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.0))(next@15.5.26(@types/node@24.13.6)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(pg@8.23.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.0.1(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(esbuild@0.28.2)(tsx@4.23.15)))
@@ -335,6 +338,15 @@ importers:
         version: link:../../protocol
 
   packages/features/social:
+    dependencies:
+      '@battle-agents/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@battle-agents/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+
+  packages/features/world:
     dependencies:
       '@battle-agents/core':
         specifier: workspace:*

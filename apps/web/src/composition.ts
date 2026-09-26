@@ -2,10 +2,11 @@ import { agentFeature } from '@battle-agents/agent';
 import { bountyFeature } from '@battle-agents/bounty';
 import { battleFeature } from '@battle-agents/battle';
 import { achievementsFeature } from '@battle-agents/achievements';
-import { progressionFeature } from '@battle-agents/progression';
+import { meetsGate, progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { reputationFeature } from '@battle-agents/reputation';
 import { socialFeature } from '@battle-agents/social';
+import { worldFeature } from '@battle-agents/world';
 import { createRuntime } from '@battle-agents/core';
 import type { EventBus, Logger, Runtime, StateStore } from '@battle-agents/core';
 
@@ -17,6 +18,7 @@ import {
   DrizzleBountyRepository,
   DrizzlePayoutIntentStore,
   DrizzleProgressionRepository,
+  DrizzleWorldRepository,
   DrizzleQuestRepository,
   DrizzleReputationRepository,
   DrizzleSessionRepository,
@@ -117,6 +119,13 @@ export interface GameRuntimeDependencies {
    * is the only layer allowed to see both.
    */
   readonly payoutIntentStore: DrizzlePayoutIntentStore;
+  /**
+   * The base, as the concrete repository rather than the feature's port, for
+   * the reason the comment at the top of this interface gives: naming a
+   * removable feature's type in a signature that outlives the removal strip
+   * would leave a removed feature's name in a live line.
+   */
+  readonly worldStore: DrizzleWorldRepository;
 }
 
 export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtime {
@@ -162,6 +171,19 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
         matchMs: 900_000,
       }),
       achievementsFeature({ repository: dependencies.achievementsRepository }),
+      // The composition root is the ONE layer allowed to see two features, and
+      // this is the reason it exists: world needs to know a character's level
+      // and progression owns that, and the two are siblings that must never
+      // import each other. So the level read and the gate are supplied HERE,
+      // and world contains no arithmetic of its own — a second copy of
+      // `level >= required` would be a second answer to a question one feature
+      // already owns.
+      worldFeature({
+        repository: dependencies.worldStore,
+        levelOf: async (agentId: string) =>
+          (await dependencies.progressionRepository.find(agentId))?.level ?? 1,
+        gate: meetsGate,
+      }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

@@ -80,6 +80,9 @@ export type GuildActionId =
   | 'guild.quests'
   | 'guild.tally';
 
+/** world */
+export type WorldActionId = 'world.read' | 'world.buildings' | 'world.unlocks' | 'world.upgrade';
+
 /** Every action id in this build, sorted. The type `act()` is checked against. */
 export type RegisteredActionId =
   | 'achievements.catalogue'
@@ -132,7 +135,11 @@ export type RegisteredActionId =
   | 'social.leaderboard'
   | 'social.poke'
   | 'social.profile'
-  | 'social.send';
+  | 'social.send'
+  | 'world.buildings'
+  | 'world.read'
+  | 'world.unlocks'
+  | 'world.upgrade';
 
 /**
  * Whether a string names an action this build registers.
@@ -199,4 +206,8 @@ export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'social.poke',
   'social.profile',
   'social.send',
+  'world.buildings',
+  'world.read',
+  'world.unlocks',
+  'world.upgrade',
 ];

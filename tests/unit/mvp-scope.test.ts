@@ -89,6 +89,22 @@ const DECLARED_MVP_FEATURES: Readonly<Record<string, string>> = {
   guild:
     '§10.4 guild endgame + §11.3 collective funding. M6. The ACL port features/social requires. ' +
     'No guild-war, no trading, no shop, and no path from money to standing.',
+  // §10.2 "Buildings unlock capability" and §27's M5 line: a base whose buildings
+  // unlock capability, plus the offline-to-online continuity that makes a
+  // character outlive its sessions. This is the consumer progression's level
+  // gate has been waiting for — the gate function shipped with nothing behind
+  // it, and a gate with nothing behind it is a function nobody calls.
+  //
+  // The scope is deliberately the SMALLEST reading of M5, because §17.8's risk
+  // 8 bans MMO-shaped features from the MVP and a persistent world is the
+  // easiest place to smuggle one in. What is here is a base, a building table
+  // and continuity. NO resources, NO crafting, NO trading, NO territory, NO
+  // housing — and no economy of any kind, so the thing §10.4 rules out is
+  // unreachable here by there being no second noun to trade.
+  world:
+    '§10.2 buildings unlock capability + §27 M5 (base, capability unlocks, offline-to-online ' +
+    'continuity). A base keyed on the AGENT, so closing every session leaves it standing. ' +
+    'No resources, no crafting, no trading, no territory, no housing, no economy.',
 };
 
 /** What a `somethingFeature({` construction looks like once prettier has run. */

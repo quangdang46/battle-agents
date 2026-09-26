@@ -57,7 +57,8 @@
       "@battle-agents/quest": ["./packages/features/quest/src/index.ts"],
       "@battle-agents/reputation": ["./packages/features/reputation/src/index.ts"],
       "@battle-agents/social": ["./packages/features/social/src/index.ts"],
-      "@battle-agents/web": ["./apps/web/src/index.ts"]
+      "@battle-agents/web": ["./apps/web/src/index.ts"],
+      "@battle-agents/world": ["./packages/features/world/src/index.ts"]
     }
   },
   // Package test files are typechecked here rather than in each package, for

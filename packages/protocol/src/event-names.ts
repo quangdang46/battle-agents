@@ -111,6 +111,11 @@ export const SOCIAL_EVENTS = {
   pokeSent: 'social.poke_sent',
 } as const;
 
+/** M5's base. A building rising is the only thing the world narrates. */
+export const WORLD_EVENTS = {
+  buildingRaised: 'world.building_raised',
+} as const;
+
 /**
  * The merge that started all of it, and the reviewer's evidence. Not in a
  * group because no feature narrates it: the GitHub integration emits it, and
@@ -162,6 +167,7 @@ export const GAME_EVENT_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.values(GUILD_EVENTS),
   ...Object.values(BATTLE_EVENTS),
   ...Object.values(SOCIAL_EVENTS),
+  ...Object.values(WORLD_EVENTS),
   PULL_REQUEST_MERGED,
   PULL_REQUEST_MERGED_OUTCOME,
 ]);

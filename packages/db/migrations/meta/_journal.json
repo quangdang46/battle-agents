@@ -148,6 +148,13 @@
       "when": 1790413014651,
       "tag": "0020_guild_teams_treasury_quests",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790413074651,
+      "tag": "0021_agent_bases",
+      "breakpoints": true
     }
   ]
 }
