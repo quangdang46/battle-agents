@@ -202,7 +202,12 @@ async function derive(
         continue;
       }
       held.add(rule.code);
-      await context.bus.publish({
+      // `emit`, not `bus.publish`, for the reason progression's level-up gives:
+      // the event is in this feature's `persistedEvents`, and only `emit`
+      // appends to the state store before publishing. Re-entering the dispatcher
+      // is not a risk here — nothing handles `achievement.awarded`, including
+      // this feature, whose rules are all triggered by the other names.
+      await context.runtime.emit({
         type: ACHIEVEMENT_AWARDED,
         occurredAt: context.now(),
         actorId: agentId,

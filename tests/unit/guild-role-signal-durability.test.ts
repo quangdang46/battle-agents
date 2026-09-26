@@ -303,6 +303,58 @@ describe('every guild role signal is a durable event', () => {
     ).toEqual([]);
   });
 
+  it('reaches the store on the way out, not only the bus', () => {
+    // The assertion above proves a feature DECLARES an event as durable. It says
+    // nothing about how that event leaves the feature, and those are two
+    // different questions — which is how `agent.level_up` and
+    // `achievement.awarded` were both in a `persistedEvents` array, both passed
+    // every test in this file, and neither reached `event_log`.
+    //
+    // `emit` appends to the state store and then publishes. `bus.publish`
+    // publishes and stops. A feature that reaches for the bus directly gets an
+    // event that is durable on paper and absent from the log, and nothing in
+    // this file could see it, because the declaration was correct.
+    //
+    // Scoped to the features PRESENT, for the reason the assertion above gives:
+    // a stripped feature is neither durable nor bus-only, it is not in this
+    // build, and reporting it would fail the removal test on the assertion
+    // meant to prove the dependency graph is clean.
+    const present = new Set(featureDirs());
+    const offenders: string[] = [];
+
+    for (const dir of featureDirs()) {
+      if (!present.has(dir)) continue;
+      const persisted = new Set(declaredPersistedEvents(dir));
+      if (persisted.size === 0) continue;
+      const constants = constantValues(dir);
+      const src = join(dir, 'src');
+      if (!existsSync(src)) continue;
+      for (const file of walk(src)) {
+        const source = stripComments(readFileSync(file, 'utf8'));
+        // A publish is only a violation when the TYPE is one this feature says
+        // it persists. `bus.publish` is the right call for everything else, and
+        // a blanket ban on it would push the code toward a dispatch that does
+        // not exist.
+        for (const call of source.matchAll(/bus\.publish\(\s*\{([^}]*)\}/g)) {
+          const type = (call[1] ?? '').match(/type:\s*([A-Z0-9_]+)/)?.[1];
+          const value = type === undefined ? undefined : constants.get(type);
+          if (value !== undefined && persisted.has(value)) {
+            offenders.push(
+              `${dir.replace(`${repoRoot}/`, '')}: '${value}' is declared persisted but published straight to the bus`,
+            );
+          }
+        }
+      }
+    }
+
+    expect(
+      offenders,
+      `These events are in a feature's persistedEvents, so the store promises to keep them, ` +
+        'but they are published with bus.publish, which skips the store entirely. Use ' +
+        `context.runtime.emit instead:\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
   it('still knows the two types the guild relies on, so the set is not empty by accident', () => {
     if (!existsSync(GUILD_RULES)) return; // stripped by the removal test
     const evidence = guildEvidenceTypes();

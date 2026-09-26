@@ -143,7 +143,15 @@ export function progressionFeature(dependencies: ProgressionDependencies): GameF
     await repository.save(after);
 
     if (after.level > before.level) {
-      await context.bus.publish({
+      // `emit`, not `bus.publish`. The event is declared in `persistedEvents`
+      // below, and the two are not interchangeable: `emit` appends to the state
+      // store before it publishes, and `bus.publish` skips straight to the bus.
+      // So the level-up was in the durability list and absent from the log — a
+      // row the store promised to keep and nothing had written. The reason to
+      // reach for the bus directly was to avoid re-entering the dispatcher, and
+      // it costs nothing: `agent.level_up` is not an entry in this feature's own
+      // outcome table, so nothing here handles it.
+      await context.runtime.emit({
         type: AGENT_LEVEL_UP,
         occurredAt: context.now(),
         actorId: after.agentId,
