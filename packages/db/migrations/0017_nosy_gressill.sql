@@ -1,0 +1,1 @@
+ALTER TABLE "payout_intents" ADD CONSTRAINT "payout_intents_state_known" CHECK ("payout_intents"."state" IN ('funded', 'pending', 'recorded'));

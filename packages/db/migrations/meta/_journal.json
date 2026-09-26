@@ -113,6 +113,20 @@
       "when": 1790394497079,
       "tag": "0015_feature_state",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790404731495,
+      "tag": "0016_battle_replay_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790406134645,
+      "tag": "0017_nosy_gressill",
+      "breakpoints": true
     }
   ]
 }

@@ -173,5 +173,12 @@ export const payoutIntents = pgTable(
     uniqueIndex('payout_intents_bounty_id_key').on(table.bountyId),
     check('payout_intents_amount_cents_non_negative', sql`${table.amountCents} >= 0`),
     check('payout_intents_reported_by_not_empty', sql`length(trim(${table.reportedBy})) > 0`),
+    // The constraint the comment above this table has claimed since it was
+    // written, and which did not exist. `state` is a CHECK rather than a pgEnum
+    // for the reason the comment gives, and a pgEnum would have been the honest
+    // way to get it — so the gap was a CHECK that was described and never
+    // written, which is the failure this repository keeps meeting. A payout
+    // intent in a state the feature cannot read is a row nothing can process.
+    check('payout_intents_state_known', sql`${table.state} IN ('funded', 'pending', 'recorded')`),
   ],
 );
