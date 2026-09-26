@@ -25,6 +25,7 @@ import {
 } from './feature.js';
 import { AGENT_NAME_TAKEN, AGENT_NOT_OWNED, type AgentRepository } from './repository.js';
 import type { SessionEndReason, SessionStatus } from './session.js';
+import { SESSION_EVENTS } from '@battle-agents/protocol';
 
 const AT = '2026-09-24T00:00:00.000Z';
 
@@ -190,9 +191,15 @@ class InMemorySessionRepository {
   }
 }
 
-function harnessWith(dependencies: Parameters<typeof agentFeature>[0]): { runtime: Runtime } {
+function harnessWith(dependencies: Parameters<typeof agentFeature>[0]): {
+  runtime: Runtime;
+  seen: GameEvent[];
+} {
   const bus = createInMemoryEventBus();
+  const seen: GameEvent[] = [];
+  bus.subscribe((each) => seen.push(each));
   return {
+    seen,
     runtime: createRuntime({
       extensions: [agentFeature(dependencies)],
       store: new InMemoryStateStore(),
@@ -545,6 +552,69 @@ describe('driving a running session', () => {
       reason: 'completed',
     });
     expect(ended).toEqual({ sessionId: created.id, status: 'ended', reason: 'completed' });
+  });
+
+  it('says the session ended, so everything downstream of an ending can see it', async () => {
+    // Ending a session was a state change and nothing else, so an ending that
+    // came through the protocol was invisible: the battle pause clock, the
+    // activity trail, the public stream and the crash badge all learned about
+    // endings only from a harness reporting one. Two ways to end a run, and the
+    // one a client calls by hand was the one nothing could see.
+    const store = new InMemorySessionRepository();
+    const { runtime, seen } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+    const created = await store.createSession({
+      agentId: 'agent-1',
+      installationId: 'i-1',
+      projectId: null,
+      now: AT,
+    });
+
+    await runtime.runAction('session.end', { sessionId: created.id, reason: 'completed' });
+
+    // `sessionId` is in the payload because that is the field battle's pause
+    // clock reads to find the battles this run was in.
+    const ended = seen.filter((each) => each.type === SESSION_EVENTS.ended);
+    expect(ended, 'the ending reached nobody').toHaveLength(1);
+    expect(ended[0]?.payload).toMatchObject({ sessionId: created.id, reason: 'completed' });
+  });
+
+  it('pays the death rule for a crash, and nothing for any other ending', async () => {
+    // §10.2: HP 0 never kills the character, and a crashed session grants
+    // experience. The award had a price and no producer — 150 XP that no run
+    // could ever earn, which is invisible rather than broken, because a price
+    // nothing pays fails no test.
+    const store = new InMemorySessionRepository();
+    const { runtime, seen } = harnessWith({
+      repository: new InMemoryAgentRepository(),
+      sessionRepository: store,
+    });
+    const crashed = await store.createSession({
+      agentId: 'agent-1',
+      installationId: 'i-1',
+      projectId: null,
+      now: AT,
+    });
+    const finished = await store.createSession({
+      agentId: 'agent-1',
+      installationId: 'i-1',
+      projectId: null,
+      now: AT,
+    });
+
+    await runtime.runAction('session.end', { sessionId: crashed.id, reason: 'crashed' });
+    await runtime.runAction('session.end', { sessionId: finished.id, reason: 'completed' });
+
+    const recovered = seen.filter((each) => each.type === SESSION_EVENTS.recovered);
+    expect(recovered, 'a crash paid nothing').toHaveLength(1);
+    expect(recovered[0]?.payload).toMatchObject({ sessionId: crashed.id });
+    // And the run that ended on its own terms is not a death, so it is not paid
+    // as one — otherwise finishing work would be worth more than surviving it.
+    expect(recovered.map((each) => each.payload)).not.toContainEqual(
+      expect.objectContaining({ sessionId: finished.id }),
+    );
   });
 
   it('does not accept an ending the table cannot hold', async () => {

@@ -12,6 +12,11 @@ export type {
   AgentRegistrationRejectedPayload,
   AgentSummary,
   RegisterAgentPayload,
+  // A battle reads `sessionId` off the ending's payload to pause the battles that
+  // run was in, and progression reads the recovery to pay §10.2's death rule.
+  // Both are consumers of these two shapes, so both are exported.
+  SessionEndedPayload,
+  SessionRecoveredPayload,
 } from './feature.js';
 // Verifying a bearer token against a credential is infrastructure and lives in
 // @battle-agents/db, so the transport can ask whether a request is

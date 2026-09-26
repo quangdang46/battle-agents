@@ -1,5 +1,6 @@
 import { defineAction } from '@battle-agents/core';
 import type { CommandHandler, GameEvent, GameFeature, RuntimeContext } from '@battle-agents/core';
+import { SESSION_EVENTS } from '@battle-agents/protocol';
 
 import {
   agentInputRejected,
@@ -34,6 +35,22 @@ import { SESSION_END_REASONS, type SessionEndReason } from './session.js';
 
 export const AGENT_REGISTERED = 'agent.registered';
 export const AGENT_REGISTRATION_REJECTED = 'agent.registration_rejected';
+
+/** The payload of `session.ended`, which is what a battle's pause clock reads. */
+export interface SessionEndedPayload {
+  readonly sessionId: string;
+  readonly reason: SessionEndReason;
+}
+
+/**
+ * The payload of `session.recovered` — §10.2's death rule, the 150 XP a crash
+ * pays. `sessionId` is carried so a reader can tie the award to the run that
+ * earned it; progression pays on sight and needs no other field.
+ */
+export interface SessionRecoveredPayload {
+  readonly sessionId: string;
+  readonly reason: SessionEndReason;
+}
 
 /**
  * What this feature offers other features.
@@ -140,7 +157,15 @@ export function agentFeature(dependencies: {
   return {
     id: 'agent',
     commands: [registerAgent],
-    persistedEvents: [AGENT_REGISTERED, AGENT_REGISTRATION_REJECTED],
+    // `session.ended` is in core's durable set already; `session.recovered` is
+    // not, so this feature is the only thing that can make the death rule's
+    // award survive a restart. It is declared here rather than in core because
+    // core knows nothing about what a crashed session is worth to the game.
+    persistedEvents: [
+      AGENT_REGISTERED,
+      AGENT_REGISTRATION_REJECTED,
+      SESSION_EVENTS.recovered,
+    ],
     capabilities: [
       { name: AGENT_READ, description: 'Look up one of the callers own characters.' },
       { name: AGENT_DESCRIBE, description: 'List the characters the caller owns.' },
@@ -283,6 +308,40 @@ function sessionActions(sessionRepository: SessionRepository) {
         if (status === undefined) {
           throw new Error(`session ${input.sessionId} is not running`);
         }
+
+        // Ending a session used to be a state change and nothing else, so an
+        // ending that came through the protocol was invisible to everything
+        // downstream: the battle pause clock, the activity trail, the public
+        // stream and the crash badge all learned about endings only from a
+        // harness reporting one. Two ways to end a run, and the one a client
+        // calls by hand was the one nothing could see.
+        //
+        // `emit` rather than `bus.publish`, and `session.ended` is in core's
+        // durable set, so this reaches the store. A harness that ALSO reports
+        // the ending produces a second event, which is safe by construction
+        // rather than by luck: battle's pause handler asks `nextBattleStatus`
+        // for the transition and an already-paused battle has none, and the
+        // achievement's award is keyed so a repeat is refused.
+        await context.runtime.emit({
+          type: SESSION_EVENTS.ended,
+          occurredAt: context.now(),
+          actorId: input.sessionId,
+          payload: { sessionId: input.sessionId, reason } satisfies SessionEndedPayload,
+        });
+
+        // And §10.2's death rule, which had a price and no producer at all:
+        // HP 0 never kills the character, a crashed session grants experience,
+        // and nothing in the tree emitted the event that pays it. A run that
+        // ended any other way is not a death, so it pays nothing.
+        if (reason === 'crashed') {
+          await context.runtime.emit({
+            type: SESSION_EVENTS.recovered,
+            occurredAt: context.now(),
+            actorId: input.sessionId,
+            payload: { sessionId: input.sessionId, reason } satisfies SessionRecoveredPayload,
+          });
+        }
+
         return { sessionId: input.sessionId, status, reason };
       },
     }),
