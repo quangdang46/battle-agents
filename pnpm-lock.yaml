@@ -124,6 +124,15 @@ importers:
         specifier: workspace:*
         version: link:../../protocol
 
+  packages/adapters/aider:
+    dependencies:
+      '@battle-agents/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@battle-agents/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+
   packages/adapters/claude:
     dependencies:
       '@battle-agents/core':
@@ -152,6 +161,15 @@ importers:
         version: link:../../protocol
 
   packages/adapters/gemini:
+    dependencies:
+      '@battle-agents/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@battle-agents/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+
+  packages/adapters/goose:
     dependencies:
       '@battle-agents/core':
         specifier: workspace:*

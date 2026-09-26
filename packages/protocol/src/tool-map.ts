@@ -226,6 +226,52 @@ export const TOOL_NAME_MAP: Readonly<Record<string, string>> = {
   list_mcp_resources: 'Read',
   list_background_processes: 'Bash',
   read_background_output: 'Read',
+
+  // Aider 0.86.2, read out of the PyPI sdist rather than from an installed copy,
+  // because Aider is not on the machine this map was extended from. These are
+  // NOT the names Aider sends to a model — see the entry above it for why that
+  // is the case. They are the names the Aider adapter gives to the activities
+  // Aider writes into its transcript, so that the harness's vocabulary lives in
+  // this one table rather than in a map inside the adapter.
+  //
+  // Only the two activities the adapter emits as tool events are here. Its two
+  // write activities (`Applied edit to <path>` and `Creating empty file
+  // <path>`) are deliberately absent: the adapter emits those as `file.write`,
+  // which is a member of the protocol union carrying the path, so it never
+  // produces those names and a table entry nothing emits is an entry that rots.
+  // `commit` is a git commit and lands in the terminal zone because that is what
+  // it is — a subprocess — and inventing a canonical name for one harness's
+  // vocabulary would grow a shared table to suit a single entry.
+  run_command: 'Bash',
+  commit: 'Bash',
+
+  // Goose. Two entries only, and that is deliberate: the developer extension
+  // registers exactly five tools — `write`, `edit`, `shell`, `tree`,
+  // `read_image`, asserted as a set in its own unit test
+  // (`developer_tools_are_flat` in
+  // crates/goose/src/agents/platform_extensions/developer/mod.rs) — and three of
+  // them already appear above. `write`, `edit` and `shell` are the OpenCode/pi
+  // lowercase block, and `shell: 'Bash'` was already there for the same reason
+  // it is here: unmapped, the single most common tool an agent runs would land
+  // in `thinking` instead of `terminal`.
+  //
+  // `tree` walks the file tree with `ignore::WalkBuilder` and takes a path and a
+  // depth, so it is structural discovery of paths rather than reading one, which
+  // is what `Glob` names and what the `files` zone is for. It is deliberately
+  // NOT `Bash`, which is what the `list_dir` entry above maps to: `list_dir`
+  // is one directory, this is a bounded walk of a tree.
+  //
+  // NOT HERE, ON PURPOSE: Goose's MCP tool names may carry an
+  // `<extension>__<tool>` qualifier. `ToolNameParts { extension_name, tool_name }`
+  // in goose-provider-types/src/conversation/message.rs is a struct built for
+  // splitting one, and the field is an `Option`, so some names qualify and some
+  // do not — but the construction site was not located, and the separator was
+  // not confirmed. A name nobody has observed does not belong in this table; the
+  // header above says so and the reason it says so is exactly this situation.
+  // If a real session turns out to write `developer__shell`, the fix is to add
+  // the qualified spellings here, NOT to change the separator in the adapter.
+  tree: 'Glob',
+  read_image: 'Read',
 };
 
 /**

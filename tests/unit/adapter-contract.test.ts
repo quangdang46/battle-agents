@@ -6,10 +6,12 @@ import { describe, expect, it } from 'vitest';
 import type { AgentWatcher } from '@battle-agents/core';
 import { AgentEventSchema } from '@battle-agents/protocol';
 
+import * as aiderModule from '../../packages/adapters/aider/src/index.js';
 import * as claudeModule from '../../packages/adapters/claude/src/index.js';
 import * as codexModule from '../../packages/adapters/codex/src/index.js';
 import * as cursorModule from '../../packages/adapters/cursor/src/index.js';
 import * as geminiModule from '../../packages/adapters/gemini/src/index.js';
+import * as gooseModule from '../../packages/adapters/goose/src/index.js';
 import * as opencodeModule from '../../packages/adapters/opencode/src/index.js';
 import * as piModule from '../../packages/adapters/pi/src/index.js';
 
@@ -49,7 +51,7 @@ import * as piModule from '../../packages/adapters/pi/src/index.js';
 const repoRoot = resolve(import.meta.dirname, '../..');
 const adaptersDir = join(repoRoot, 'packages/adapters');
 
-const ADAPTERS = ['claude', 'codex', 'cursor', 'gemini', 'opencode', 'pi'] as const;
+const ADAPTERS = ['aider', 'claude', 'codex', 'cursor', 'gemini', 'goose', 'opencode', 'pi'] as const;
 
 /**
  * Each watcher, as a value of the type it must be assignable to.
@@ -64,10 +66,12 @@ const ADAPTERS = ['claude', 'codex', 'cursor', 'gemini', 'opencode', 'pi'] as co
 const WATCHER_TYPES: Readonly<
   Record<(typeof ADAPTERS)[number], abstract new (...args: never[]) => AgentWatcher>
 > = {
+  aider: aiderModule.AiderWatcher,
   claude: claudeModule.ClaudeWatcher,
   codex: codexModule.CodexWatcher,
   cursor: cursorModule.CursorWatcher,
   gemini: geminiModule.GeminiWatcher,
+  goose: gooseModule.GooseWatcher,
   opencode: opencodeModule.OpenCodeWatcher,
   pi: piModule.PiWatcher,
 };
@@ -110,13 +114,15 @@ describe('every adapter satisfies the shared contract', () => {
     // Static imports, not a computed one. Vitest cannot resolve
     // `import(\`../../packages/adapters/${name}/src/index.js\`)` — it fails at
     // runtime with "Unknown variable dynamic import" — so a loop over barrels
-    // would have to be six hand-written lines. Written out, the list of adapters
+    // would have to be one hand-written line per adapter. Written out, the list of adapters
     // under contract is also visible in the file rather than hidden in a glob.
     const barrels: Readonly<Record<string, unknown>> = {
+      aider: aiderModule,
       claude: claudeModule,
       codex: codexModule,
       cursor: cursorModule,
       gemini: geminiModule,
+      goose: gooseModule,
       opencode: opencodeModule,
       pi: piModule,
     };

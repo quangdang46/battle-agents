@@ -33,6 +33,7 @@ from, and the license it carries. Keep it updated in the same commit that adds t
 | agent-quest (tiny-swords-cc0) | https://github.com/FulAppiOS/Agent-Quest           | `010c791207c9` | CC0-1.0    | `client/public/assets/themes/tiny-swords-cc0/LICENSE.txt` |
 | spacemolt (client)            | https://github.com/SpaceMolt/client                | `e7af1620a67e` | MIT        | Copyright (c) 2026 spacemolt.com                          |
 | spacemolt (lib)               | https://github.com/SpaceMolt/spacemolt-lib         | `9aa120d3e493` | MIT        | Copyright (c) 2026 SpaceMolt                              |
+| aider                        | https://github.com/Aider-AI/aider                  | `f38a9d322f56` | Apache-2.0 | not stated in the sdist (see the note below)              |
 
 `agent-move` and `agent-world-codemoo` ship no `LICENSE` file; their MIT terms are declared in
 `package.json`. Carry the attribution into any file derived from them.
@@ -42,6 +43,21 @@ separately so each revision is attributable: the protocol and the command surfac
 `client`, the reconnect/presence policy is in `spacemolt-lib`. Neither is copied —
 `docs/research/spacemolt.md` records the reading and the decision, and the only thing it
 proposes taking is a shape, not code.
+
+The `aider` row is pinned by the sha256 of the PyPI sdist rather than a git SHA, because
+that artefact is what a user installs and it is the artefact this repository read. No Aider
+code is copied. What the Aider adapter takes is a set of FACTS about what Aider writes — the
+path of its transcript, the shape of a run-boundary line, the four activity lines — each read
+out of a named function in `aider-chat 0.86.2` and cited as such in
+`packages/adapters/aider/src/parsers/transcript.ts`. Those are facts about a file format, and
+no copyright attaches to them; the attribution is here because the reading is what the adapter
+rests on, and a reader who wants to check a claim needs to know which release it was checked
+against.
+
+That sdist states no author and carries the stock Apache-2.0 `LICENSE.txt` with no
+project-specific copyright line, so the copyright holder is recorded as unstated rather than
+guessed. Nothing is copied from it, so no attribution obligation is outstanding either way;
+the row exists so the claim in the parser header can be checked against a named release.
 
 ## Prohibited sources
 
@@ -67,6 +83,7 @@ proposes taking is a shape, not code.
 | `packages/mcp-server/src/` zod tool layout         | `tmux-agents/packages/mcp/src/{tools,server}.ts`                                                                   | `b7e71384f4ee` | MIT        |
 | `apps/web/src/` extension registry                 | `paperclip` adapter registries                                                                                     | `f55759942b8c` | MIT        |
 | `apps/web/public/` protocol docs                   | `moltbook` skill/heartbeat/messaging docs (shape only; `events.md` is ours)                                        | `dd452e852de3` | MIT        |
+| `packages/adapters/aider/src/parsers/transcript.ts`   | `aider-chat 0.86.2` line grammar, read from `io.py`, `commands.py` and `coders/base_coder.py`. No code copied.        | `f38a9d322f56` | Apache-2.0 |
 | `apps/web/src/` SSE delta protocol                 | `agent-world-codemoo/server/{stateDiffBroadcast,eventsPipeline}.js`                                                | `851ceee1d3f6` | MIT        |
 
 ## Asset licenses

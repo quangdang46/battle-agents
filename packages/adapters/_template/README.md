@@ -66,15 +66,15 @@ here exist to model.
   else. If you needed another workspace package to do the job, that is the
   design talking, not a missing dependency.
 - Expect to be **added** to that contract test by hand, because it does not
-  discover adapters: it lists six imports. It also cannot check per-harness
-  event coverage, deliberately — the six shipped adapters do not all meet
+  discover adapters: it lists one import per adapter. It also cannot check
+  per-harness event coverage, deliberately — the shipped adapters do not all meet
   `REQUIRED_EVENT_TYPES` (Cursor writes no tool result in its format), so
   asserting the template's list would be red on day one. Matching the template's
   event coverage is a commitment you make, not one the suite will hold you to.
 
 ## The thing that is not done, so you do not discover it at the end
 
-**This package has no `bin`, and neither do the six adapters shipped alongside
+**This package has no `bin`, and neither do the adapters shipped alongside
 it.** Nothing in this repository starts an adapter watcher: there is no
 executable entry point on any adapter package, and no non-test file anywhere
 imports one. The watchers run in unit tests and nowhere else.

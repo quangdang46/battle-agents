@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // This adapter reads the filesystem to tail a transcript in the user's
+    // project, so it needs the node globals. The base sets `types: []` to keep
+    // library packages free of a Node assumption, and an adapter is not one.
+    "types": ["node"]
+  },
+  "references": [
+    {
+      "path": "../../core"
+    },
+    {
+      "path": "../../protocol"
+    }
+  ],
+  "include": ["src/**/*.ts"]
+}

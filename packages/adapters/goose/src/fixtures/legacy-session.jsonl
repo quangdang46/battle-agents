@@ -1,0 +1,9 @@
+{"description":"fix the byte cursor","id":"20260926_104500","created_at":"2026-09-26T10:45:00Z","updated_at":"2026-09-26T10:45:00Z","extension_data":{},"message_count":6,"working_dir":"/Users/example/project"}
+{"id":"m1","role":"user","created":1789118700,"content":[{"type":"text","text":"The offset drift bug is back — 🐛 in a prompt again"}]}
+{"id":"m2","role":"assistant","created":1789118701,"content":[{"type":"thinking","thinking":"Check the cursor arithmetic before touching the parser."}]}
+{"id":"m3","role":"assistant","created":1789118702,"content":[{"type":"toolRequest","id":"t1","toolCall":{"status":"success","value":{"name":"shell","arguments":{"command":["ls","-la"]}}}}]}
+{"id":"m4","role":"assistant","created":1789118704,"content":[{"type":"toolResponse","id":"t1","toolResult":{"status":"success","value":{"content":[{"type":"text","text":"total 4\n-rw-r--r-- 1 user  staff  878  src  index.ts"}]}}}]}
+{"id":"m5","role":"assistant","created":1789118705,"content":[{"type":"toolRequest","id":"t2","toolCall":{"status":"success","value":{"name":"read_image","arguments":{"path":"diagram.png","detail":"high"}}}}]}
+{"id":"m6","role":"assistant","created":1789118709,"content":[{"type":"toolResponse","id":"t2","toolResult":{"status":"error","error":"file not found"}}]}
+{"id":"m7","role":"assistant","created":1789118710,"content":[{"type":"toolRequest","id":"t3","toolCall":{"status":"error","error":"arguments did not parse"}}]}
+{"id":"m8","role":"user","created":1789118712,"content":[{"type":"text","text":"日本語のテストとالعربية و русский — すべて壊れないこと"}]}

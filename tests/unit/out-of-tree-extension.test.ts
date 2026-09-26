@@ -246,13 +246,18 @@ function sourcePathFor(pkgDir: string, specifier: string): string | undefined {
 /**
  * The names one module exports, following its `export *` until it stops.
  *
- * The hop exists because `@battle-agents/protocol`'s barrel is five `export *`
- * lines, so it does not enumerate its own surface and a name a third party can
- * import is not visible in the file that is supposed to list them. That is a
- * real defect in the published SDK and it is reported in
- * `docs/design/extension-surface.md` rather than fixed here, because rewriting
- * a barrel that four other packages in this workspace import is a change with a
- * blast radius, and this bead's job is to find the gap and name it.
+ * The hop USED to be load-bearing: `@battle-agents/protocol`'s barrel was five
+ * `export *` lines, so it did not enumerate its own surface and a name a third
+ * party could import was invisible in the file meant to list them. Both barrels
+ * are flat now — `core` always was, and `protocol` is required to be by
+ * `tests/unit/protocol-barrel.test.ts` — so the hop does not run, and
+ * `and that assertion has not gone vacuous` is what keeps that honest rather
+ * than letting the recursion become code nothing exercises.
+ *
+ * It is kept because a resolver that handles both shapes is correct whichever
+ * shape a barrel has, and because a `export *` reintroduced tomorrow would
+ * otherwise make this guard under-count and report ordinary imports as
+ * unexported — crying wolf on the most common import there is.
  *
  * It recurses on FILES, not on package directories, and `seen` holds file
  * paths. A `export *` target is a sibling of the barrel inside `src/`, so
@@ -465,6 +470,39 @@ describe('the out-of-tree package imports nothing but public barrels', () => {
     // suite was green the whole time.
     const { unresolved } = resolvedBarrels();
     expect(unresolved).toEqual([]);
+  });
+
+  it('and that assertion has not gone vacuous, because both barrels are flat', () => {
+    // The assertion above is a real check only while some barrel still has an
+    // `export *` in it. Flattening `@battle-agents/protocol`'s barrel — which
+    // `tests/unit/protocol-barrel.test.ts` now requires and keeps requiring —
+    // left `unresolved` trivially empty, so the test passed while checking
+    // nothing. That is the failure this file was written to prevent happening
+    // inside the guard written to prevent it, and it is asserted here rather
+    // than left to be noticed later.
+    //
+    // So the count is pinned, not assumed. If a star-export comes back, the
+    // count moves and this goes red; the resolver above goes back to having a
+    // hop to follow, and `unresolved` becomes worth asserting again.
+    const starExports: string[] = [];
+    for (const [specifier, dir] of [
+      [CORE_SPECIFIER, CORE_DIR],
+      [PROTOCOL_SPECIFIER, PROTOCOL_DIR],
+    ] as const) {
+      const barrel = readFileSync(join(dir, 'src/index.ts'), 'utf8');
+      for (const _ of code(barrel).matchAll(/export\s+\*/g)) {
+        starExports.push(`${specifier} re-exports a module wholesale`);
+      }
+    }
+    expect(starExports).toEqual([]);
+
+    // And the names a third party actually imports are still resolved by the
+    // flat path alone, which is what makes the flatness a simplification rather
+    // than a coverage loss. If the resolver had quietly stopped reading the
+    // barrels, this is the assertion that would notice.
+    const { exported } = resolvedBarrels();
+    expect((exported.get(PROTOCOL_SPECIFIER) as Set<string>).size).toBeGreaterThan(50);
+    expect((exported.get(CORE_SPECIFIER) as Set<string>).size).toBeGreaterThan(10);
   });
 
   it('sees past a barrel, rather than trusting the file that is meant to list it', () => {
