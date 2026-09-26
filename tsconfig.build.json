@@ -62,6 +62,9 @@
       "path": "packages/adapters/_template"
     },
     {
+      "path": "packages/adapters/aider"
+    },
+    {
       "path": "packages/adapters/claude"
     },
     {
@@ -72,6 +75,9 @@
     },
     {
       "path": "packages/adapters/gemini"
+    },
+    {
+      "path": "packages/adapters/goose"
     },
     {
       "path": "packages/adapters/opencode"

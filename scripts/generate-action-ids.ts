@@ -36,6 +36,7 @@ const MANIFESTS: Readonly<Record<string, readonly string[]>> = {
   social: SOCIAL_ACTION_IDS,
   battle: BATTLE_ACTION_IDS,
   achievements: ACHIEVEMENTS_ACTION_IDS,
+  guild: GUILD_ACTION_IDS,
 };
 
 /**
@@ -217,6 +218,7 @@ import { QUEST_ACTION_IDS } from '../packages/features/quest/src/manifest.js';
 import { REPUTATION_ACTION_IDS } from '../packages/features/reputation/src/manifest.js';
 import { BATTLE_ACTION_IDS } from '../packages/features/battle/src/manifest.js';
 import { ACHIEVEMENTS_ACTION_IDS } from '../packages/features/achievements/src/manifest.js';
+import { GUILD_ACTION_IDS } from '../packages/features/guild/src/manifest.js';
 import { SOCIAL_ACTION_IDS } from '../packages/features/social/src/manifest.js';
 
 main();

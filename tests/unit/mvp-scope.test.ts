@@ -73,6 +73,22 @@ const DECLARED_MVP_FEATURES: Readonly<Record<string, string>> = {
   // built is not that. The entry is here because installing it is a decision
   // somebody wrote down, which is the entire point of this list.
   achievements: '§10.2 sheet (Achievements), derived from the activity log. Not a currency.',
+  // M6, and the first entry here that is outside the §10.2 MVP character sheet
+  // — §10.2 itself says "Equipment/Cosmetics/Pets/Mounts/Base/Guild later", and
+  // §17.8's scope rule is what "later" is protecting. It is here because the
+  // composition root installs it, which is the decision this list exists to
+  // make somebody write down.
+  //
+  // What earns it: §10.4's guild endgame (teams, guild quests, weekly tallies,
+  // no pay-to-win) and §11.3's collective funding. What is deliberately NOT in
+  // it: guild-war, trading, a shop, a season, or anything purchasable. The
+  // treasury records what a guild agreed and moves no money, and the function
+  // that computes a guild's standing has no parameter a caller could fill with
+  // cents — so the pay-to-win §10.4 rules out is unreachable by construction
+  // rather than by tuning.
+  guild:
+    '§10.4 guild endgame + §11.3 collective funding. M6. The ACL port features/social requires. ' +
+    'No guild-war, no trading, no shop, and no path from money to standing.',
 };
 
 /** What a `somethingFeature({` construction looks like once prettier has run. */

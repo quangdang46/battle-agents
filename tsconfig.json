@@ -29,6 +29,7 @@
     // and silently missed by the other.
     "paths": {
       "@battle-agents/_template": ["./packages/adapters/_template/src/index.ts"],
+      "@battle-agents/aider": ["./packages/adapters/aider/src/index.ts"],
       "@battle-agents/achievements": ["./packages/features/achievements/src/index.ts"],
       "@battle-agents/activity": ["./packages/features/activity/src/index.ts"],
       "@battle-agents/agent": ["./packages/features/agent/src/index.ts"],
@@ -44,6 +45,7 @@
       "@battle-agents/db": ["./packages/db/src/index.ts"],
       "@battle-agents/game-client": ["./packages/game-client/src/index.ts"],
       "@battle-agents/gemini": ["./packages/adapters/gemini/src/index.ts"],
+      "@battle-agents/goose": ["./packages/adapters/goose/src/index.ts"],
       "@battle-agents/github": ["./packages/infrastructure/github/src/index.ts"],
       "@battle-agents/guild": ["./packages/features/guild/src/index.ts"],
       "@battle-agents/inventory": ["./packages/features/inventory/src/index.ts"],

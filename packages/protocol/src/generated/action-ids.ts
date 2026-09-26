@@ -63,6 +63,20 @@ export type BattleActionId =
 export type AchievementsActionId =
   'achievements.catalogue' | 'achievements.list' | 'achievements.project';
 
+/** guild */
+export type GuildActionId =
+  | 'guild.create'
+  | 'guild.join'
+  | 'guild.leave'
+  | 'guild.members'
+  | 'guild.roles'
+  | 'guild.contribute'
+  | 'guild.fund'
+  | 'guild.treasury'
+  | 'guild.quest.start'
+  | 'guild.quests'
+  | 'guild.tally';
+
 /** Every action id in this build, sorted. The type `act()` is checked against. */
 export type RegisteredActionId =
   | 'achievements.catalogue'
@@ -83,6 +97,17 @@ export type RegisteredActionId =
   | 'bounty.fund'
   | 'bounty.list'
   | 'bounty.submit'
+  | 'guild.contribute'
+  | 'guild.create'
+  | 'guild.fund'
+  | 'guild.join'
+  | 'guild.leave'
+  | 'guild.members'
+  | 'guild.quest.start'
+  | 'guild.quests'
+  | 'guild.roles'
+  | 'guild.tally'
+  | 'guild.treasury'
   | 'progression.awards'
   | 'progression.gate'
   | 'progression.read'
@@ -137,6 +162,17 @@ export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
   'bounty.fund',
   'bounty.list',
   'bounty.submit',
+  'guild.contribute',
+  'guild.create',
+  'guild.fund',
+  'guild.join',
+  'guild.leave',
+  'guild.members',
+  'guild.quest.start',
+  'guild.quests',
+  'guild.roles',
+  'guild.tally',
+  'guild.treasury',
   'progression.awards',
   'progression.gate',
   'progression.read',
