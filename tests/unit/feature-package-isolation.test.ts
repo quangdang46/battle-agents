@@ -76,9 +76,27 @@ function featureNames(): string[] {
 
 function sourceFilesIn(feature: string): string[] {
   const src = join(featuresDir, feature, 'src');
+  // A feature that does not exist has no source to carry anything, which is
+  // vacuously clean.
+  //
+  // The guard is not defensive padding, it is the second time in this session
+  // that a test of mine broke the removal test by walking
+  // packages/features/*/src without it. scripts/removal-test.sh strips a feature
+  // by MOVING its directory aside and then runs the unit suite, so any test that
+  // reads feature sources must tolerate the directory being gone — which is
+  // exactly what a stripped feature looks like. tests/unit/mvp-scope.test.ts
+  // failed this way first, for the same reason and in the same shape.
+  if (!existsSync(src)) return [];
   const found: string[] = [];
   const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      // Moved between the existsSync above and here. Same case, same answer.
+      return;
+    }
+    for (const entry of entries) {
       if (entry.name === 'node_modules' || entry.name === 'dist') continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
