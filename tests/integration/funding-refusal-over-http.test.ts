@@ -1,4 +1,5 @@
 import { createApplicationApi, type ApplicationApi } from '@battle-agents/api';
+import { issueCredential } from '@battle-agents/agent';
 import { HttpApiClient, type HttpTransport } from '@battle-agents/cli';
 import {
   BOUNTY_CLAIM,
@@ -21,8 +22,10 @@ import {
   createDatabase,
   DrizzleActivityLog,
   DrizzleBountyRepository,
+  DrizzleCredentialStore,
   DrizzlePayoutIntentStore,
   DrizzleStateStore,
+  installations,
   users,
   type Database,
 } from '@battle-agents/db';
@@ -33,7 +36,8 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createRoutes, type HttpRequest } from '../../apps/web/src/routes.js';
+import { createBountyGateway, type BountyGateway } from '../../apps/web/src/bounty-gateway.js';
+import { createRoutes, type HttpRequest, type HttpResponse } from '../../apps/web/src/routes.js';
 
 /**
  * Stacking money over the wire, and what a refusal looks like to the person who
@@ -56,6 +60,32 @@ import { createRoutes, type HttpRequest } from '../../apps/web/src/routes.js';
  * is already payable was told the platform was broken, with a message saying
  * something entirely different in the body. A client that reads 500 as
  * "transient, retry" retries a contribution that can never be accepted.
+ *
+ * ## Which surface "over the wire" means, and why it changed
+ *
+ * This file drove `bounty.fund` through `/api/act` and called that the wire. It
+ * no longer can, and the reason is the same one the bug above was about rather
+ * than a different one: `/api/act` authenticates and then discards whose token
+ * was on the request, so the frozen Extension API hands the command no caller
+ * and a `sponsorUserId` read out of the payload is whatever the caller chose to
+ * write. `CALLER_SCOPED_ACTIONS` now refuses the action there with a 403 naming
+ * `POST /api/bounties/{id}/fund`, which is the only surface that can prove who
+ * the caller is — it resolves the sponsor from the installation the token
+ * belongs to, and refuses a body that names anybody else.
+ *
+ * So the two halves this file meets no longer meet at `/api/act`. They meet at
+ * the fund route and the Application API, and the properties below are the ones
+ * that survive the move: money accumulates across three different strangers, a
+ * refused top-up is a 409 with the disposition in it, and neither a claim nor a
+ * submission stops somebody stacking. What does not survive is the claim that a
+ * caller can fund as anybody over the catch-all, which was never true and is now
+ * a 403 rather than a funding row.
+ *
+ * That is the difference between a test that was passing and a test that was
+ * right, and it is worth stating plainly: this file was green for its whole life
+ * against a surface that let anyone be anyone's sponsor. A green integration
+ * suite is evidence about the surface it drove, and no evidence at all about a
+ * surface nobody drove.
  *
  * ## The real store, on purpose
  *
@@ -93,6 +123,8 @@ const ATTEMPTED_CENTS = 7_000;
 
 let pool: Pool;
 let database: Database;
+/** One gateway per fixture, closed together because they share this suite's pool. */
+const gateways: BountyGateway[] = [];
 
 beforeAll(async () => {
   const connectionString = process.env[DATABASE_URL_VARIABLE];
@@ -107,6 +139,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  for (const gateway of gateways) {
+    await gateway.close();
+  }
   await closeDatabasePool(pool);
 });
 
@@ -119,14 +154,46 @@ function coordinates(): { repoOwner: string; repoName: string; issueNumber: numb
   };
 }
 
-/** A platform user, which is what a `bounty_funds` row points at. */
-async function aSponsor(label: string): Promise<string> {
-  const githubId = `wire-funding-${label}-${randomUUID()}`;
-  const [sponsor] = await database
+/**
+ * A human who can be refunded, and the credential that names them.
+ *
+ * A `users` row alone is not enough any more. The fund route resolves
+ * `sponsorUserId` from the installation a presented token belongs to, so a
+ * contribution over HTTP needs a person who can hold one — and carrying the id
+ * and the token in a single value is what stops a call site from funding the
+ * wire with one person while the ledger records another, which is the exact
+ * shape of the defect `funding-caller-identity.test.ts` exists to catch.
+ *
+ * The token is minted against the REAL clock rather than this file's `NOW`,
+ * because the gateway's authenticator compares against `new Date()`. A token
+ * issued at the fixture's fixed instant would be refused as expired before the
+ * route ran, and every assertion after it would be green for the wrong reason.
+ */
+interface Sponsor {
+  readonly userId: string;
+  readonly token: string;
+}
+
+async function aSponsor(label: string): Promise<Sponsor> {
+  const login = `wire-funding-${label}-${randomUUID()}`;
+  const [user] = await database
     .insert(users)
-    .values({ githubId, login: githubId })
+    .values({ githubId: login, login })
     .returning({ id: users.id });
-  return sponsor?.id ?? '';
+  const [installation] = await database
+    .insert(installations)
+    .values({ userId: user?.id ?? '', installationKey: `key-${randomUUID()}` })
+    .returning({ id: installations.id });
+  const issued = issueCredential(new Date().toISOString(), { lifetimeMs: 3_600_000 });
+  await new DrizzleCredentialStore(database).insert({
+    id: randomUUID(),
+    tokenHash: issued.hash,
+    installationId: installation?.id ?? '',
+    agentId: null,
+    scopes: [],
+    expiresAt: issued.expiresAt,
+  });
+  return { userId: user?.id ?? '', token: issued.token };
 }
 
 /**
@@ -178,12 +245,26 @@ function bridge(api: ApplicationApi): HttpTransport & { readonly calls: number }
   };
 }
 
-function fixture(): {
+/**
+ * The bounty resource surface, with a count of what reached it.
+ *
+ * The counter is the same instrument `bridge` carries for `/api/act`, and it
+ * guards the same failure: "both surfaces agreed" is also true of a route that
+ * answered from a cache and never asked the feature anything.
+ */
+interface Wire {
+  readonly handle: (request: HttpRequest) => Promise<HttpResponse>;
+  readonly close: () => Promise<void>;
+  readonly calls: number;
+}
+
+async function fixture(): Promise<{
   readonly api: ApplicationApi;
   readonly cli: HttpApiClient;
   readonly transport: HttpTransport & { readonly calls: number };
   readonly payouts: DrizzlePayoutIntentStore;
-} {
+  readonly wire: Wire;
+}> {
   const payouts = new DrizzlePayoutIntentStore(database);
   const api = createApplicationApi(
     createRuntime({
@@ -210,7 +291,77 @@ function fixture(): {
     }),
   );
   const transport = bridge(api);
-  return { api, cli: new HttpApiClient({ baseUrl: ORIGIN, transport }), transport, payouts };
+  // The REAL gateway: real authenticator, real credential store, real
+  // installation→user query. The route's collaborators are taken as arguments
+  // precisely so a test can hand it doubles, and the one property this file
+  // cannot fake is the resolution of a bearer token into a human — a double
+  // returning whichever sponsor the test wanted would assert the fixture.
+  const inner = await createBountyGateway({ database, api });
+  gateways.push(inner);
+  const state = { calls: 0 };
+  return {
+    api,
+    cli: new HttpApiClient({ baseUrl: ORIGIN, transport }),
+    transport,
+    payouts,
+    wire: {
+      get calls() {
+        return state.calls;
+      },
+      handle: (request: HttpRequest) => {
+        state.calls += 1;
+        return inner.handle(request);
+      },
+      close: () => inner.close(),
+    },
+  };
+}
+
+/**
+ * One top-up over `POST /api/bounties/{id}/fund`.
+ *
+ * The body carries an amount and nothing else. `sponsorUserId` and `reportedBy`
+ * are both filled by the route from the credential, and leaving either to the
+ * payload is what `bounty.fund` did over `/api/act` until the refusal list
+ * caught it — so a helper that let a caller name the sponsor would be able to
+ * assert the hole rather than the closure.
+ */
+function fundOverHttp(
+  wire: Wire,
+  sponsor: Sponsor,
+  bountyId: string,
+  amountCents: number,
+): Promise<HttpResponse> {
+  const request: HttpRequest = {
+    method: 'POST',
+    url: `${ORIGIN}/api/bounties/${bountyId}/fund`,
+    headers: { get: (name) => (name === 'authorization' ? `Bearer ${sponsor.token}` : null) },
+    body: { amountCents },
+  };
+  return wire.handle(request);
+}
+
+/**
+ * A top-up the route accepted, or the failure that stopped it.
+ *
+ * The status is checked here rather than at each call site because a route that
+ * refused would otherwise hand back a body with no `rewardCents` on it, and
+ * every assertion reading that field would report a funding total of
+ * `undefined` and blame the feature for arithmetic.
+ */
+async function funded(
+  wire: Wire,
+  sponsor: Sponsor,
+  bountyId: string,
+  amountCents: number,
+): Promise<BountySummary> {
+  const response = await fundOverHttp(wire, sponsor, bountyId, amountCents);
+  if (response.status !== 200) {
+    throw new Error(
+      `the fund route answered ${String(response.status)}: ${JSON.stringify(response.body)}`,
+    );
+  }
+  return response.body as BountySummary;
 }
 
 /**
@@ -234,7 +385,7 @@ async function aPayableStack(
     await api.act(BOUNTY_FUND, {
       bountyId: created.id,
       amountCents,
-      sponsorUserId: await aSponsor(label),
+      sponsorUserId: (await aSponsor(label)).userId,
       reportedBy: `${label}-person`,
     });
   }
@@ -251,7 +402,7 @@ async function aPayableStack(
 
 describe('funding reaches the bounty feature identically over every surface', () => {
   it('takes three strangers money, and the stack is the sum of the rows', async () => {
-    const { api, cli, transport } = fixture();
+    const { api, cli, transport, wire } = await fixture();
     const overWire = coordinates();
     const direct = coordinates();
     // Two bounties, so the two surfaces can be given the SAME input without the
@@ -269,21 +420,20 @@ describe('funding reaches the bounty feature identically over every surface', ()
     const amounts = [20_000, 5_000, 10_000];
     let wireTotal = 0;
     let directTotal = 0;
-    for (const [index, sponsorUserId] of sponsors.entries()) {
+    for (const [index, sponsor] of sponsors.entries()) {
       const amountCents = amounts[index] ?? 0;
-      wireTotal = (
-        (await cli.act(BOUNTY_FUND, {
-          bountyId: onWire.id,
-          amountCents,
-          sponsorUserId,
-          reportedBy: `sponsor-${index}-person`,
-        })) as BountySummary
-      ).rewardCents;
+      // Each contribution rides the sponsor's OWN credential to the fund route,
+      // and the same three strangers go straight to the API. Attributing the
+      // wire side to the credential rather than the payload is the property
+      // `funding-caller-identity.test.ts` asserts on its own; repeating it here
+      // is what makes the parity below a claim about the ledger rather than a
+      // claim about one caller's ability to wear three identities.
+      wireTotal = (await funded(wire, sponsor, onWire.id, amountCents)).rewardCents;
       directTotal = (
         (await api.act(BOUNTY_FUND, {
           bountyId: directApi.id,
           amountCents,
-          sponsorUserId,
+          sponsorUserId: sponsor.userId,
           reportedBy: `sponsor-${index}-person`,
         })) as BountySummary
       ).rewardCents;
@@ -297,45 +447,58 @@ describe('funding reaches the bounty feature identically over every surface', ()
     // The ledger, read straight out of the table rather than back through the
     // feature: a summary that agreed with itself while the rows said something
     // else is exactly the drift this column is forbidden from having.
+    //
+    // Each amount against the sponsor who paid it, NOT the set of sponsors and
+    // the total checked separately. That weaker pair of assertions was in this
+    // file first, and a mutation proved why it is not enough: with three
+    // strangers and three distinct amounts, a surface that attributed every
+    // contribution to the wrong one of them still produced the right three ids
+    // and the right 35,000. `sponsor_user_id` is what a refund is paid against,
+    // so "each of these three paid this much" is the claim the column has to
+    // carry, and it is a strictly stronger one.
+    const paid = new Map<string, number>(
+      sponsors.map((sponsor, index) => [sponsor.userId, amounts[index] ?? 0]),
+    );
     for (const bountyId of [onWire.id, directApi.id]) {
       const rows = await database
         .select({ amountCents: bountyFunds.amountCents, sponsorUserId: bountyFunds.sponsorUserId })
         .from(bountyFunds)
         .where(eq(bountyFunds.bountyId, bountyId));
       expect(rows, `the funding rows for ${bountyId} do not match its total`).toHaveLength(3);
-      expect(rows.map((row) => row.sponsorUserId).sort()).toEqual([...sponsors].sort());
+      expect(
+        new Map<string, number>(rows.map((row) => [row.sponsorUserId, row.amountCents])),
+        `the contributions on ${bountyId} are not the three strangers' own amounts`,
+      ).toEqual(paid);
       expect(rows.reduce((total, row) => total + row.amountCents, 0)).toBe(35_000);
     }
-    // Four acts reached the dispatcher — the create and the three contributions
-    // over the wire — while the other three contributions went straight to the
-    // API. Asserted because "both surfaces agreed" is also true of a route that
-    // answered from a cache and never asked.
-    expect(transport.calls).toBe(4);
+    // Six acts reached a dispatcher — the create over `/api/act` and the three
+    // contributions over the fund route, with the other three going straight to
+    // the API. Asserted because "both surfaces agreed" is also true of a route
+    // that answered from a cache and never asked the feature anything.
+    expect(transport.calls).toBe(1);
+    expect(wire.calls).toBe(3);
   });
 
   it('tells a refused sponsor it is a conflict, and never that money was taken', async () => {
-    const { api, cli, payouts } = fixture();
+    const { api, payouts, wire } = await fixture();
     const { bountyId, repoName } = await aPayableStack(api, payouts);
     const carol = await aSponsor('carol');
 
-    const refused = await cli
-      .act(BOUNTY_FUND, {
-        bountyId,
-        amountCents: ATTEMPTED_CENTS,
-        sponsorUserId: carol,
-        reportedBy: 'carol-person',
-      })
-      .catch((error: unknown) => error);
+    // Carol's own credential, top-upping her own account. Anything other than
+    // the two identity fields being refused here would be a different test:
+    // this is about what happens once the route has agreed she is the caller.
+    const refused = await fundOverHttp(wire, carol, bountyId, ATTEMPTED_CENTS);
 
-    // The CLI client throws on a non-2xx, so the status has to be read off the
-    // error it threw. Asserting on a returned response here would pass for a
-    // client that swallowed the refusal and answered `undefined` instead.
-    expect(refused).toBeInstanceOf(Error);
-    const status = (refused as { status?: unknown }).status;
-    expect(status, 'a refused top-up reads as a server fault').toBe(409);
-    expect(status).not.toBe(500);
+    // The route ANSWERS a refusal rather than throwing it, and that is the whole
+    // assertion: `describeHttpFailure` is what turns the feature's refusal into
+    // a status, and it used to map every error it did not recognise to 500. A
+    // sponsor told the platform was broken retries a contribution that can never
+    // be accepted, so the status is checked first and the body is checked
+    // second — a client reading either alone is a client this must not mislead.
+    expect(refused.status, 'a refused top-up reads as a server fault').toBe(409);
+    expect(refused.status).not.toBe(500);
 
-    const body = (refused as { body?: unknown }).body as {
+    const body = refused.body as {
       error: string;
       refusal?: { disposition: string; notice: string };
     };
@@ -348,14 +511,17 @@ describe('funding reaches the bounty feature identically over every surface', ()
     // plain HTTP client has — is not left with a status and no reason.
     expect(body.error).toContain(NO_MONEY_WAS_TAKEN);
 
-    // The SAME refusal on both surfaces, code for code. A client that retries
-    // through the API directly and one that goes through the CLI get the same
-    // answer, or a caller has two answers to one question.
+    // The SAME refusal on both surfaces, code for code. A client that reaches
+    // the feature over the fund route and one that goes straight to the API get
+    // the same answer, or a caller has two answers to one question. It has to
+    // be the same sponsor on both sides, which is why `carol.userId` appears
+    // here and not a fresh id: a different person would be refused for a
+    // different reason and the comparison would prove nothing.
     const direct = await api
       .act(BOUNTY_FUND, {
         bountyId,
         amountCents: ATTEMPTED_CENTS,
-        sponsorUserId: carol,
+        sponsorUserId: carol.userId,
         reportedBy: 'carol-person',
       })
       .catch((error: unknown) => error);
@@ -375,7 +541,7 @@ describe('funding reaches the bounty feature identically over every surface', ()
     ).find((each) => each.id === bountyId);
     expect(after, 'the bounty vanished from its own repository listing').toBeDefined();
     expect(after?.rewardCents).toBe(25_000);
-    expect(after?.funds.map((fund) => fund.sponsorUserId)).not.toContain(carol);
+    expect(after?.funds.map((fund) => fund.sponsorUserId)).not.toContain(carol.userId);
     expect(after?.funds).toHaveLength(2);
   });
 
@@ -385,7 +551,7 @@ describe('funding reaches the bounty feature identically over every surface', ()
     // and the repository owner settling a dispute later has only the log. The
     // same row read through the ACTIVITY PORT rather than by SQL is the read a
     // real reader uses, so that is what is asserted.
-    const { api, payouts } = fixture();
+    const { api, payouts } = await fixture();
     const { bountyId } = await aPayableStack(api, payouts);
     const carol = await aSponsor('carol');
 
@@ -393,7 +559,7 @@ describe('funding reaches the bounty feature identically over every surface', ()
       .act(BOUNTY_FUND, {
         bountyId,
         amountCents: ATTEMPTED_CENTS,
-        sponsorUserId: carol,
+        sponsorUserId: carol.userId,
         reportedBy: 'carol-person',
       })
       .catch(() => undefined);
@@ -405,7 +571,7 @@ describe('funding reaches the bounty feature identically over every surface', ()
     expect(rows, 'the refusal reached nobody: no log row was written').toHaveLength(1);
     expect(rows[0]?.payload).toMatchObject({
       bountyId,
-      sponsorUserId: carol,
+      sponsorUserId: carol.userId,
       amountCents: ATTEMPTED_CENTS,
       reason: FUNDING_REFUSALS.payable,
       disposition: FUNDING_REFUSAL_DISPOSITIONS.alreadyPayable,
@@ -423,25 +589,25 @@ describe('funding reaches the bounty feature identically over every surface', ()
     // where a "fund only unclaimed bounties" convenience would be added — and it
     // would be added to a route, not to the feature, which is why the feature's
     // own test is not enough to catch it.
-    const { api, cli } = fixture();
+    //
+    // "Over the wire" is now literally the route rather than the catch-all, so
+    // this is closer to the surface the convenience would be added to than it
+    // was. Two strangers top up after the claim and after the submission, each
+    // on their own credential, and the stack has to be the sum of three.
+    const { api, wire } = await fixture();
     const where = coordinates();
     const created = (await api.act(BOUNTY_CREATE, where)) as BountySummary;
     const alice = await aSponsor('alice');
     await api.act(BOUNTY_FUND, {
       bountyId: created.id,
       amountCents: 20_000,
-      sponsorUserId: alice,
+      sponsorUserId: alice.userId,
       reportedBy: 'alice-person',
     });
-    const agentId = await anAgentFor(alice);
+    const agentId = await anAgentFor(alice.userId);
     await api.act(BOUNTY_CLAIM, { bountyId: created.id, agentId });
 
-    const afterClaim = (await cli.act(BOUNTY_FUND, {
-      bountyId: created.id,
-      amountCents: 5_000,
-      sponsorUserId: await aSponsor('bob'),
-      reportedBy: 'bob-person',
-    })) as BountySummary;
+    const afterClaim = await funded(wire, await aSponsor('bob'), created.id, 5_000);
     expect(afterClaim.status).toBe('claimed');
     expect(afterClaim.rewardCents).toBe(25_000);
 
@@ -450,12 +616,7 @@ describe('funding reaches the bounty feature identically over every surface', ()
       agentId,
       prUrl: `https://github.com/${REPO_OWNER}/${where.repoName}/pull/${PULL_REQUEST}`,
     });
-    const afterSubmit = (await cli.act(BOUNTY_FUND, {
-      bountyId: created.id,
-      amountCents: 10_000,
-      sponsorUserId: await aSponsor('carol'),
-      reportedBy: 'carol-person',
-    })) as BountySummary;
+    const afterSubmit = await funded(wire, await aSponsor('carol'), created.id, 10_000);
 
     expect(afterSubmit.status).toBe('submitted');
     expect(afterSubmit.rewardCents).toBe(35_000);
