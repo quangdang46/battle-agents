@@ -197,13 +197,16 @@ export class DrizzleSessionRepository {
     sessionId: string,
     reason: SessionEndReason,
     now: string,
-  ): Promise<SessionStatus | undefined> {
+  ): Promise<{ readonly status: SessionStatus; readonly agentId: string } | undefined> {
     const [row] = await this.#database
       .update(sessions)
       .set({ status: 'ended', endReason: reason, endedAt: new Date(now) })
       .where(and(eq(sessions.id, sessionId), eq(sessions.status, 'active')))
-      .returning({ status: sessions.status });
-    return row?.status;
+      .returning({ status: sessions.status, agentId: sessions.agentId });
+    if (row === undefined) {
+      return undefined;
+    }
+    return { status: row.status, agentId: row.agentId };
   }
 }
 

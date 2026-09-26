@@ -57,7 +57,7 @@ function registeredIds(): readonly string[] {
           createSession: async () => ({ id: 's' }),
           markSessionActive: async () => {},
           heartbeat: async () => 'active',
-          end: async () => 'ended',
+          end: async () => ({ status: 'ended', agentId: 'a' }),
         },
       }),
     ],

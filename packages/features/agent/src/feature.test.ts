@@ -113,7 +113,12 @@ class InMemoryAgentRepository implements AgentRepository {
  * make those tests pass for the wrong reason.
  */
 class InMemorySessionRepository {
-  readonly rows: { id: string; status: SessionStatus; reason: SessionEndReason | null }[] = [];
+  readonly rows: {
+    id: string;
+    agentId: string;
+    status: SessionStatus;
+    reason: SessionEndReason | null;
+  }[] = [];
   #next = 1;
   /** Counts the reads, for the same reason as the agent repository's. */
   reads = 0;
@@ -151,7 +156,7 @@ class InMemorySessionRepository {
     now: string;
   }): Promise<{ id: string }> {
     const id = `session-${this.#next++}`;
-    this.rows.push({ id, status: 'active', reason: null });
+    this.rows.push({ id, agentId: input.agentId, status: 'active', reason: null });
     this.stampedAt.push(input.now);
     return { id };
   }
@@ -167,19 +172,25 @@ class InMemorySessionRepository {
     id: string,
     reason: SessionEndReason,
     _now?: string,
-  ): Promise<SessionStatus | undefined> {
+  ): Promise<{ readonly status: SessionStatus; readonly agentId: string } | undefined> {
     this.reads += 1;
     const row = this.rows.find((each) => each.id === id);
     if (row?.status !== 'active') {
       return undefined;
     }
     this.set(id, () => ({ ...row, status: 'ended', reason }));
-    return 'ended';
+    return { status: 'ended', agentId: row.agentId };
   }
   private set(
     id: string,
-    next: (row: { id: string; status: SessionStatus; reason: SessionEndReason | null }) => {
+    next: (row: {
       id: string;
+      agentId: string;
+      status: SessionStatus;
+      reason: SessionEndReason | null;
+    }) => {
+      id: string;
+      agentId: string;
       status: SessionStatus;
       reason: SessionEndReason | null;
     },
@@ -578,7 +589,16 @@ describe('driving a running session', () => {
     // clock reads to find the battles this run was in.
     const ended = seen.filter((each) => each.type === SESSION_EVENTS.ended);
     expect(ended, 'the ending reached nobody').toHaveLength(1);
-    expect(ended[0]?.payload).toMatchObject({ sessionId: created.id, reason: 'completed' });
+    // The agent, not the session. `achievements.agent_id` is a foreign key and
+    // every consumer that awards reads the actor as a character, so an ending
+    // naming only its session produced an award against a row that does not
+    // exist — the crash badge died on insert rather than being refused.
+    expect(ended[0]?.payload).toMatchObject({
+      sessionId: created.id,
+      agentId: 'agent-1',
+      reason: 'completed',
+    });
+    expect(ended[0]?.actorId).toBe('agent-1');
   });
 
   it('pays the death rule for a crash, and nothing for any other ending', async () => {
@@ -609,7 +629,12 @@ describe('driving a running session', () => {
 
     const recovered = seen.filter((each) => each.type === SESSION_EVENTS.recovered);
     expect(recovered, 'a crash paid nothing').toHaveLength(1);
-    expect(recovered[0]?.payload).toMatchObject({ sessionId: crashed.id });
+    expect(recovered[0]?.payload).toMatchObject({
+      sessionId: crashed.id,
+      agentId: 'agent-1',
+      reason: 'crashed',
+    });
+    expect(recovered[0]?.actorId, 'the award names a character, not a run').toBe('agent-1');
     // And the run that ended on its own terms is not a death, so it is not paid
     // as one — otherwise finishing work would be worth more than surviving it.
     expect(recovered.map((each) => each.payload)).not.toContainEqual(

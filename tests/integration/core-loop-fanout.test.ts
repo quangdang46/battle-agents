@@ -352,16 +352,24 @@ describe('SOCIAL, with guild installed', () => {
     expect(work).toHaveLength(1);
     expect(work[0]?.sourceKey).toBe(`bounty.completed|${created.id}`);
 
-    // The second signal is the one this file pins rather than expects. One merge
-    // that completed a bounty emits `bounty.completed` AND `pr.merged`
-    // (features/bounty/src/merge.ts), and guild's ROLE_SIGNALS scores `pr.merged`
-    // toward `reviewer` without reading the `completedBounty: true` the same
-    // payload carries. So an agent who merges their own bounty accrues reviewer
-    // evidence for work they did. The work LEDGER is not affected — the handler
-    // records work only from `bounty.completed` — and the quest below is what
-    // proves that. This is the signal half, stated rather than left to be
-    // discovered by whoever reads the roster first.
-    expect(after.signals.filter((signal) => signal.sourceType === 'pr.merged')).toHaveLength(1);
+    // The second signal is the one this file used to PIN, and pinning it is what
+    // kept the defect alive. One merge that completed a bounty emits
+    // `bounty.completed` AND `pr.merged` (features/bounty/src/merge.ts), and
+    // guild scored `pr.merged` toward `reviewer` without reading the
+    // `completedBounty: true` the same payload carries — so an agent who merged
+    // their own bounty accrued reviewer evidence for their own work, and could
+    // do it again on the next one. Reviewer is defined as somebody ELSE reading
+    // the work, so the merge is withdrawn from that role.
+    //
+    // What is asserted is the absence, deliberately. A positive assertion here
+    // ("a self-merge still scores") would be a test of the bug, and the comment
+    // above it used to be exactly that. The merge is not unscored: `bounty
+    // .completed` above is the work, the coder's role comes with it, and the
+    // quest below proves the ledger still completed.
+    expect(
+      after.signals.filter((signal) => signal.sourceType === 'pr.merged'),
+      'an author was paid for reviewing their own work',
+    ).toHaveLength(0);
 
     const quests = (await api.act('guild.quests', { guildId: founded.id })) as {
       quests: readonly { id: string; completedAt: string | null; progress: number }[];

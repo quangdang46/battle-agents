@@ -179,6 +179,8 @@ interface Observed {
     readonly bounty: AwardView;
     readonly battle: AwardView;
     readonly testPassed: AwardView;
+    /** §10.2's death rule — the 150 a crash pays, read from the same table. */
+    readonly sessionRecovered: AwardView;
   };
   readonly crasher: Character;
   /** The crashed character's sheets, read after the ending reached the bus. */
@@ -493,6 +495,7 @@ async function runTheLoop(): Promise<Observed> {
       bounty: await award('bounty.completed'),
       battle: await award('battle.finished'),
       testPassed: await award('test.passed'),
+      sessionRecovered: await award('session.recovered'),
     },
     crasher,
     crashed: { sheet: crasherSheet, badges: crasherBadges },
@@ -642,8 +645,8 @@ describe("plan 10.5: one agent's work, through seven stages, to somewhere anothe
     const codes = observed.crashed.badges.badges.map((badge) => badge.code);
     expect(codes).toContain('survived-a-crash.v1');
     expect(codes).toContain('critical-hit.v1');
-    // The experience IS paid, and it is asserted as the price table's own number
-    // rather than as a literal, so a retune moves the expectation with it.
+    // The experience IS paid, and it is asserted as the price table's own numbers
+    // rather than as literals, so a retune moves the expectation with it.
     //
     // This assertion used to be `toBe(0)` — a REPORT, not a passing expectation,
     // and the comment said so. `test.passed` was priced at 100 with a handler
@@ -653,14 +656,19 @@ describe("plan 10.5: one agent's work, through seven stages, to somewhere anothe
     // envelope when the payload has the shape ingest produces, which is the same
     // fallback achievements already used.
     //
-    // STILL UNWIRED, and the report moves here rather than disappearing:
-    // `session.recovered` is priced at 150 and is §10.2's death rule — a failed
-    // run teaches — but nothing PRODUCES it. So a crash pays what the crash's own
-    // test events pay, and the 150 is still a price with no producer. See
-    // ba-9fh, which carries that alongside the other contract defects this file
-    // exposed.
+    // And the death rule is WIRED now, so the total is both prices. This used to
+    // assert `testPassed.xp` alone, with a comment explaining that
+    // `session.recovered` was "priced at 150 and is §10.2's death rule — a failed
+    // run teaches — but nothing PRODUCES it". `session.end` produces it now: a
+    // run that ended as a crash emits it, carrying the session's AGENT, which
+    // the price is paid to. A 150 XP award nobody could earn looked exactly like
+    // 150 XP nobody had earned yet, which is why it survived — a price nothing
+    // pays fails no test.
     expect(observed.awards.testPassed.recognised).toBe(true);
-    expect(observed.xp.crasher).toBe(observed.awards.testPassed.xp);
+    expect(observed.awards.sessionRecovered.recognised).toBe(true);
+    expect(observed.xp.crasher).toBe(
+      observed.awards.testPassed.xp + observed.awards.sessionRecovered.xp,
+    );
     expect(observed.xp.crasher).toBeGreaterThan(0);
   });
 

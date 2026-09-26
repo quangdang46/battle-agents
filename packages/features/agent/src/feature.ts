@@ -39,6 +39,8 @@ export const AGENT_REGISTRATION_REJECTED = 'agent.registration_rejected';
 /** The payload of `session.ended`, which is what a battle's pause clock reads. */
 export interface SessionEndedPayload {
   readonly sessionId: string;
+  /** Whose run ended. Consumers that award read this, or the actor. */
+  readonly agentId: string;
   readonly reason: SessionEndReason;
 }
 
@@ -49,6 +51,7 @@ export interface SessionEndedPayload {
  */
 export interface SessionRecoveredPayload {
   readonly sessionId: string;
+  readonly agentId: string;
   readonly reason: SessionEndReason;
 }
 
@@ -304,10 +307,11 @@ function sessionActions(sessionRepository: SessionRepository) {
           );
         }
         const reason = toEndReason(input.reason);
-        const status = await sessionRepository.end(input.sessionId, reason, context.now());
-        if (status === undefined) {
+        const ended = await sessionRepository.end(input.sessionId, reason, context.now());
+        if (ended === undefined) {
           throw new Error(`session ${input.sessionId} is not running`);
         }
+        const { status, agentId } = ended;
 
         // Ending a session used to be a state change and nothing else, so an
         // ending that came through the protocol was invisible to everything
@@ -316,29 +320,41 @@ function sessionActions(sessionRepository: SessionRepository) {
         // harness reporting one. Two ways to end a run, and the one a client
         // calls by hand was the one nothing could see.
         //
-        // `emit` rather than `bus.publish`, and `session.ended` is in core's
-        // durable set, so this reaches the store. A harness that ALSO reports
-        // the ending produces a second event, which is safe by construction
-        // rather than by luck: battle's pause handler asks `nextBattleStatus`
-        // for the transition and an already-paused battle has none, and the
-        // achievement's award is keyed so a repeat is refused.
+        // `actorId` is the session's AGENT, matching what `toGameEvent` does on
+        // the ingest path, and that is not a detail. A consumer that awards on
+        // the strength of an event reads the actor and treats any non-empty id
+        // as a character — achievements warns only when there is nothing to
+        // read. Putting the session id here looks like a character to every one
+        // of them, and `achievements.agent_id` is a foreign key, so the crash
+        // badge died on insert rather than being refused. `sessionId` is in the
+        // payload as well, because battle's pause clock looks battles up by it.
+        //
+        // A harness that ALSO reports the ending produces a second event, which
+        // is safe by construction rather than by luck: battle asks
+        // `nextBattleStatus` for the transition and an already-paused battle has
+        // none, and the award is keyed so a repeat is refused.
         await context.runtime.emit({
           type: SESSION_EVENTS.ended,
           occurredAt: context.now(),
-          actorId: input.sessionId,
-          payload: { sessionId: input.sessionId, reason } satisfies SessionEndedPayload,
+          actorId: agentId,
+          payload: { sessionId: input.sessionId, agentId, reason } satisfies SessionEndedPayload,
         });
 
         // And §10.2's death rule, which had a price and no producer at all:
         // HP 0 never kills the character, a crashed session grants experience,
         // and nothing in the tree emitted the event that pays it. A run that
         // ended any other way is not a death, so it pays nothing.
+        //
+        // The badge is a separate thing on a separate event: achievements reads
+        // `session.ended` and gates on `reason === 'crashed'`, while this is the
+        // 150 XP. Two consumers, two events, and this one had nobody producing
+        // it — a price nothing pays fails no test.
         if (reason === 'crashed') {
           await context.runtime.emit({
             type: SESSION_EVENTS.recovered,
             occurredAt: context.now(),
-            actorId: input.sessionId,
-            payload: { sessionId: input.sessionId, reason } satisfies SessionRecoveredPayload,
+            actorId: agentId,
+            payload: { sessionId: input.sessionId, agentId, reason } satisfies SessionRecoveredPayload,
           });
         }
 

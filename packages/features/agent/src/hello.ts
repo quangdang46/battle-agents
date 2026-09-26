@@ -98,8 +98,30 @@ export interface SessionRepository {
    * A run that ends is over even though its character is not — that is the
    * whole reason sessions and agents are different things. A late heartbeat
    * cannot reopen it.
+   *
+   * It reports the AGENT back as well as the status, and that is not a
+   * convenience. An ending is an event, and §10.2's death rule pays the
+   * character that crashed — so the event has to name a character. Returning
+   * only a status left the emitter with nothing but the session id to put on
+   * it, and a downstream feature that awards on the strength of an event will
+   * award against whatever non-empty id it is given: the crash badge went into
+   * `achievements` with a session id in its `agent_id` and the insert failed on
+   * the foreign key. The agent is already in the row this updates, so returning
+   * it costs no query; looking it up afterwards would be a second round trip to
+   * learn something the first one had.
    */
-  end(sessionId: string, reason: SessionEndReason, now: string): Promise<SessionStatus | undefined>;
+  end(
+    sessionId: string,
+    reason: SessionEndReason,
+    now: string,
+  ): Promise<EndedSession | undefined>;
+}
+
+/** What ending a run reports back: how it ended, and whose run it was. */
+export interface EndedSession {
+  readonly status: SessionStatus;
+  /** NOT NULL in the schema — every session belongs to exactly one agent. */
+  readonly agentId: string;
 }
 
 export interface ResumableSession {

@@ -67,9 +67,12 @@ class FakeSessionRepository implements SessionRepository {
     return 'active';
   }
 
-  async end(sessionId: string, _reason: SessionEndReason): Promise<SessionStatus | undefined> {
+  async end(
+    sessionId: string,
+    _reason: SessionEndReason,
+  ): Promise<{ readonly status: SessionStatus; readonly agentId: string } | undefined> {
     this.ended.push(sessionId);
-    return 'ended';
+    return { status: 'ended', agentId: 'agent-1' };
   }
 
   async createSession(): Promise<{ id: string }> {
