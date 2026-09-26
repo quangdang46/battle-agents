@@ -1,0 +1,576 @@
+/*
+ * The dashboard's own stylesheet.
+ *
+ * DESIGN.md §7 deliberately does not set a palette, a type scale, a spacing
+ * scale, an icon set or a motion language, and says those are this surface's
+ * decisions. They are made here, once, and the reasons are here with them.
+ *
+ * DARK, because of what the product is rather than because it is fashionable.
+ * DESIGN.md §1 fixes the mood at cyberpunk / dev-workstation / RPG-arena, and
+ * the pixel world `ba-game-client-pixijs-riw` builds is lit for a dark stage.
+ * A light dashboard next to it would be two products in one window. There is no
+ * light theme because there is no second set of tokens to keep honest yet;
+ * `prefers-color-scheme` is not a signal this surface reads.
+ *
+ * TWO NEUTRALS AND ONE ACCENT. The neutrals are the page and the raised
+ * surface; amber is the accent and it appears in exactly one job, which is
+ * money. A bounty board whose reward is not the thing the eye lands on is a
+ * board sorted by something else. The accent is NOT used on links, on borders,
+ * on hover states or on the primary button, because an accent that is
+ * everywhere is not an accent.
+ *
+ * NO GRADIENT, NO GLOW, NO GLASS, NO BACKGROUND GRID, NO SHADOW. Each of those
+ * is a way to make a flat page look composed. This one is composed by the
+ * spacing scale and the type scale below, and the only separator is a one-pixel
+ * rule. The sticky bar gets a border rather than a shadow for the same reason:
+ * a shadow on one element reads as elevation, a shadow on twelve reads as fog.
+ *
+ * MOTION IS HOVER AND FOCUS ONLY. Nothing loops, nothing pulses, and the one
+ * dot that carries a colour is a presence state, not a heartbeat animation.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* The neutral ramp. Four steps is what this layout actually needs: page,
+   * surface, hairline, and text that is not the loudest thing on screen. */
+  --page: #0c0e12;
+  --surface: #14171d;
+  --surface-raised: #1b1f27;
+  --rule: #262b35;
+  --rule-strong: #39404e;
+
+  --text: #e8eaef;
+  --text-quiet: #9aa2b1;
+  --text-faint: #6b7383;
+
+  /* The accent, and only the accent. */
+  --reward: #f0b429;
+  --reward-quiet: #8a6712;
+
+  /* Two status colours, both marking a state that is genuinely read. */
+  --online: #46b980;
+  --offline: #6b7383;
+
+  --focus: #7aa2f7;
+
+  /* A four-step scale. Spacing is structure: the gap between a section and its
+   * heading is not the gap between two rows. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+
+  --radius: 6px;
+  --radius-action: 8px;
+
+  /* System UI for everything, monospace only for values that ARE code: an
+   * agent id, a repository coordinate, a raw cent amount. Monospace as a
+   * heading font would be costume, and the world art supplies the game's
+   * character — the dashboard's job is to be readable. */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* A keyboard user has to be able to see where they are, and the ring is the only
+ * affordance they get for it. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+}
+
+p {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── the shell ───────────────────────────────────────────────────────────── */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--page);
+  /* A border rather than a shadow: one elevated element reads as elevation. */
+  border-bottom: 1px solid var(--rule);
+}
+
+.topbar__brand {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.topbar__viewer {
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+  margin-inline-start: auto;
+}
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.page__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+/*
+ * The count line sits beside the heading rather than under it, and carries no
+ * card, no border and no colour. It is a fact about the list below it and
+ * nothing more; the moment a number gets a box around it, every other number on
+ * the page will want one.
+ */
+.page__count {
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+}
+
+.tab {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-quiet);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.tab[aria-current='page'] {
+  color: var(--text);
+  border-bottom-color: var(--rule-strong);
+}
+
+/* A tab with no destination is a broken promise, so it is not a link and says
+ * so in its own text rather than pretending to be one. */
+.tab--absent {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* ── the board ───────────────────────────────────────────────────────────── */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.bounty {
+  display: grid;
+  grid-template-columns: 7rem 1fr auto;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  transition: background-color 120ms ease-out;
+}
+
+.bounty:last-child {
+  border-bottom: 0;
+}
+
+.bounty:hover {
+  background: var(--surface);
+}
+
+/*
+ * The reward is the one place the accent is spent, and it is left-aligned in
+ * its own column so the column of amounts is a column and not a ragged edge.
+ */
+.bounty__reward {
+  color: var(--reward);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.bounty__reward--unfunded {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.bounty__subject {
+  min-width: 0;
+}
+
+.bounty__repo {
+  font-family: var(--font-code);
+  font-size: 0.8125rem;
+  color: var(--text-quiet);
+}
+
+.bounty__issue {
+  color: var(--text);
+}
+
+.bounty__meta {
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.bounty__meta b {
+  color: var(--text-quiet);
+  font-weight: 500;
+}
+
+/* ── the detail page ─────────────────────────────────────────────────────── */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 44rem;
+}
+
+.detail__reward {
+  color: var(--reward);
+  font-size: 1.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+}
+
+.detail__row dt {
+  color: var(--text-faint);
+}
+
+.detail__row dd {
+  margin: 0;
+  font-family: var(--font-code);
+}
+
+/*
+ * A notice the payout rail requires to be unmissable: the platform does not
+ * hold money. It is a bordered block rather than a coloured banner, because the
+ * border says "this is a condition" without claiming urgency the product does
+ * not have.
+ */
+.notice {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+}
+
+.action {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-action);
+  border: 1px solid var(--reward-quiet);
+  color: var(--reward);
+  font-weight: 600;
+  transition: background-color 120ms ease-out;
+}
+
+.action:hover {
+  background: var(--surface-raised);
+}
+
+.action--absent {
+  color: var(--text-faint);
+  border-color: var(--rule);
+  cursor: default;
+}
+
+.action--absent:hover {
+  background: none;
+}
+
+/* ── the roster ──────────────────────────────────────────────────────────── */
+
+.roster {
+  display: grid;
+  /* Two columns of equal weight: the deciding fields on a roster row are the
+   * same for every character, so a varying mosaic would be decoration. */
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: var(--space-3);
+}
+
+.character {
+  display: block;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  transition: border-color 120ms ease-out;
+}
+
+.character:hover {
+  border-color: var(--rule-strong);
+}
+
+.character__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.character__name {
+  font-weight: 600;
+}
+
+.character__level {
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.character__quest {
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+  margin-top: var(--space-1);
+}
+
+/*
+ * One dot, one state, no glow and no pulse. A presence that animates forever
+ * tells a reader there is something happening whether or not anything is, and
+ * the thing that tells them is the session row underneath it.
+ */
+.presence {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-faint);
+  font-size: 0.8125rem;
+  margin-top: var(--space-2);
+}
+
+.presence__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--offline);
+}
+
+.presence--online .presence__dot {
+  background: var(--online);
+}
+
+/* ── the card ────────────────────────────────────────────────────────────── */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 44rem;
+}
+
+.card__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.skills {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill {
+  display: grid;
+  grid-template-columns: 9rem 1fr 3rem;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.skill__name {
+  color: var(--text-quiet);
+}
+
+.skill__track {
+  height: 6px;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.skill__fill {
+  height: 100%;
+  background: var(--rule-strong);
+}
+
+.skill__level {
+  color: var(--text-quiet);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+}
+
+.counters b {
+  display: block;
+  color: var(--text);
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the states ──────────────────────────────────────────────────────────── */
+
+/*
+ * Every one of these says what is missing AND what to do about it. "No data"
+ * is the version that leaves a reader stuck, and a board whose first run is
+ * empty is a board somebody needs to be told how to fill.
+ */
+.state {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  max-width: 34rem;
+}
+
+.state__title {
+  margin-bottom: var(--space-2);
+}
+
+.state__body {
+  color: var(--text-quiet);
+  font-size: 0.875rem;
+}
+
+.state__body + .state__body {
+  margin-top: var(--space-2);
+}
+
+.state__action {
+  display: inline-block;
+  margin-top: var(--space-3);
+  color: var(--text);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-action);
+  padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+}
+
+.state__action:hover {
+  background: var(--surface-raised);
+}
+
+/* ── narrow ──────────────────────────────────────────────────────────────── */
+
+/*
+ * The board's three columns become a stack below 40rem. The reward keeps its
+ * own line because it is the field the row is scanned for, and putting it back
+ * into the flow under the repository would make the amounts ragged again.
+ */
+@media (max-width: 40rem) {
+  .bounty {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .skill {
+    grid-template-columns: 7rem 1fr 2.5rem;
+    gap: var(--space-2);
+  }
+
+  .page {
+    padding: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0ms !important;
+  }
+}
