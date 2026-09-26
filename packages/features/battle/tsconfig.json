@@ -2,7 +2,13 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // The judge RUN provisions a directory and starts processes, so this package
+    // is the first feature to need the node builtins. features/agent already
+    // asks for them, so this is an established shape rather than a new
+    // dependency: `@types/node` is a root devDependency and no package here
+    // declares its own, which is why pnpm-lock.yaml is untouched.
+    "types": ["node"]
   },
   "references": [
     {
