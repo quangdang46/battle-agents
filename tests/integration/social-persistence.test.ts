@@ -12,7 +12,7 @@ import {
   users,
 } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { count, and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -276,9 +276,15 @@ describe('the social repository, over a real database', () => {
       ])
       .onConflictDoNothing();
 
-    // A generous limit, because the assertion is about the relative order of
-    // two rows inside whatever else the shared test table happens to hold.
-    const board = await repository.board({ metric: 'win_rate', limit: 1_000 });
+    // A limit that cannot truncate, DERIVED rather than guessed. This used to
+    // ask for 1_000 under a comment calling that generous, and it stopped being
+    // generous: the shared test table passed 1,000 agents, an agent that has never
+    // fought scores 0 and therefore sorts LAST, so it fell off the end and the
+    // test failed on a fact about the database rather than about the ordering it
+    // exists to check. Any fixed number has the same expiry date.
+    const [row] = await database.select({ total: count() }).from(agents);
+    const total = row?.total ?? 0;
+    const board = await repository.board({ metric: 'win_rate', limit: total + 10 });
     const order = board.map((entry) => entry.agentId);
 
     expect(order).toContain(fought);

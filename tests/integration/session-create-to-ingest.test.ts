@@ -128,14 +128,6 @@ describe('a session created over the API is one the ingest route accepts', () =>
   it('creates the session, then keeps a batch addressed to it', async () => {
     // A character has to exist before a handshake can name one, and that is the
     // agent register command rather than something this test should invent.
-    const githubId = `${randomUUID()}-character-owner`;
-    const { database } = await sharedRuntime();
-    const { users } = await import('@battle-agents/db');
-    const [owner] = await database
-      .insert(users)
-      .values({ githubId, login: githubId })
-      .returning({ id: users.id });
-
     // Dispatched, not acted on: `agent.register` is a COMMAND, and act()
     // refusing it by name — "unknown action agent.register" — is the capability
     // registry doing its job rather than a thing to work around. The distinction
