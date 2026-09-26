@@ -55,6 +55,9 @@ readonly CANONICAL_STAGES=(
   schema-hygiene
   removal-test
   moltbook-claims
+  docs
+  watchlist-claims
+  pooled-driver
   license
   e2e-smoke
 )
@@ -88,6 +91,9 @@ readonly OWNER_DB="ba-db-schema-drizzle-fki"
 readonly OWNER_REMOVAL_TEST="ba-removal-test-e33"
 readonly OWNER_LICENSE="ba-license-hygiene-qy7"
 readonly OWNER_MOLTBOOK="ba-moltbook-verification-0zc"
+readonly OWNER_DOCS="ba-contributor-onboarding-tc9"
+readonly OWNER_WATCHLIST="ba-watchlist-space-molt-5v4"
+readonly OWNER_POOLED_DRIVER="ba-neon-cloud-deploy-zn4"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
 readonly OWNER_CONTRACT="ba-contract-extension-api-w29"
 readonly OWNER_ARCHITECTURE="ba-dependency-rules-os1"
@@ -653,6 +659,34 @@ run_stage_moltbook_claims() {
   run_delegated moltbook-claims "$OWNER_MOLTBOOK" script:check:moltbook
 }
 
+run_stage_docs() {
+  # A doc that drifts from the tree passes every review, because a reviewer
+  # reads prose and not the filesystem. The script asserts that the README's
+  # links resolve, that the advertised good-first-issues exist in the tracker,
+  # that the licence claim is one this repository actually holds, and that the
+  # documented setup steps match what the tree does.
+  run_delegated docs "$OWNER_DOCS" script:check:docs
+}
+
+run_stage_watchlist_claims() {
+  # Resolves every SpaceMolt citation in the research note against the checkout
+  # and asserts the decision is recorded as ADOPT, KEEP or DEFER with a stated
+  # consequence. The clause that earns it is the cross-check: a design doc
+  # leaning on an unverified SpaceMolt mechanic is how a phantom constraint gets
+  # built, and that is the failure the Moltbook check guards on the first watch
+  # target.
+  run_delegated watchlist-claims "$OWNER_WATCHLIST" script:check:watchlist
+}
+
+run_stage_pooled_driver() {
+  # §7.1's beginner trap: a connection constructed per request rather than a
+  # pooled one. The grep half catches a route opening its own connection; the
+  # identity assertion in tests/integration/shared-runtime-fold.test.ts is the
+  # half that earns it, because a hoisted client that looks right in review and
+  # exhausts connections at 2000 writes/s is invisible to a grep.
+  run_delegated pooled-driver "$OWNER_POOLED_DRIVER" script:check:pooled-driver
+}
+
 run_stage_license() {
   run_delegated license "$OWNER_LICENSE" file:scripts/check-licenses.sh script:check:licenses
 }
@@ -681,6 +715,9 @@ run_stage() {
     integration) run_stage_integration ;;
     removal-test) run_stage_removal_test ;;
     moltbook-claims) run_stage_moltbook_claims ;;
+    docs) run_stage_docs ;;
+    watchlist-claims) run_stage_watchlist_claims ;;
+    pooled-driver) run_stage_pooled_driver ;;
     license) run_stage_license ;;
     e2e-smoke) run_stage_e2e_smoke ;;
     *) fail "no runner registered for stage '$1'" ;;

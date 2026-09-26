@@ -35,5 +35,11 @@ removal-test
 # here because a check nobody invokes is the exact failure ba-risk-gates-e74
 # exists to prevent, and this one was written to pass while enforcing nothing.
 moltbook-claims
+# `docs` and `pooled-driver` are here because both scripts were written, run
+# green by hand, and would have stayed that way. A check nobody invokes is a
+# comment with a shebang, and each of these was that until this line.
+docs
+watchlist-claims
+pooled-driver
 license
 e2e-smoke

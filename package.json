@@ -29,7 +29,10 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:m0": "bash scripts/test-m0.sh",
     "test:unit": "vitest run --config vitest.unit.config.ts",
-    "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json"
+    "typecheck": "tsc -b tsconfig.build.json && tsc -p tsconfig.json",
+    "check:docs": "bash scripts/check-docs.sh",
+    "check:pooled-driver": "bash scripts/check-pooled-driver.sh",
+    "check:watchlist": "bash scripts/check-watchlist-claims.sh"
   },
   "devDependencies": {
     "@battle-agents/activity": "workspace:*",
