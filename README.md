@@ -138,15 +138,18 @@ three failure modes by name, the four frozen contracts, and the exact files you
 touch to add a package. [AGENTS.md](AGENTS.md) is the same territory arranged
 as a map for coding agents.
 
-There are **3** open good-first-issues, all fun-visible — you ship something
-that shows up on screen rather than fixing an internal chore. Read one with
-`br show <id>`:
+There are **0** open good-first-issues, because every one we have opened has
+shipped: an Aider adapter, a Goose adapter, and a battle reporter that renders the
+public replay as a readable report. That is the point of choosing them — each is
+evidence that `packages/adapters/_template` and this README are enough to ship
+something that shows up on screen without asking anyone. (`br show <id>` for any of
+them; the docs gate refuses to advertise one as open once it is closed, so this
+paragraph goes stale in one direction only.)
 
-| Bead                                | You would add                                      |
-| ----------------------------------- | -------------------------------------------------- |
-| `ba-adapter-goose-good-first-cpd`   | an adapter, so Goose joins the roster              |
-| `ba-adapter-aider-good-first-9f1`   | an adapter, so Aider joins the roster              |
-| `ba-battle-reporter-good-first-rxz` | a page that renders a session as a readable report |
+The route for the next is the same: take a template, follow its checklist, and
+`br ready` for whatever is open. The two things the template's README flags as
+the usual first mistakes — tool-name normalisation and consent gating — are the
+two the shipped adapters had to get right before their contract suite passed.
 
 Run the gate before you open a PR. It is the same command CI runs, and it is
 faster than a review round trip.
