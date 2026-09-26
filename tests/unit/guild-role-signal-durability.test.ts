@@ -150,18 +150,25 @@ function durableEventTypes(): ReadonlySet<string> {
  * passing on an empty set.
  */
 /** The evidence types owned by a feature that is NOT in this build. */
-function removableFeatureOwning(
+function busOnlyInThisBuild(
   types: readonly string[],
   present: ReadonlySet<string>,
   durable: ReadonlySet<string>,
 ): readonly string[] {
-  const absent: string[] = [];
+  const busOnly: string[] = [];
   for (const type of types) {
     if (durable.has(type)) continue;
-    const prefix = `${type.split('.')[0]}.`;
-    if (!present.has(type.slice(0, prefix.length - 1))) absent.push(type);
+    // Skip anything whose OWNING FEATURE IS NOT INSTALLED. Stripping bounty makes
+    // its types neither durable nor bus-only: they belong to a feature that is
+    // not in this build, and calling that a durability failure fails the removal
+    // test on the assertion meant to prove the dependency graph is clean. The
+    // first version of this helper collected those instead of skipping them,
+    // which is the same bug pointed the other way.
+    const owner = type.slice(0, type.indexOf('.'));
+    if (!present.has(owner)) continue;
+    busOnly.push(type);
   }
-  return absent;
+  return busOnly;
 }
 
 function guildEvidenceTypes(): readonly string[] {
@@ -204,8 +211,7 @@ describe('every guild role signal is a durable event', () => {
     // asserts the opposite of what this repository is built around; three have
     // been written that way today and all three were caught the same way.
     const present = new Set(featureDirs());
-    const removable = removableFeatureOwning(guildEvidenceTypes(), present, durable);
-    const busOnly = removable.filter((type) => !durable.has(type));
+    const busOnly = busOnlyInThisBuild(guildEvidenceTypes(), present, durable);
 
     expect(
       busOnly,
