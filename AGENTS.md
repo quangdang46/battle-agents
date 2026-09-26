@@ -100,6 +100,15 @@ rediscovered.
   in a separate schema, so dropping the application schema leaves it believing
   everything applied. The `migrations` and `schema-drift` stages check the
   tables and the artifact directly for exactly this reason.
+- **A check may not assume every feature is installed.** `removal-test.sh`
+  strips each feature in turn and runs the unit suite, so any test that reads
+  `packages/features/*/src` at a fixed path fails on the removal it was meant to
+  prove clean. Four were written this way before the pattern was named. A feature
+  that is absent is not a feature with no behaviour: its event types are neither
+  durable nor bus-only, and a style or vocabulary check that cannot tell the
+  difference reports a dependency that does not exist. This is the same failure as
+  the `any` at a boundary, one layer out — an assertion about the whole system
+  reaching past a seam the system is built to have.
 
 ## Working a bead
 
