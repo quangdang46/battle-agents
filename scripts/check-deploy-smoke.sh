@@ -98,7 +98,16 @@ probe() {
   local name=$1 want_status=$2 want_body=$3 method=$4 path=$5 base=$6 payload=${7:-}
   local body status stderr_file rc
   stderr_file="$(mktemp)"
+  # --location on the ROOT probe only, and it is a correction rather than
+  # leniency: the app answers 307 from / to the board, which is correct
+  # behaviour, and a probe that treats a redirect as a failure reports a working
+  # deployment as broken. Following the hop is what "the root serves" means; the
+  # API probes deliberately do NOT follow, because a 307 out of /api/events is a
+  # routing defect rather than a convenience.
   local -a args=(--silent --show-error --max-time 30 --request "$method" --write-out '\n%{http_code}')
+  if [ "$path" = '/' ]; then
+    args+=(--location --max-redirs 5)
+  fi
 
   if [ -n "$payload" ]; then
     args+=(--header 'content-type: application/json' --data-binary "$payload")
