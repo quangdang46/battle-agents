@@ -29,6 +29,7 @@
     // and silently missed by the other.
     "paths": {
       "@battle-agents/_template": ["./packages/adapters/_template/src/index.ts"],
+      "@battle-agents/achievements": ["./packages/features/achievements/src/index.ts"],
       "@battle-agents/activity": ["./packages/features/activity/src/index.ts"],
       "@battle-agents/agent": ["./packages/features/agent/src/index.ts"],
       "@battle-agents/animation": ["./packages/features/animation/src/index.ts"],

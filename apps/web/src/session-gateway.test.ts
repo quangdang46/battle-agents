@@ -61,7 +61,7 @@ describe('the session gateway wiring', () => {
     // top level, so a gateway that forgot the translation returned 500 — which
     // tells the caller to retry a credential that will never be accepted. The
     // event gateway records having shipped that bug; this is the same edge.
-    const { handle } = createSessionGateway({
+    const { handle } = await createSessionGateway({
       database: UNREADABLE_DATABASE,
       api: stubApi(),
     });
@@ -73,7 +73,7 @@ describe('the session gateway wiring', () => {
   });
 
   it('refuses a token that was put in the URL, on this surface as on the others', async () => {
-    const { handle } = createSessionGateway({
+    const { handle } = await createSessionGateway({
       database: UNREADABLE_DATABASE,
       api: stubApi(),
     });
@@ -88,7 +88,7 @@ describe('the session gateway wiring', () => {
   });
 
   it('refuses a malformed Authorization header', async () => {
-    const { handle } = createSessionGateway({
+    const { handle } = await createSessionGateway({
       database: UNREADABLE_DATABASE,
       api: stubApi(),
     });

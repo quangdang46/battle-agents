@@ -56,12 +56,21 @@ importers:
 
   apps/web:
     dependencies:
+      '@battle-agents/achievements':
+        specifier: workspace:*
+        version: link:../../packages/features/achievements
       '@battle-agents/agent':
         specifier: workspace:*
         version: link:../../packages/features/agent
       '@battle-agents/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@battle-agents/battle':
+        specifier: workspace:*
+        version: link:../../packages/features/battle
+      '@battle-agents/bounty':
+        specifier: workspace:*
+        version: link:../../packages/features/bounty
       '@battle-agents/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -210,6 +219,15 @@ importers:
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
+
+  packages/features/achievements:
+    dependencies:
+      '@battle-agents/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@battle-agents/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
 
   packages/features/activity:
     dependencies:

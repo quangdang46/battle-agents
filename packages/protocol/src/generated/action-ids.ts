@@ -49,10 +49,34 @@ export type SocialActionId =
   | 'social.profile'
   | 'social.send';
 
+/** battle */
+export type BattleActionId =
+  | 'battle.create'
+  | 'battle.join'
+  | 'battle.finish'
+  | 'battle.weights'
+  | 'battle.read'
+  | 'battle.list'
+  | 'battle.sweep';
+
+/** achievements */
+export type AchievementsActionId =
+  'achievements.catalogue' | 'achievements.list' | 'achievements.project';
+
 /** Every action id in this build, sorted. The type `act()` is checked against. */
 export type RegisteredActionId =
+  | 'achievements.catalogue'
+  | 'achievements.list'
+  | 'achievements.project'
   | 'agent.describe'
   | 'agent.read'
+  | 'battle.create'
+  | 'battle.finish'
+  | 'battle.join'
+  | 'battle.list'
+  | 'battle.read'
+  | 'battle.sweep'
+  | 'battle.weights'
   | 'bounty.claim'
   | 'bounty.create'
   | 'bounty.expire'
@@ -95,8 +119,18 @@ export function isRegisteredActionId(value: string): value is RegisteredActionId
 }
 
 export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
+  'achievements.catalogue',
+  'achievements.list',
+  'achievements.project',
   'agent.describe',
   'agent.read',
+  'battle.create',
+  'battle.finish',
+  'battle.join',
+  'battle.list',
+  'battle.read',
+  'battle.sweep',
+  'battle.weights',
   'bounty.claim',
   'bounty.create',
   'bounty.expire',

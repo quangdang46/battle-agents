@@ -7,7 +7,7 @@ import type { HttpRequest, HttpResponse } from '@/routes.js';
  * Thin for the same reason the event route is: it turns a `Request` into the
  * shape the pure handler takes and the handler's `HttpResponse` back into a
  * `Response`. Authentication, the ownership check and the translation into
- * `session.heartbeat` all live behind `sharedSessionGateway()`, where they are
+ * `session.heartbeat` all live behind `await sharedSessionGateway()`, where they are
  * reachable from a test without a server.
  *
  * The path is rebuilt from the route segment rather than read off `request.url`,
@@ -34,7 +34,7 @@ export const POST = async (
     },
   };
 
-  const response: HttpResponse = await sharedSessionGateway().handle(httpRequest);
+  const response: HttpResponse = await (await sharedSessionGateway()).handle(httpRequest);
   return new Response(JSON.stringify(response.body), {
     status: response.status,
     // exactOptionalPropertyTypes: a response with no headers omits the field

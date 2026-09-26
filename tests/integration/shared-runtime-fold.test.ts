@@ -1,6 +1,7 @@
 import type { ApplicationApi } from '@battle-agents/api';
 import type { StreamFrame } from '../../apps/web/src/event-stream.js';
 import { closeSharedApi, sharedApi } from '../../apps/web/src/routes.js';
+import type { EventGateway } from '../../apps/web/src/event-gateway.js';
 import { closeSharedEventGateway, sharedEventGateway } from '../../apps/web/src/event-gateway.js';
 import { closeSharedRuntime, sharedRuntime } from '../../apps/web/src/shared-runtime.js';
 
@@ -31,7 +32,7 @@ function requireDatabase(): void {
 }
 
 /** Discards the opening full_state so what remains is deltas. */
-async function openStream(hub: ReturnType<typeof sharedEventGateway>['hub']): Promise<{
+async function openStream(hub: EventGateway['hub']): Promise<{
   pull(): Promise<StreamFrame | undefined>;
   readonly pending: number;
 }> {
@@ -47,10 +48,10 @@ afterAll(async () => {
 });
 
 describe('the app publishes on one bus', () => {
-  it('gives the SSE gateway the runtime and bus the Application API acts through', () => {
+  it('gives the SSE gateway the runtime and bus the Application API acts through', async () => {
     requireDatabase();
-    const { runtime, bus } = sharedRuntime();
-    const gateway = sharedEventGateway();
+    const { runtime, bus } = await sharedRuntime();
+    const gateway = await sharedEventGateway();
 
     // Identity, not equality: two runtimes wired to the same repositories would
     // pass a structural comparison and still lose every event.
@@ -58,15 +59,15 @@ describe('the app publishes on one bus', () => {
     expect(gateway.runtime).toBe(runtime);
   });
 
-  it('returns the same shared runtime to every caller', () => {
+  it('returns the same shared runtime to every caller', async () => {
     requireDatabase();
 
-    expect(sharedRuntime()).toBe(sharedRuntime());
+    expect(await sharedRuntime()).toBe(await sharedRuntime());
     expect(sharedApi()).toBe(sharedApi());
     expect(sharedEventGateway()).toBe(sharedEventGateway());
   });
 
-  it('reuses one pool rather than opening one per caller', () => {
+  it('reuses one pool rather than opening one per caller', async () => {
     // The beginner trap plan §7.1 names: never construct a new connection and
     // connect per query, always use a pooled driver. createDatabasePool()
     // returns a NEW Pool on every call, so the thing that actually has to be
@@ -80,15 +81,15 @@ describe('the app publishes on one bus', () => {
     // the failure is invisible in a test that only ever makes one request.
     requireDatabase();
 
-    expect(sharedRuntime().database).toBe(sharedRuntime().database);
+    expect((await sharedRuntime()).database).toBe((await sharedRuntime()).database);
   });
 });
 
 describe('a game action reaches the public stream', () => {
   it('delivers the event an action emitted to a subscriber', async () => {
     requireDatabase();
-    const api: ApplicationApi = sharedApi();
-    const gateway = sharedEventGateway();
+    const api: ApplicationApi = await sharedApi();
+    const gateway = await sharedEventGateway();
     const subscriber = await openStream(gateway.hub);
 
     // No event is published by hand. The action is the publisher, which is the
@@ -104,9 +105,9 @@ describe('a game action reaches the public stream', () => {
 
   it('delivers it to an observer on the same bus, once each', async () => {
     requireDatabase();
-    const api: ApplicationApi = sharedApi();
-    const { bus } = sharedRuntime();
-    const subscriber = await openStream(sharedEventGateway().hub);
+    const api: ApplicationApi = await sharedApi();
+    const { bus } = await sharedRuntime();
+    const subscriber = await openStream((await sharedEventGateway()).hub);
 
     const seenByApi: unknown[] = [];
     const observer = api.observe({}, (event) => seenByApi.push(event));
@@ -123,6 +124,6 @@ describe('a game action reaches the public stream', () => {
     // from the action.
     expect(seenByApi).toHaveLength(1);
     expect(subscriber.pending).toBe(1);
-    expect(bus).toBe(sharedEventGateway().bus);
+    expect(bus).toBe((await sharedEventGateway()).bus);
   });
 });

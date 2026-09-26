@@ -298,7 +298,7 @@ describe('the machine-native path', () => {
     // The composed runtime, with the feature wired exactly as it ships. The
     // assertion is that the refusal is loud: an absent authorization service
     // must never read as an open channel.
-    const { runtime } = sharedRuntime();
+    const { runtime } = await sharedRuntime();
     const api = createApplicationApi(runtime);
 
     expect(runtime.degraded().get('social')).toEqual([ACL]);
@@ -311,7 +311,7 @@ describe('the machine-native path', () => {
     // The same `act()` the CLI and an MCP tool call. Installing the provider
     // also proves the degradation signal is recomputed on install rather than
     // fixed at construction.
-    const { runtime, bus } = sharedRuntime();
+    const { runtime, bus } = await sharedRuntime();
     const api = createApplicationApi(runtime, bus);
     const body = `machine-native ${process.pid}`;
 
@@ -359,7 +359,7 @@ describe('the machine-native path', () => {
   });
 
   it('leaves nothing behind for a send the ACL refused', async () => {
-    const { runtime } = sharedRuntime();
+    const { runtime } = await sharedRuntime();
     const api = createApplicationApi(runtime);
     const body = `refused ${process.pid}`;
 
@@ -382,7 +382,7 @@ describe('the machine-native path', () => {
   it('takes the joined string the command line sends', async () => {
     // `{ args }` is what packages/cli/src/commands.ts passes for every verb, and
     // no action in this repository read it before this one.
-    const { runtime, bus } = sharedRuntime();
+    const { runtime, bus } = await sharedRuntime();
     const api = createApplicationApi(runtime, bus);
     const body = `from the command line ${process.pid}`;
 
@@ -401,7 +401,7 @@ describe('the machine-native path', () => {
   });
 
   it('reads a public profile that excludes the owning account', async () => {
-    const { runtime } = sharedRuntime();
+    const { runtime } = await sharedRuntime();
     const api = createApplicationApi(runtime);
     const [writer] = await database.select().from(agents).where(eq(agents.id, writerId)).limit(1);
 

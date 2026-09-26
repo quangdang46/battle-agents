@@ -168,7 +168,6 @@ async function seedBattleFixtures(tx: SeedTransaction): Promise<void> {
         mode: SEED_BATTLE.mode,
         weightsJson: SEED_BATTLE.weightsJson,
         status: SEED_BATTLE.status,
-        winnerSessionId: SEED_BATTLE.winnerSessionId,
       },
     });
 
@@ -177,7 +176,7 @@ async function seedBattleFixtures(tx: SeedTransaction): Promise<void> {
     .values([...SEED_BATTLE_PARTICIPANTS])
     .onConflictDoUpdate({
       target: [battleParticipants.battleId, battleParticipants.sessionId],
-      set: { scoreJson: battleParticipants.scoreJson },
+      set: { scoreJson: battleParticipants.scoreJson, won: battleParticipants.won },
     });
 }
 

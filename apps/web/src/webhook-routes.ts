@@ -57,9 +57,9 @@ export type WebhookHttpHandler = (request: WebhookHttpRequest) => Promise<Webhoo
  */
 let cached: WebhookHttpHandler | undefined;
 
-export function sharedGithubWebhook(): WebhookHttpHandler {
+export async function sharedGithubWebhook(): Promise<WebhookHttpHandler> {
   if (cached === undefined) {
-    const { database, runtime } = sharedRuntime();
+    const { database, runtime } = await sharedRuntime();
     const handle = createGithubWebhookHandler({
       // A provider, not a value, so the secret is read per request: rotating it
       // needs no restart, and an unset secret fails closed on the very next

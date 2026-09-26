@@ -26,7 +26,7 @@ export const GET = async (request: Request): Promise<Response> => {
     },
   };
 
-  const response = await sharedEventGateway().handle(httpRequest);
+  const response = await (await sharedEventGateway()).handle(httpRequest);
   // The first argument to `new Response` is its body; `ResponseInit` (the second)
   // has no `body` field. Derived from the constructor rather than naming
   // `BodyInit`, which is not a global in this project (no DOM lib, and @types/node

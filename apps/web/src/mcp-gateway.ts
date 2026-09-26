@@ -49,8 +49,8 @@ export interface McpGateway {
  */
 const MCP_REQUIRED_SCOPE = 'mcp';
 
-export function createMcpGateway(database: Database): McpGateway {
-  const sessions = createMcpSessionStore({ createServer: serverFactoryFor(sharedApi()) });
+export async function createMcpGateway(database: Database): Promise<McpGateway> {
+  const sessions = createMcpSessionStore({ createServer: serverFactoryFor(await sharedApi()) });
   const handle = createMcpRoutes({
     // The same authenticator the telemetry plane uses, supplied rather than
     // imported for the reason event-gateway.ts gives: it is the one collaborator
@@ -82,14 +82,19 @@ let cached: { gateway: McpGateway; close: () => Promise<void> } | undefined;
  * database pool is fine once and fatal per request. The credential store shares
  * the shared runtime's pool rather than opening a third one.
  */
-export function sharedMcpGateway(): McpGateway {
-  if (cached !== undefined) {
-    return cached.gateway;
+export async function sharedMcpGateway(): Promise<McpGateway> {
+  const existing = cached;
+  if (existing !== undefined) {
+    return existing.gateway;
   }
-  const { database } = sharedRuntime();
-  const gateway = createMcpGateway(database);
+  const { database } = await sharedRuntime();
+  // A local rather than writing through `cached` and reading it back: the
+  // narrowing from the guard above does not survive an await, so `cached.gateway`
+  // here is `McpGateway | undefined` to the compiler even though it is not at
+  // runtime.
+  const gateway = await createMcpGateway(database);
   cached = { gateway, close: () => Promise.resolve() };
-  return cached.gateway;
+  return gateway;
 }
 
 /** Drops the gateway's cache. The pool belongs to `sharedRuntime`. */

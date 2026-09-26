@@ -3,7 +3,7 @@ import type { GameEvent, StateStore } from '@battle-agents/core';
 import { sql } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
-import { eventLog } from '../schema/index.js';
+import { eventLog, featureState } from '../schema/index.js';
 
 /**
  * The runtime's durable store, backed by the activity log.
@@ -20,6 +20,7 @@ import { eventLog } from '../schema/index.js';
  */
 export class DrizzleStateStore implements StateStore {
   readonly #database: Database;
+  readonly #slices = new Map<string, { readonly state: unknown }>();
 
   constructor(database: Database) {
     this.#database = database;
@@ -40,25 +41,66 @@ export class DrizzleStateStore implements StateStore {
   /**
    * Per-feature durable state, namespaced by the feature that owns it.
    *
-   * Unsupported, and it fails loudly on both halves rather than returning
-   * undefined. A `load` that quietly answered "you have no state" would let a
-   * feature run against an empty account and look like a working product with
-   * nothing in it — the failure mode this whole store is built to avoid. The
-   * plan puts per-feature state with the features that own it, so the first
-   * feature to need it decides the shape rather than inheriting a guess.
+   * `undefined` before the feature's first write, and ONLY then. A `load` that
+   * answered "you have no state" for a feature that has written would let it run
+   * against an empty account and look like a working product with nothing in it
+   * — the failure mode this whole store is built to avoid — so the absent case is
+   * a row that was never written rather than a row whose column is null.
+   *
+   * The shape is one value per feature because `StateStore.load` takes a feature
+   * id and no key: the frozen contract has no place for a second one, and a table
+   * with a composite key would be inventing an addressing scheme the interface
+   * does not have. The battle feature is what needed this, and
+   * `schema/feature-state.ts` says what it keeps and why.
    */
-  load<S>(_feature: string): S | undefined {
-    throw new Error(
-      'DrizzleStateStore.load is not implemented: no feature needs durable ' +
-        'per-feature state yet, and the first one to need it should decide the shape.',
-    );
+  load<S>(feature: string): S | undefined {
+    const row = this.#readRow(feature);
+    return row === undefined ? undefined : (row.state as S);
   }
 
-  async save<S>(_feature: string, _state: S): Promise<void> {
-    throw new Error(
-      'DrizzleStateStore.save is not implemented: no feature needs durable ' +
-        'per-feature state yet, and the first one to need it should decide the shape.',
-    );
+  async save<S>(feature: string, state: S): Promise<void> {
+    // Insert-or-replace rather than update-then-insert: a feature's first write
+    // must not depend on a row it has never seen, and the two-step version has a
+    // window in which two first writes collide on the primary key.
+    await this.#database
+      .insert(featureState)
+      .values({ feature, state: state as Record<string, unknown>, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: featureState.feature,
+        set: { state: state as Record<string, unknown>, updatedAt: new Date() },
+      });
+    this.#slices.set(feature, { state });
+  }
+
+  /**
+   * Reads every feature's slice into the cache, so a restarted process sees the
+   * state the previous one left.
+   *
+   * THIS IS NOT OPTIONAL FOR A HOST THAT RESTARTS, and the reason is a real
+   * failure it prevents. `StateStore.load` is synchronous in the frozen contract,
+   * which is the right call — a contract only one store can satisfy is not a
+   * contract — and it leaves this class unable to await a query. So the database
+   * read happens here, once, where awaiting is allowed, and `load` answers from
+   * the cache afterwards.
+   *
+   * Without it, a process that started fresh would answer `undefined` for a
+   * feature that had durable state, and the battle feature's session-to-agent map
+   * would come back empty: the arena gate would stop gating and no battle won
+   * since the restart would emit a reward event, because the agent a session
+   * belonged to is looked up rather than trusted from a caller. The composition
+   * root must await this at startup.
+   */
+  async prime(): Promise<void> {
+    const rows = await this.#database.select().from(featureState);
+    this.#slices.clear();
+    for (const row of rows) {
+      this.#slices.set(row.feature, { state: row.state });
+    }
+  }
+
+  /** The cache, and only the cache. See `prime` for why this cannot query. */
+  #readRow(feature: string): { readonly state: unknown } | undefined {
+    return this.#slices.get(feature);
   }
 
   /** How many rows the log holds, which is the number a storage budget cares about. */

@@ -32,6 +32,9 @@
       "path": "packages/features/animation"
     },
     {
+      "path": "packages/features/achievements"
+    },
+    {
       "path": "packages/features/battle"
     },
     {

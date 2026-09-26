@@ -53,6 +53,26 @@ const DECLARED_MVP_FEATURES: Readonly<Record<string, string>> = {
   reputation: '§10.2/§11.3 — trust from outcomes, distinct from progression.',
   social:
     '§11.4 product shape — messages, profiles, leaderboard. Degraded until the ACL principal is decided.',
+  // §17.8's own carve-out names the M1/M2/M4 slice, and M4 is the battle: §2.1
+  // makes it the differentiator, §24 gives it CreateBattle/JoinBattle/FinishBattle,
+  // and §17.4 puts its fairness properties (a published rubric) inside the MVP
+  // rather than after it.
+  //
+  // The entry is here because the composition root installs it, and the whole
+  // point of this list is that installing a feature is a decision somebody wrote
+  // down. §17.8 also bans "tournament" and "boss" in the MVP — as GAMEPLAY, and
+  // this feature has neither: a battle mode is a stored string this build
+  // answers fail-closed for, and no season, guild-war or marketplace arrives with
+  // it. The vocabulary is not the axis, and the header says so.
+  battle: '§2.1/§24 — the battle, and §17.4 a rubric published before it is judged. M4.',
+  // §17.8 bars achievements from the MVP "beyond the §10.2 sheet", and §10.2's
+  // sheet names Achievements among the seven things a character carries. Read
+  // together the two say what the sheet says and nothing more: a badge derived
+  // from recorded outcomes. What would be out of scope is the thing a badge
+  // invites — a points currency, a rarity tier, a shop — and the feature as
+  // built is not that. The entry is here because installing it is a decision
+  // somebody wrote down, which is the entire point of this list.
+  achievements: '§10.2 sheet (Achievements), derived from the activity log. Not a currency.',
 };
 
 /** What a `somethingFeature({` construction looks like once prettier has run. */

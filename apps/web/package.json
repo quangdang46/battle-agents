@@ -18,8 +18,10 @@
     "start": "next start"
   },
   "dependencies": {
+    "@battle-agents/achievements": "workspace:*",
     "@battle-agents/agent": "workspace:*",
     "@battle-agents/api": "workspace:*",
+    "@battle-agents/battle": "workspace:*",
     "@battle-agents/bounty": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",

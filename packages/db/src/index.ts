@@ -16,6 +16,20 @@ export { and, eq, or, sql } from 'drizzle-orm';
 export { closeDatabasePool, createDatabase, createDatabasePool } from './client.js';
 export type { Database } from './client.js';
 export { applyMigrations } from './migrate.js';
+export { DrizzleAchievementsRepository } from './repositories/achievements.js';
+export type {
+  AchievementsStore,
+  AwardedAchievementRow,
+  RecordedOutcomeRow,
+} from './repositories/achievements.js';
+export { DrizzleBattleRepository } from './repositories/battles.js';
+export type {
+  BattleParticipantRow,
+  BattleRow,
+  BattleStore,
+  JoinOutcomeRow,
+  JoinRefusalRow,
+} from './repositories/battles.js';
 export { DrizzleActivityLog, DEFAULT_TRAIL_LIMIT } from './repositories/activity.js';
 export type { ActivityLogEntry, ActivityTrailQuery } from './repositories/activity.js';
 export {

@@ -28,6 +28,12 @@ export {
 } from './credential.js';
 export type { CredentialRejection, IssuedCredential } from './credential.js';
 export { hello, sweepStaleSessions, UnknownAgentError } from './hello.js';
+// Exported so the battle feature can be given the SAME number rather than a
+// second copy of it. Two constants that both mean "how long may a participant be
+// away" is two answers to one question, and they would drift silently. The
+// battle package deliberately takes this as a required parameter rather than
+// defaulting it, precisely so the wiring is visible at the composition root.
+export { DEFAULT_RESUME_GRACE_MS } from './session.js';
 export type {
   HelloOptions,
   HelloRequest,

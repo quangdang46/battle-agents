@@ -24,6 +24,6 @@ export const POST = async (request: Request): Promise<Response> => {
     rawBody,
   };
 
-  const response = await sharedGithubWebhook()(webhookRequest);
+  const response = await (await sharedGithubWebhook())(webhookRequest);
   return new Response(JSON.stringify(response.body), { status: response.status });
 };

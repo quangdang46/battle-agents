@@ -1,4 +1,5 @@
 export * from './auth.js';
+export * from './feature-state.js';
 export * from './ownership.js';
 export * from './platform.js';
 export * from './views.js';

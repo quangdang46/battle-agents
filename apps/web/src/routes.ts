@@ -140,7 +140,7 @@ function describeFailure(error: unknown): HttpResponse {
 /**
  * The Application API, over the process-wide runtime.
  *
- * The runtime, its bus and its pool all come from `sharedRuntime()` so that an
+ * The runtime, its bus and its pool all come from `await sharedRuntime()` so that an
  * action taken through this API publishes to the same bus the SSE stream is
  * subscribed to. Building a second runtime here is what made game events
  * invisible to spectators: this used to create its own
@@ -152,9 +152,9 @@ function describeFailure(error: unknown): HttpResponse {
  */
 let cached: ApplicationApi | undefined;
 
-export function sharedApi(): ApplicationApi {
+export async function sharedApi(): Promise<ApplicationApi> {
   if (cached === undefined) {
-    const { runtime, bus } = sharedRuntime();
+    const { runtime, bus } = await sharedRuntime();
     cached = createApplicationApi(runtime, bus);
   }
   return cached;

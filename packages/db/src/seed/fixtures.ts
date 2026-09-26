@@ -180,13 +180,26 @@ export const SEED_MATCHING_FUNDING: typeof bountyFunds.$inferInsert = {
 
 export const SEEDED_BOUNTY_TOTAL_CENTS = LEAD_FUNDING_CENTS + MATCHING_FUNDING_CENTS;
 
+/**
+ * A battle between the two seeded agents, on the seeded bounty.
+ *
+ * `speed`, and not the `ranked` this fixture used to carry. The mode column takes
+ * any string — the taxonomy belongs to another bead and the feature answers
+ * fail-closed for a value it does not recognise — but `ranked` is a name nothing
+ * in this repository defines, and a seed row whose mode no reader can interpret
+ * is a fixture that teaches the wrong thing. `speed` is one of the six the plan
+ * names for M4.
+ *
+ * No `winnerSessionId` and no `won` flag: this battle is still running, and the
+ * winner of a finished battle is a flag on the participant rows rather than a
+ * column that can hold only one of a shared win's two winners.
+ */
 export const SEED_BATTLE: typeof battles.$inferInsert = {
   id: SEED_IDS.battle,
-  mode: 'ranked',
+  mode: 'speed',
   bountyId: SEED_IDS.bounty,
   weightsJson: BATTLE_WEIGHTS,
   status: 'running',
-  winnerSessionId: null,
   replayJson: null,
   finishedAt: null,
 };
@@ -195,12 +208,14 @@ export const SEED_BATTLE_PARTICIPANTS: readonly (typeof battleParticipants.$infe
   {
     battleId: SEED_IDS.battle,
     sessionId: SEED_IDS.challengerSession,
-    scoreJson: { correctness: 0.9, tests: 1 },
+    scoreJson: { total: 0.92, contributions: [] },
+    won: 0,
   },
   {
     battleId: SEED_IDS.battle,
     sessionId: SEED_IDS.opponentSession,
-    scoreJson: { correctness: 0.8, tests: 0.9 },
+    scoreJson: { total: 0.81, contributions: [] },
+    won: 0,
   },
 ];
 

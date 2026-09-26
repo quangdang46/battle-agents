@@ -1,1 +1,131 @@
-export {};
+export {
+  BATTLE_ABANDONED,
+  BATTLE_CREATE,
+  BATTLE_CREATED,
+  BATTLE_EXPIRED,
+  BATTLE_FINISH,
+  BATTLE_FINISHED,
+  BATTLE_JOIN,
+  BATTLE_JOINED,
+  BATTLE_JOIN_REFUSED,
+  BATTLE_LIST,
+  BATTLE_PAUSED,
+  BATTLE_READ,
+  BATTLE_RESUMED,
+  BATTLE_SWEEP,
+  BATTLE_WEIGHTS_READ,
+  battleFeature,
+  REPUTATION_READ,
+} from './feature.js';
+export type { BattleDependencies } from './feature.js';
+export {
+  ARENA_MIN_TRUST,
+  BATTLE_MODES,
+  BATTLE_STATUSES,
+  BATTLE_TRANSITIONS,
+  battleCapacity,
+  DEFAULT_BATTLE_MODE,
+  DEFAULT_BATTLE_WEIGHTS,
+  isBattleWeights,
+  isKnownBattleMode,
+  isTerminalBattle,
+  JUDGE_CRITERIA,
+  mayEnterArena,
+  nextBattleStatus,
+  publishWeights,
+  tiePolicyFor,
+  toKnownBattleStatus,
+  WEIGHT_SUM_TOLERANCE,
+  whyWeightsAreRejected,
+} from './domain.js';
+export type {
+  BattleParticipantView,
+  BattleChargeView,
+  BattleStatsView,
+  BattleStatus,
+  BattleTiePolicy,
+  BattleTransition,
+  BattleView,
+  BattleWeights,
+  JudgeCriterion,
+  KnownBattleMode,
+  WeightsRejection,
+} from './domain.js';
+export {
+  CREATE_BATTLE_SHAPE,
+  FINISH_BATTLE_SHAPE,
+  isBattleRefInput,
+  isCreateBattleInput,
+  isFinishBattleInput,
+  isJoinBattleInput,
+  JOIN_BATTLE_SHAPE,
+  LIST_BATTLES_SHAPE,
+  READ_BATTLE_SHAPE,
+  whyBattleRefIsRejected,
+  whyCreateBattleIsRejected,
+  whyFinishBattleIsRejected,
+  whyJoinBattleIsRejected,
+} from './input.js';
+export type {
+  BattleRefInput,
+  BattleRejection,
+  BattleResultInput,
+  FinishBattleInput,
+} from './input.js';
+export {
+  decideOutcome,
+  NO_WINNER_NO_PARTICIPANTS,
+  NO_WINNER_NO_VALID_SUBMISSION,
+  SCORE_DECIMALS,
+  scoreAgainst,
+  UnscorableBattle,
+} from './judge.js';
+export type {
+  BattleOutcome,
+  CriterionResult,
+  ScoredParticipant,
+  ScoringRejection,
+  WeightedContribution,
+  WeightedScore,
+  WinReason,
+} from './judge.js';
+export { BATTLE_ACTION_IDS } from './manifest.js';
+export type { BattleActionId, BattleActionTypes } from './manifest.js';
+export { BATTLE_NOT_FOUND, isBattleStorageFailure } from './repository.js';
+export type {
+  BattleFilter,
+  BattleRepository,
+  BattleStorageFailure,
+  BattleWithParticipants,
+  JoinRefusal,
+  JoinResult,
+  NewStoredBattle,
+  StoredBattle,
+  StoredParticipant,
+} from './repository.js';
+export {
+  BATTLE_STAT_NAMES,
+  CHARGE_PER_FAILED_RUN,
+  CHARGE_PER_OWN_BUG_FIX,
+  CHARGE_PER_SUCCESSFUL_CHANGE,
+  chargeFor,
+  DAMAGE_PER_FAILURE_PAST_THE_THRESHOLD,
+  deriveStats,
+  emptyAccumulator,
+  emptyCodingBehaviour,
+  FAILURE_STREAK_FOR_DAMAGE,
+  observeEdit,
+  observeOwnBugFix,
+  observeReasoning,
+  observeTestFailed,
+  observeTestPassed,
+  observeToolChoice,
+  settle,
+} from './stats.js';
+export type {
+  BattleCharge,
+  BattleStatName,
+  BattleStats,
+  BehaviourAccumulator,
+  CodingBehaviour,
+} from './stats.js';

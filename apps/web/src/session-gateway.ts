@@ -48,11 +48,13 @@ export interface SessionGateway {
   readonly close: () => Promise<void>;
 }
 
-export function createSessionGateway(dependencies: SessionGatewayDependencies): SessionGateway {
+export async function createSessionGateway(
+  dependencies: SessionGatewayDependencies,
+): Promise<SessionGateway> {
   const { database } = dependencies;
   const sessions = new DrizzleSessionRepository(database);
   const handle = createSessionRoutes({
-    api: dependencies.api ?? sharedApi(),
+    api: dependencies.api ?? (await sharedApi()),
     // The same authenticator the telemetry plane uses, supplied rather than
     // imported for the reason event-gateway.ts gives: importing it directly
     // would make the removal test have to edit this file too. It is the same
@@ -94,12 +96,12 @@ let cached: { gateway: SessionGateway; close: () => Promise<void> } | undefined;
  * database pool is fine once and fatal per request. The credential store shares
  * the shared runtime's pool rather than opening a third one.
  */
-export function sharedSessionGateway(): SessionGateway {
+export async function sharedSessionGateway(): Promise<SessionGateway> {
   if (cached !== undefined) {
     return cached.gateway;
   }
-  const { database } = sharedRuntime();
-  const gateway = createSessionGateway({ database });
+  const { database } = await sharedRuntime();
+  const gateway = await createSessionGateway({ database });
   cached = { gateway, close: () => Promise.resolve() };
   return gateway;
 }

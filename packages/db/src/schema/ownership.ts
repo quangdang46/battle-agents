@@ -21,6 +21,7 @@ export const PLATFORM_TABLES = [
   'agent_credentials',
   'sessions',
   'event_log',
+  'feature_state',
   'installations',
   'projects',
   // The GitHub delivery ledger, added by ba-github-infrastructure-56v. It sits

@@ -23,7 +23,7 @@ export const POST = async (request: Request): Promise<Response> => {
     body,
   };
 
-  const response: HttpResponse = await sharedEventGateway().handle(httpRequest);
+  const response: HttpResponse = await (await sharedEventGateway()).handle(httpRequest);
   return new Response(JSON.stringify(response.body), {
     status: response.status,
     // exactOptionalPropertyTypes: a response with no headers omits the field

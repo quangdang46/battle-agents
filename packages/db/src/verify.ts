@@ -52,6 +52,11 @@ const EXPECTED_PLATFORM_TABLES: readonly string[] = [
   'achievements',
   'messages',
   'event_log',
+  // The per-feature state slices the frozen Extension API promises. A missing
+  // one means every feature that keeps state throws on the first read, and the
+  // feature's own tests pass because they use the in-memory store — the same
+  // "green while checking the wrong store" failure the whole list exists for.
+  'feature_state',
   // Checked here for the same reason as the rest: drizzle keeps its ledger in a
   // separate schema, so `db:migrate` reporting success is not evidence this
   // table exists. AGENTS.md calls that out, and this list is where the

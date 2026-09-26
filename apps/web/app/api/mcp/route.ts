@@ -7,7 +7,7 @@ import type { HttpRequest, HttpResponse } from '@/routes.js';
  * Thin for the same reason the event route is: it turns a `Request` into the
  * shape the pure handler takes, and the handler's `HttpResponse` back into a
  * `Response`. Authentication, the JSON-RPC envelope, the session lifetime and
- * the `Accept` gate all live behind `sharedMcpGateway()`, where they are
+ * the `Accept` gate all live behind `await sharedMcpGateway()`, where they are
  * reachable from a test without a server.
  *
  * Three verbs, because the transport needs three. POST carries the JSON-RPC.
@@ -42,7 +42,7 @@ async function respond(request: Request): Promise<Response> {
     ...(body === undefined ? {} : { body }),
   };
 
-  const response: HttpResponse = await sharedMcpGateway().handle(httpRequest);
+  const response: HttpResponse = await (await sharedMcpGateway()).handle(httpRequest);
   // The first argument to `new Response` is its body; `ResponseInit` (the second)
   // has no `body` field. Derived from the constructor rather than naming
   // `BodyInit`, which is not a global in this project (no DOM lib, and

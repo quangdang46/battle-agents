@@ -4,6 +4,8 @@ import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
 import {
   DrizzleAgentRepository,
+  DrizzleBattleRepository,
+  DrizzleAchievementsRepository,
   DrizzleBountyRepository,
   DrizzleCredentialStore,
   DrizzlePayoutIntentStore,
@@ -41,7 +43,7 @@ import type { HttpRequest, HttpResponse } from './routes.js';
  * become "we drop it", because dropping is a decision neither of them is in a
  * position to make.
  *
- * The runtime and bus arrive from `sharedRuntime()`. This file used to build
+ * The runtime and bus arrive from `await sharedRuntime()`. This file used to build
  * its own, and the paragraph that used to sit here argued for it: folding the
  * two runtimes together "belongs with the work that makes the act path a
  * first-class publisher". MCP is that work, and the fold is done — see
@@ -125,6 +127,8 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
       socialRepository: new DrizzleSocialRepository(dependencies.database),
       bountyRepository: new DrizzleBountyRepository(dependencies.database),
       payoutIntentStore: new DrizzlePayoutIntentStore(dependencies.database),
+      battleRepository: new DrizzleBattleRepository(dependencies.database),
+      achievementsRepository: new DrizzleAchievementsRepository(dependencies.database),
     });
 
   // The snapshot is deliberately synchronous and deliberately empty of live
@@ -229,15 +233,15 @@ let cached: { gateway: EventGateway; close: () => Promise<void> } | undefined;
  *
  * The hub has to be the SAME hub every request sees, because a second one would
  * be a second realtime plane with no events in it. The runtime and bus come from
- * `sharedRuntime()` so they are also the ones the Application API acts through —
+ * `await sharedRuntime()` so they are also the ones the Application API acts through —
  * that is the whole point of the fold, and it is why the gateway no longer opens
  * a pool of its own.
  */
-export function sharedEventGateway(): EventGateway {
+export async function sharedEventGateway(): Promise<EventGateway> {
   if (cached !== undefined) {
     return cached.gateway;
   }
-  const { database, runtime, bus } = sharedRuntime();
+  const { database, runtime, bus } = await sharedRuntime();
   // The authenticator is the one thing here that needs the agent feature, and it
   // is supplied here rather than imported, so this file has no feature import and
   // the removal test can take the feature out without touching it. This function

@@ -107,9 +107,6 @@ export const reputationOutcomes = pgTable(
   (table) => [
     uniqueIndex('reputation_outcomes_bounty_kind_key').on(table.bountyId, table.kind),
     check('reputation_outcomes_bounty_id_not_empty', sql`length(trim(${table.bountyId})) > 0`),
-    check(
-      'reputation_outcomes_kind_known',
-      sql`${table.kind} IN ('completed', 'failed')`,
-    ),
+    check('reputation_outcomes_kind_known', sql`${table.kind} IN ('completed', 'failed')`),
   ],
 );

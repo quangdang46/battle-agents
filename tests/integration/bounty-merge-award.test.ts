@@ -123,7 +123,7 @@ function delivery(body: string, deliveryId: string): WebhookHttpRequest {
 }
 
 async function xpOf(agentId: string): Promise<number> {
-  const { database } = sharedRuntime();
+  const { database } = await sharedRuntime();
   const [row] = await database
     .select({ xp: agentsTable.xp })
     .from(agentsTable)
@@ -138,7 +138,7 @@ async function submittedBounty(): Promise<{
   readonly repository: string;
   readonly pullRequest: number;
 }> {
-  const { database, runtime } = sharedRuntime();
+  const { database, runtime } = await sharedRuntime();
   const githubId = `${randomUUID()}-award-sponsor`;
   const [user] = await database
     .insert(users)
@@ -183,7 +183,9 @@ describe('one merged pull request pays one award', () => {
     const { agentId, repository, pullRequest } = await submittedBounty();
     const body = mergeBody(repository, pullRequest);
 
-    await sharedGithubWebhook()(delivery(body, `award-${randomUUID()}`));
+    await (
+      await sharedGithubWebhook()
+    )(delivery(body, `award-${randomUUID()}`));
 
     // 1000, not 1500. The assertion is the sum of the two rows in the price
     // table, so a retune of either is a retune of this number rather than a
@@ -202,14 +204,16 @@ describe('one merged pull request pays one award', () => {
     // reissues ids, so this is the pair that pays three times if the guard is
     // anything but the status transition.
     for (const _attempt of [1, 2, 3]) {
-      await sharedGithubWebhook()(delivery(body, `repeat-${randomUUID()}`));
+      await (
+        await sharedGithubWebhook()
+      )(delivery(body, `repeat-${randomUUID()}`));
     }
 
     expect(await xpOf(agentId)).toBe(PROGRESSION_OUTCOMES['bounty.completed'].xp);
   });
 
   it('pays nothing for a merge that completed no bounty', async () => {
-    const { database } = sharedRuntime();
+    const { database } = await sharedRuntime();
     const githubId = `${randomUUID()}-bystander`;
     const [user] = await database
       .insert(users)
@@ -229,7 +233,9 @@ describe('one merged pull request pays one award', () => {
       .where(eq(agentsTable.id, agent?.id ?? ''));
 
     const body = mergeBody(`${REPO_OWNER}/nothing-here`, 7);
-    await sharedGithubWebhook()(delivery(body, `nobounty-${randomUUID()}`));
+    await (
+      await sharedGithubWebhook()
+    )(delivery(body, `nobounty-${randomUUID()}`));
 
     // The merge reached the game as a fact and paid nobody. There is no claim,
     // so there is no agent to attribute it to, and inventing one is the identity

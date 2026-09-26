@@ -1,5 +1,8 @@
 import { agentFeature } from '@battle-agents/agent';
 import { bountyFeature } from '@battle-agents/bounty';
+import { battleFeature } from '@battle-agents/battle';
+import { DEFAULT_RESUME_GRACE_MS } from '@battle-agents/agent';
+import { achievementsFeature } from '@battle-agents/achievements';
 import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { reputationFeature } from '@battle-agents/reputation';
@@ -19,6 +22,8 @@ import {
   DrizzleReputationRepository,
   DrizzleSessionRepository,
   DrizzleSocialRepository,
+  DrizzleBattleRepository,
+  DrizzleAchievementsRepository,
 } from '@battle-agents/db';
 
 /**
@@ -93,6 +98,10 @@ export interface GameRuntimeDependencies {
    * worth wiring rather than a gap to paper over.
    */
   readonly socialRepository: DrizzleSocialRepository;
+  /** Battle storage. The feature degrades to open battles without reputation. */
+  readonly battleRepository: DrizzleBattleRepository;
+  /** Awarded achievements, derived from the activity log rather than counted. */
+  readonly achievementsRepository: DrizzleAchievementsRepository;
   /**
    * Bounty storage, and the record of payout intent.
    *
@@ -136,6 +145,17 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
         repository: dependencies.bountyRepository,
         payouts: dependencies.payoutIntentStore,
       }),
+      // Both numbers are explicit because both are decisions, and a default here
+      // would hide them. The grace window is the agent feature's own constant so
+      // the number exists once; the match ceiling is the only half of the session
+      // state machine the agent feature does not already own, and it is what
+      // makes `expired` reachable at all. Plan 10.3 puts a match at 5-15 minutes.
+      battleFeature({
+        repository: dependencies.battleRepository,
+        resumeGraceMs: DEFAULT_RESUME_GRACE_MS,
+        matchDurationMs: 15 * 60_000,
+      }),
+      achievementsFeature({ repository: dependencies.achievementsRepository }),
     ],
     store: dependencies.store,
     bus: dependencies.bus,

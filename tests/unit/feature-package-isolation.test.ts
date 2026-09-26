@@ -57,6 +57,18 @@ const OWNED: Readonly<Record<string, readonly string[]>> = {
   agent: ['AGENT_ACTION_IDS', 'whyAgentIsRejected', 'sweepStaleSessions'],
   social: ['SOCIAL_ACTION_IDS', 'whySocialIsRejected'],
   guild: ['GUILD_ACTION_IDS'],
+  // Added with the battle feature. The entries are chosen to be the ones a
+  // copy would drag in AND the ones another feature plausibly reuses a name for:
+  // a judge and a stat line are both things a guild or a quest might want, and
+  // this list is what makes "wants it" different from "copied it".
+  battle: [
+    'BATTLE_ACTION_IDS',
+    'scoreAgainst',
+    'decideOutcome',
+    'deriveStats',
+    'battleCapacity',
+    'ARENA_MIN_TRUST',
+  ],
 };
 
 /** Same technique as scaffold.test.ts, and the same reason for it. */

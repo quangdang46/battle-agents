@@ -5,6 +5,8 @@ import {
   createDatabase,
   createDatabasePool,
   DrizzleAgentRepository,
+  DrizzleBattleRepository,
+  DrizzleAchievementsRepository,
   DrizzleBountyRepository,
   DrizzlePayoutIntentStore,
   DrizzleProgressionRepository,
@@ -58,7 +60,7 @@ let cached: { shared: SharedRuntime; close: () => Promise<void> } | undefined;
  * module-scope pool would be opened while `next build` is still walking the
  * tree rather than when a request arrives.
  */
-export function sharedRuntime(): SharedRuntime {
+export async function sharedRuntime(): Promise<SharedRuntime> {
   if (cached !== undefined) {
     return cached.shared;
   }
@@ -67,8 +69,17 @@ export function sharedRuntime(): SharedRuntime {
   const bus = createInMemoryEventBus();
   const sessionRepository = new DrizzleSessionRepository(database);
 
+  const store = new DrizzleStateStore(database);
+  // Awaited, never fired and forgotten. StateStore.load is synchronous in the
+  // frozen contract, so the cache can only be filled where awaiting is allowed,
+  // and a prime that races the first request answers `undefined` for a feature
+  // with durable state. For battle that is not a degraded read: the arena gate
+  // stops gating and no win since the restart emits a reward, because the agent
+  // a session belongs to is looked up rather than trusted from a caller.
+  await store.prime();
+
   const runtime = createGameRuntime({
-    store: new DrizzleStateStore(database),
+    store,
     bus,
     agentRepository: new DrizzleAgentRepository(database),
     questRepository: new DrizzleQuestRepository(database),
@@ -78,6 +89,8 @@ export function sharedRuntime(): SharedRuntime {
     socialRepository: new DrizzleSocialRepository(database),
     bountyRepository: new DrizzleBountyRepository(database),
     payoutIntentStore: new DrizzlePayoutIntentStore(database),
+    battleRepository: new DrizzleBattleRepository(database),
+    achievementsRepository: new DrizzleAchievementsRepository(database),
   });
 
   cached = { shared: { database, runtime, bus }, close: () => closeDatabasePool(pool) };

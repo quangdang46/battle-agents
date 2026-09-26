@@ -15,7 +15,7 @@ import { closeSharedRuntime, sharedRuntime } from '../../apps/web/src/shared-run
  * The unit suite proves the handler's ordering against fakes and the delivery
  * suite proves the ledger against real Postgres. Neither can catch the failure
  * this file exists for, because the thing that would break is a WIRING decision
- * neither of them sees: that the webhook publishes onto `sharedRuntime().bus`
+ * neither of them sees: that the webhook publishes onto `await sharedRuntime().bus`
  * rather than onto a runtime it built for itself.
  *
  * That wiring is not hypothetical. `shared-runtime.ts` exists because there used
@@ -95,9 +95,9 @@ function delivery(options: {
 }
 
 /** Collects everything the shared bus publishes for the life of the subscription. */
-function watchSharedBus(): { events: unknown[]; stop: () => void } {
+async function watchSharedBus(): Promise<{ events: unknown[]; stop: () => void }> {
   const events: unknown[] = [];
-  const stop = sharedRuntime().bus.subscribe((event) => events.push(event));
+  const stop = (await sharedRuntime()).bus.subscribe((event) => events.push(event));
   return { events, stop };
 }
 
@@ -106,7 +106,7 @@ let database: Database;
 beforeAll(async () => {
   requireDatabase();
   process.env[WEBHOOK_SECRET_VARIABLE] = SECRET;
-  const { database: shared } = sharedRuntime();
+  const { database: shared } = await sharedRuntime();
   database = shared;
   // The ledger is durable, so a second run of this file would collide with the
   // first on the fact key and be refused as a duplicate — which is the ledger
@@ -123,10 +123,10 @@ afterAll(async () => {
 
 describe('a signed merge, end to end', () => {
   it('lands on the shared bus, the ledger, and neither twice', async () => {
-    const { events, stop } = watchSharedBus();
+    const { events, stop } = await watchSharedBus();
     try {
       const body = mergeBody(4242);
-      const first = await sharedGithubWebhook()(delivery({ body, deliveryId: 'e2e-1' }));
+      const first = await (await sharedGithubWebhook())(delivery({ body, deliveryId: 'e2e-1' }));
 
       expect(first.status).toBe(200);
       expect(first.body.outcome).toBe('accepted');
@@ -179,7 +179,7 @@ describe('a signed merge, end to end', () => {
 
       // A retry under a NEW delivery id is the case a delivery-id cache cannot
       // catch, and it is the one that double-completes a bounty.
-      const retry = await sharedGithubWebhook()(delivery({ body, deliveryId: 'e2e-2' }));
+      const retry = await (await sharedGithubWebhook())(delivery({ body, deliveryId: 'e2e-2' }));
       expect(retry.status).toBe(200);
       expect(retry.body.outcome).toBe('duplicate');
       // Still exactly one of each, and the count is asserted per event name
@@ -199,12 +199,12 @@ describe('a signed merge, end to end', () => {
   });
 
   it('is refused before the bus or the ledger, and leaves neither', async () => {
-    const { events, stop } = watchSharedBus();
+    const { events, stop } = await watchSharedBus();
     try {
       const body = mergeBody(5555);
-      const forged = await sharedGithubWebhook()(
-        delivery({ body, deliveryId: 'e2e-forged', signature: `sha256=${'0'.repeat(64)}` }),
-      );
+      const forged = await (
+        await sharedGithubWebhook()
+      )(delivery({ body, deliveryId: 'e2e-forged', signature: `sha256=${'0'.repeat(64)}` }));
 
       expect(forged.status).toBe(401);
       expect(events).toEqual([]);
