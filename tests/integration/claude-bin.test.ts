@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,15 +55,19 @@ async function spawnBin(args: readonly string[], env: NodeJS.ProcessEnv = {}): P
   }
 }
 
-/** A transcripts root with one real-looking session file in it. */
+/**
+ * A transcripts root with one real-looking session file in it.
+ *
+ * `require` is not used and the directory is created through the imported
+ * `mkdirSync`: a bare `require` in an ESM test compiles and runs, and lints
+ * differently in each project, so the imported name is the one that stays honest.
+ */
 function aTranscriptRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'claude-bin-'));
   const project = join(dir, 'project-a');
-  writeFileSync(join(dir, 'placeholder'), '');
-  const nested = join(dir, 'project-a');
-  require('node:fs').mkdirSync(nested, { recursive: true });
+  mkdirSync(project, { recursive: true });
   writeFileSync(
-    join(nested, 'session-1.jsonl'),
+    join(project, 'session-1.jsonl'),
     `${JSON.stringify({
       type: 'user',
       uuid: 'u-1',
