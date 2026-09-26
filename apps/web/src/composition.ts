@@ -1,7 +1,7 @@
 import { agentFeature } from '@battle-agents/agent';
 import { bountyFeature } from '@battle-agents/bounty';
 import { battleFeature } from '@battle-agents/battle';
-import { DEFAULT_RESUME_GRACE_MS } from '@battle-agents/agent';
+import { DEFAULT_SESSION_RESUME_GRACE_MS } from '@battle-agents/protocol';
 import { achievementsFeature } from '@battle-agents/achievements';
 import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
@@ -145,15 +145,17 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
         repository: dependencies.bountyRepository,
         payouts: dependencies.payoutIntentStore,
       }),
-      // Both numbers are explicit because both are decisions, and a default here
-      // would hide them. The grace window is the agent feature's own constant so
-      // the number exists once; the match ceiling is the only half of the session
-      // state machine the agent feature does not already own, and it is what
-      // makes `expired` reachable at all. Plan 10.3 puts a match at 5-15 minutes.
+      // ONE line, on purpose: scripts/removal-test.sh strips a feature by
+      // stripping the line that constructs it, so a call wrapped across lines
+      // leaves a reference behind and fails the removal test for the wrong
+      // reason. Both numbers are explicit because both are decisions — the grace
+      // window comes from protocol so both features share one number and
+      // stripping either leaves it standing, and the match ceiling is what makes
+      // `expired` reachable at all.
       battleFeature({
         repository: dependencies.battleRepository,
-        resumeGraceMs: DEFAULT_RESUME_GRACE_MS,
-        matchDurationMs: 15 * 60_000,
+        resumeGraceMs: DEFAULT_SESSION_RESUME_GRACE_MS,
+        matchDurationMs: 900_000,
       }),
       achievementsFeature({ repository: dependencies.achievementsRepository }),
     ],

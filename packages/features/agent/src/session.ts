@@ -40,7 +40,12 @@ const MS_PER_MINUTE = 60_000;
  * else's session".
  */
 export const DEFAULT_HEARTBEAT_TIMEOUT_MS = 5 * MS_PER_MINUTE;
-export const DEFAULT_RESUME_GRACE_MS = 15 * MS_PER_MINUTE;
+// Re-exported, not defined: the battle feature needs the same number and both
+// features are removable, so the constant lives in @battle-agents/protocol where
+// stripping either one leaves it standing.
+import { DEFAULT_SESSION_RESUME_GRACE_MS } from '@battle-agents/protocol';
+
+export { DEFAULT_SESSION_RESUME_GRACE_MS as DEFAULT_RESUME_GRACE_MS };
 
 /** What happened to a session. Each maps to at most one transition. */
 export type SessionEvent =
@@ -115,7 +120,7 @@ export function isHeartbeatStale(
 export function isWithinResumeGrace(
   disconnectedAt: string,
   now: string,
-  graceMs: number = DEFAULT_RESUME_GRACE_MS,
+  graceMs: number = DEFAULT_SESSION_RESUME_GRACE_MS,
 ): boolean {
   return elapsedMs(disconnectedAt, now) <= graceMs;
 }
