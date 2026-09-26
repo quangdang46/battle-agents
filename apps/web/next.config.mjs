@@ -41,6 +41,21 @@ const nextConfig = {
     };
     return config;
   },
+  // Plan section 28.1 puts art under `apps/web/public/assets/`, and that path
+  // DOES NOT WORK: Next.js reserves `/assets` for its own build pipeline and
+  // answers every request beneath it with a 308 to the directory, so every pack
+  // vendored there was unreachable from the running app. Measured — a PNG in
+  // `public/assets/tiny-swords-cc0/` returned 308, and following it returned 404,
+  // while a file at `public/probe.txt` beside it returned 200. The art was on
+  // disk, licensed, checked, and unloadable.
+  //
+  // So the files live in `public/art/`, which Next serves, and this rewrite
+  // keeps the URL the plan names. If the rewrite is ever reported as not
+  // applying, the honest fallback is to change the URLs rather than to move the
+  // files back under a reserved path.
+  async rewrites() {
+    return [{ source: '/assets/:path*', destination: '/art/:path*' }];
+  },
   eslint: { ignoreDuringBuilds: true },
 };
 

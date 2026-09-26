@@ -198,6 +198,44 @@ self_test() {
   printf 'self-test ok: the parser accepts allowlisted expressions and denies the rest.\n'
 }
 
+# Every vendored art pack ships its own license, beside the art.
+#
+# The SPDX allowlist above reads DECLARED identifiers in source files, and a PNG
+# carries none — so a whole art pack could be merged with no license anywhere and
+# this gate would pass. That is the gap plan section 14's deliverable closes: art
+# licenses are tracked SEPARATELY from the repository's MIT code license, and
+# assuming everything under the repo is MIT because the code is is exactly the
+# contamination section 17.7 warns about.
+#
+# The rule is per DIRECTORY rather than per file, because a pack is the unit that
+# was selected and the unit that can be relicensed. `tests/unit/asset-shortlist.test.ts`
+# additionally compares each pack's recorded license against the file shipped
+# beside it, which is the half that catches a pack relicensed upstream after it
+# was chosen; this clause is the one that runs on every merge regardless of
+# whether anyone remembered to look at the shortlist.
+check_asset_licenses() {
+  local root="${1}"
+  [ -d "${root}" ] || return 0
+
+  local missing=0 pack
+  for pack in "${root}"/*/; do
+    [ -d "${pack}" ] || continue
+    pack="${pack%/}"
+    if [ ! -s "${pack}/LICENSE.txt" ]; then
+      printf '  no LICENSE.txt in %s\n' "${pack#"${REPO_ROOT}"/}" >&2
+      missing=1
+    fi
+  done
+
+  if [ "${missing}" -ne 0 ]; then
+    printf 'every vendored art pack must ship the license it was selected under.\n' >&2
+    return 1
+  fi
+  return 0
+}
+
 self_test
 
-printf 'License check passed: every declared license is allowlisted, and no copyleft notice or Kaetram reference was found under %s.\n' "${SCAN_ROOTS[*]}"
+check_asset_licenses "${REPO_ROOT}/apps/web/public/art"
+
+printf 'License check passed: every declared license is allowlisted, no copyleft notice or Kaetram reference was found under %s, and every vendored art pack ships its own license.\n' "${SCAN_ROOTS[*]}"
