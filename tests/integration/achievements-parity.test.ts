@@ -118,6 +118,19 @@ function runtimeWith(repository: AchievementsRepository, store: InMemoryStateSto
 }
 
 /**
+ * A runtime with nothing awarded yet, for the tests that only ask whether a
+ * surface can FIND the capability.
+ *
+ * The store is created once and handed to both the repository and the runtime,
+ * because two stores is a test that cannot see the event it emitted — which is
+ * the failure this shape replaces.
+ */
+function bareRuntime(): Runtime {
+  const store = new InMemoryStateStore();
+  return runtimeWith(new Ledger(store), store);
+}
+
+/**
  * Stands in for the bounty feature, which owns `bounty.completed` in the real
  * build. Reacting to an event is not owning it, and this one only declares the
  * persisted type so the row survives to be read.
@@ -159,7 +172,7 @@ describe('achievements grows the registry, not the surface', () => {
     // CLI verb arriving through `search` rather than as a tool of its own, so
     // the search has to find it. Search is a name lookup over the catalogue and
     // never reaches a store, which is why this works before anything is awarded.
-    const api = createApplicationApi(runtimeWith(new Ledger()));
+    const api = createApplicationApi(bareRuntime());
     const found = await api.search({ type: 'achievements' });
     expect(found.map((entry) => entry.id).sort()).toEqual([
       'achievements.catalogue',
@@ -172,7 +185,7 @@ describe('achievements grows the registry, not the surface', () => {
   });
 
   it('describes the domain without naming a sixth primitive', async () => {
-    const api = createApplicationApi(runtimeWith(new Ledger()));
+    const api = createApplicationApi(bareRuntime());
     const detail = await api.discover('achievements');
     expect(detail.detail?.capabilities.map((entry) => entry.name).sort()).toEqual([
       'achievements.catalogue',
@@ -187,7 +200,7 @@ describe('achievements grows the registry, not the surface', () => {
     // A tool per badge, or a tool per feature, is the failure the registry was
     // built to prevent: the tool list is what a model has to read at connect
     // time, and it grows with the game otherwise.
-    const server = createMcpServer({ api: createApplicationApi(runtimeWith(new Ledger())) });
+    const server = createMcpServer({ api: createApplicationApi(bareRuntime()) });
     expect(
       server
         .listTools()
@@ -197,7 +210,7 @@ describe('achievements grows the registry, not the surface', () => {
   });
 
   it('describes an achievement action through inspect, which describes and does not run', async () => {
-    const api = createApplicationApi(runtimeWith(new Ledger()));
+    const api = createApplicationApi(bareRuntime());
     const described = (await api.inspect({ type: 'achievements', id: 'list' })) as {
       found: boolean;
       permissions: readonly string[];
@@ -209,8 +222,9 @@ describe('achievements grows the registry, not the surface', () => {
 
 describe('the same award command on all three surfaces', () => {
   it('reaches one implementation from the API, the CLI over HTTP, and MCP', async () => {
-    const repository = new Ledger();
-    const api = createApplicationApi(runtimeWith(repository));
+    const store = new InMemoryStateStore();
+    const repository = new Ledger(store);
+    const api = createApplicationApi(runtimeWith(repository, store));
     const cli = new HttpApiClient({ baseUrl: ORIGIN, transport: bridge(api) });
     const server = createMcpServer({ api });
 
@@ -263,7 +277,7 @@ describe('the same award command on all three surfaces', () => {
   });
 
   it('refuses a malformed award the same way on all three', async () => {
-    const api = createApplicationApi(runtimeWith(new Ledger()));
+    const api = createApplicationApi(bareRuntime());
     const cli = new HttpApiClient({ baseUrl: ORIGIN, transport: bridge(api) });
     const server = createMcpServer({ api });
 
