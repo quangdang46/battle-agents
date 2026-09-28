@@ -26,6 +26,7 @@ import { stableHash, DECORATION_KINDS,} from '../sprites/sprite-factory.js';
 import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
+import { pointOnRoad, roadCurves, type RoadNode } from './roads.js';
 import { zoneSlot } from './zone-slot.js';
 import { wanderOffset } from './idle-wander.js';
 import { pickLine } from './dialogue.js';
@@ -252,6 +253,7 @@ export class PixiWorldView implements WorldViewLike {
   readonly #units = new Map<string, UnitNode>();
   /** Elapsed world time in ms, driving both the animation cycle and the sky. */
   #elapsedMs = 0;
+  #roadCache: ReturnType<typeof roadCurves> | undefined;
   readonly #sky: Graphics;
 
   constructor(options: PixiViewOptions) {
@@ -531,7 +533,7 @@ export class PixiWorldView implements WorldViewLike {
    * because a flat square of `#2a3a2a` is more obviously wrong than absence is.
    */
   #drawTerrain(): void {
-    const sample = terrainSampler(this.#scene.seed);
+    const sample = terrainSampler(this.#scene.seed, (gx, gy) => pointOnRoad(this.#roads(), gx, gy));
     for (let gy = 0; gy < this.#scene.h; gy += 1) {
       for (let gx = 0; gx < this.#scene.w; gx += 1) {
         const kind = sample(gx, gy);
@@ -756,6 +758,32 @@ export class PixiWorldView implements WorldViewLike {
    * the Coding City, so `/arena` and `/city` rendered the same picture.
    */
   /**
+   * The road network for this scene, built once and reused.
+   *
+   * Nodes are the ZONES. A city where the workshop, the lab and the quest board
+   * are joined by a road is a place with a layout; three of them in a field is
+   * a map with props on it. The edge list is a ring plus two chords, which is
+   * the smallest graph that gives a square more than four streets.
+   *
+   * Cached because `terrainSampler` asks about every cell of the grid, and
+   * rebuilding the network per cell would be the same curve walked 1024 times.
+   */
+  #roads(): readonly (readonly { readonly gx: number; readonly gy: number; readonly hw: number }[])[] {
+    if (this.#roadCache !== undefined) return this.#roadCache;
+    const nodes: RoadNode[] = (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[])
+      .map((zone) => ZONE_PLACEMENT[zone])
+      .filter((placement) => placement.scene === this.#scene.id)
+      .map((placement) => ({ gx: placement.gx, gy: placement.gy }));
+    const edges: [number, number][] = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      edges.push([i, (i + 1) % nodes.length]);
+      if (i + 2 < nodes.length) edges.push([i, i + 2]);
+    }
+    this.#roadCache = roadCurves(nodes, edges);
+    return this.#roadCache;
+  }
+
+  /**
    * A sprite per scattered decoration, in this scene.
    *
    * The scatter itself is a pure function in `decorations.ts`; this is the part
@@ -767,7 +795,7 @@ export class PixiWorldView implements WorldViewLike {
     const placements = scatterDecorations({
       w: this.#scene.w,
       h: this.#scene.h,
-      kindAt: terrainSampler(this.#scene.seed),
+      kindAt: terrainSampler(this.#scene.seed, (gx, gy) => pointOnRoad(this.#roads(), gx, gy)),
       clearOf: (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[])
         .map((zone) => ZONE_PLACEMENT[zone])
         .filter((placement) => placement.scene === this.#scene.id),

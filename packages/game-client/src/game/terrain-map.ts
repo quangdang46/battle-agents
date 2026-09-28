@@ -14,10 +14,11 @@
  *    `ThemeDef`. Ours takes a seed, so the same seed gives the same city and a
  *    different seed gives a different one — which is what makes a scene fixture
  *    in a test reproducible.
- * 2. **No roads.** The reference's dirt follows road curves from `roads.ts`.
- *    We have no road network in M5, so dirt is sampled from noise alone and the
- *    zone placements in `zones.ts` do the spatial work instead. If roads arrive,
- *    this is where they hook in.
+ * 2. **Roads, since.** The sampler takes an optional `onRoad`, and `roads.ts`
+ *    arrived -- a port of the reference's own module, with the geometry
+ *    unchanged so the drawn road and the dirt band beneath it are the same
+ *    function. It was previously sampled from noise alone while `zones.ts` did
+ *    the spatial work, which is what this note used to say.
  */
 
 import { cornerMask, drawsTile, frameForMask, type IsUpper } from './autotile.js';
@@ -64,9 +65,20 @@ export interface GridSpec {
 }
 
 /** A sampler that answers for any cell, including ones outside the grid. */
-export function terrainSampler(seed: number): (gx: number, gy: number) => TerrainId {
+export function terrainSampler(
+  seed: number,
+  /**
+   * Cells on a road, when the scene has a network. Dirt follows these instead
+   * of the noise, which is the hook this module's own header asked for by name.
+   */
+  onRoad?: (gx: number, gy: number) => boolean,
+): (gx: number, gy: number) => TerrainId {
   const isWater = (gx: number, gy: number): boolean => fbm(gx, gy, seed) < WATER_BELOW;
   return (gx, gy) => {
+    // A road is a dirt band laid by a curve, not a patch of noise that happens
+    // to be brown, so it wins over the rock check: a boulder sitting in the
+    // middle of the high street is the kind of detail that reads as a bug.
+    if (onRoad?.(gx, gy) === true && !isWater(gx, gy)) return 'dirt';
     if (isWater(gx, gy)) return 'water';
     if (fbm(gx, gy, seed + 7) > ROCK_ABOVE) {
       // Rock never touches water. A rock/water seam is the one adjacency the
