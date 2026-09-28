@@ -117,6 +117,7 @@ export function WorldCanvas({
    * and the listener would outlive the world.
    */
   const cameraGuards = useRef<(() => void) | undefined>(undefined);
+  const wheelHandlers = useRef<((event: WheelEvent) => void) | null>(null);
   const pointerHandlers = useRef<{
     down: (event: PointerEvent) => void;
     move: (event: PointerEvent) => void;
@@ -254,6 +255,21 @@ export function WorldCanvas({
         // `overscroll-behavior: none` behind would break scrolling on the rest
         // of the page.
         cameraGuards.current = installCameraGuards(container);
+
+        // Wheel zoom. The guard above already calls preventDefault on a
+        // ctrlKey wheel, which is what a trackpad pinch arrives as -- so without
+        // this the page zoomed and the world did not. `deltaY` negative is a
+        // scroll up, and scrolling up should bring the city closer, so the sign
+        // is inverted here rather than at the call site.
+        const onWheel = (event: WheelEvent): void => {
+          event.preventDefault();
+          view.zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, {
+            width: container.clientWidth,
+            height: container.clientHeight,
+          });
+        };
+        container.addEventListener('wheel', onWheel, { passive: false });
+        wheelHandlers.current = onWheel;
         view.fit(container.clientWidth, container.clientHeight);
 
         // Pointer input, through the pure state machine so the gesture rules
@@ -363,6 +379,10 @@ export function WorldCanvas({
       // IIFE and the removal happens in the effect's own cleanup -- two different
       // function scopes, and a `let` in either one is invisible to the other.
       // `pointerHandlers` above is the same shape for the same reason.
+      if (wheelHandlers.current !== null) {
+        container.removeEventListener('wheel', wheelHandlers.current);
+        wheelHandlers.current = null;
+      }
       cameraGuards.current?.();
       cameraGuards.current = undefined;
       const current = world.current;

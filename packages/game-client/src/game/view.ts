@@ -206,6 +206,21 @@ export interface PixiViewOptions {
  * One `Sprite` per agent, plus one zone marker per placed zone built once at
  * construction and never rebuilt on a delta.
  */
+/**
+ * The zoom range, as a fraction of the 1:1 fit.
+ *
+ * The top is 1 because that is where pixels stop being pixel art: past 1:1 a
+ * 64px tile is a 128px tile and the city stops looking drawn. The bottom is a
+ * quarter, because under that you are looking at a texture, not a place.
+ */
+export const MIN_ZOOM = 0.25;
+export const MAX_ZOOM = 1;
+
+export function clampZoom(scale: number, fitScale: number): number {
+  if (!Number.isFinite(scale) || scale <= 0) return fitScale;
+  return Math.min(fitScale * MAX_ZOOM, Math.max(fitScale * MIN_ZOOM, scale));
+}
+
 export class PixiWorldView implements WorldViewLike {
   readonly #store: WorldStore;
   readonly #projection: Projection;
@@ -313,6 +328,9 @@ export class PixiWorldView implements WorldViewLike {
   /** Elapsed world time in ms, driving both the animation cycle and the sky. */
   #elapsedMs = 0;
   #roadCache: ReturnType<typeof roadCurves> | undefined;
+  /** The fit scale, and the multiplier the user has zoomed by on top of it. */
+  #zoom = 1;
+  #userZoom = 1;
   readonly #sky: Graphics;
 
   constructor(options: PixiViewOptions) {
@@ -349,6 +367,34 @@ export class PixiWorldView implements WorldViewLike {
    * An EMPTY list is a real answer and clears the highlight rather than doing
    * nothing, so recalling an empty group releases the previous one.
    */
+  /**
+   * Zoom, in a range that stops at 1:1.
+   *
+   * The upper bound is the fit scale rather than a constant, because that is
+   * where pixels stop being pixel art: past 1:1 a 64px tile is a 128px tile
+   * and the city stops looking drawn. The lower bound is a quarter, because
+   * below that you are looking at a texture, not a place.
+   *
+   * `factor` is multiplicative and the anchor is the viewport centre, so the
+   * middle of the screen stays put while the edges move -- which is what makes
+   * a zoom feel like a camera rather than a slider.
+   */
+  zoomBy(factor: number, viewport?: { width: number; height: number }): void {
+    const next = clampZoom(this.#zoom * this.#userZoom * factor, this.#zoom);
+    if (next === this.#zoom * this.#userZoom) return;
+    this.#userZoom = next / this.#zoom;
+    this.worldLayer.scale.set(next);
+    if (viewport !== undefined) {
+      // Keep the centre where it was: shift by the change in the world-space
+      // half-span, so a zoom in does not drift toward the origin.
+      const before = this.worldLayer.position.clone();
+      this.worldLayer.position.set(
+        viewport.width / 2 + (before.x - viewport.width / 2) * (this.#userZoom),
+        viewport.height / 2 + (before.y - viewport.height / 2) * (this.#userZoom),
+      );
+    }
+  }
+
   setHighlighted(agentIds: readonly string[]): void {
     const lit = new Set(agentIds);
     for (const node of this.#units.values()) {
@@ -417,14 +463,20 @@ export class PixiWorldView implements WorldViewLike {
     const worldH = maxY - minY;
     if (worldW <= 0 || worldH <= 0) return;
 
-    const scale = Math.min(width / worldW, height / worldH);
-    this.worldLayer.scale.set(scale);
+    // NEVER UPSCALE past 1:1. This is the whole of "the sprites are far too
+    // big": the city is 32 tiles and the canvas is 1278px, so fitting a square
+    // map to the viewport scales it UP by two, and a 64px character becomes a
+    // billboard. A world that is smaller than its window shows its edges; that
+    // is what a borderless canvas is FOR. Fit down, never up.
+    const scale = Math.min(1, width / worldW, height / worldH);
+    this.#zoom = scale;
+    this.worldLayer.scale.set(this.#zoom);
     // Centred on the bounds, and shifted by `-min` because the isometric origin
     // puts cell (0,0) at a negative x: without it the world is centred on the
     // origin rather than on the map, which is a half-map offset to the right.
     this.worldLayer.position.set(
-      (width - worldW * scale) / 2 - minX * scale,
-      (height - worldH * scale) / 2 - minY * scale,
+      (width - worldW * this.#zoom) / 2 - minX * this.#zoom,
+      (height - worldH * this.#zoom) / 2 - minY * this.#zoom,
     );
   }
 
