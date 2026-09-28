@@ -43,6 +43,9 @@ import type { TerrainId } from '../game/terrain-map.js';
  */
 export const TERRAIN_KINDS: readonly TerrainId[] = ['grass', 'dirt', 'rock', 'water'];
 
+/** How many tiles of one kind a variant can reach. */
+export const TERRAIN_VARIANTS = 4;
+
 import { PixelCanvas, hex, withAlpha } from './pixel-canvas.js';
 import { buildingForZone, type SpriteAssets } from './asset-atlas.js';
 
@@ -297,14 +300,24 @@ export class SpriteCache {
       case 'building':
         return assets.buildings.values().next().value as Texture | undefined;
       case 'terrain-tile': {
-        // The variant IS the terrain kind, and the tile within it. Falling back to
-        // grass rather than returning nothing, because a missing ground sheet must
-        // leave a world that has a floor, not a hole in one.
-        const bucket = Math.abs(key.variant) % TERRAIN_KINDS.length;
-        const kind: TerrainId = TERRAIN_KINDS[bucket] ?? 'grass';
+        // The variant carries BOTH the kind and the tile within it, and the two
+        // are read out of DIFFERENT parts of it.
+        //
+        // It was one number read twice: the caller packed `kindIndex * 4 +
+        // variety`, then this took `variant % 4` for the kind — which throws the
+        // `kindIndex * 4` away entirely and makes the ground depend only on the
+        // variety, while `variant % sheet.length` then picked the same tile for
+        // every cell of that kind. The map came out as one tile stamped 1024
+        // times, which is what a screenshot showed and no test did.
+        //
+        // The high bits are the kind; the low bits are the tile. Grass is
+        // `0x00..`, dirt `0x10..`, rock `0x20..`, water `0x30..`.
+        const packed = Math.abs(Math.trunc(key.variant));
+        const kind: TerrainId = TERRAIN_KINDS[Math.floor(packed / TERRAIN_VARIANTS)] ?? 'grass';
+        const variety = packed % TERRAIN_VARIANTS;
         const sheet = assets.terrain[kind] ?? assets.terrain['grass'];
         if (sheet === undefined || sheet.length === 0) return undefined;
-        return sheet[key.variant % sheet.length];
+        return sheet[variety % sheet.length];
       }
       default:
         return undefined;

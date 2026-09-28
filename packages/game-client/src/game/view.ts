@@ -36,6 +36,7 @@ import {
   spriteCache,
   spriteKey,
   TERRAIN_KINDS,
+  TERRAIN_VARIANTS,
   type SpriteCache,
   type SpriteKind,
 } from '../sprites/sprite-factory.js';
@@ -501,7 +502,7 @@ export class PixiWorldView implements WorldViewLike {
         const variety = (gx * 7 + gy * 13) % 3;
         const kindIndex = Math.max(0, TERRAIN_KINDS.indexOf(kind));
         const texture = this.#cache.get(
-          spriteKey('terrain-tile', kindIndex * 4 + variety),
+          spriteKey('terrain-tile', kindIndex * TERRAIN_VARIANTS + variety),
         );
         if (texture === undefined) continue;
         const at = this.#projection.toScreen(gx, gy);

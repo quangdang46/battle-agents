@@ -37,12 +37,17 @@ function aTexture(label: string): never {
 /** An atlas with ground and nothing else — the world without characters. */
 function anAtlasWithGround(): SpriteCache {
   const cache = new SpriteCache();
-  const terrain = {
-    grass: [aTexture('grass-0'), aTexture('grass-1')],
-    dirt: [aTexture('dirt-0')],
-    rock: [aTexture('rock-0')],
-    water: [aTexture('water-0')],
-  };
+  // Four tiles of EACH kind, because the variant packs a kind and a tile and a
+  // fixture with one tile per kind cannot tell the two apart — every reading of
+  // the variant produces a varied map, so the test below would pass against the
+  // very bug it was written for. That is exactly what the first version of this
+  // fixture did, and the mutation proved it: the test stayed green with the
+  // original bug restored.
+  const kinds = ['grass', 'dirt', 'rock', 'water'] as const;
+  const terrain: Record<string, { label: string }[]> = {};
+  for (const kind of kinds) {
+    terrain[kind] = [0, 1, 2, 3].map((index) => aTexture(`${kind}-${String(index)}`));
+  }
   cache.attach({
     theme: 'fantasy',
     heroes: [],
@@ -107,6 +112,27 @@ describe('the ground', () => {
     const first = labelAt(aCity(), 5, 7);
     const second = labelAt(aCity(), 5, 7);
     expect(first).toBe(second);
+  });
+
+  it('varies the ground, and reuses a small set of tiles rather than one', () => {
+    // WHAT THIS ASSERTS, and what it does not.
+    //
+    // It asserts the map is not a single repeated texture and is not a unique
+    // texture per cell: tiling IS a small set reused. That is a real property
+    // and it was not covered before.
+    //
+    // It does NOT assert WHICH tile lands on which cell, and a mutation that
+    // swaps the kind lookup for a different valid one leaves it green — proven,
+    // not assumed. The packing of "kind and tile into one integer" is therefore
+    // covered by neither this nor anything else in the repository, and the reason
+    // a screenshot showed a repetitive map has NOT been established. What changed
+    // the kind lookup makes the pack unambiguous; that it was the cause is a
+    // claim this test cannot support.
+    const sprites = childrenOf(aCity().terrainLayer) as { readonly label?: string }[];
+    const labels = new Set(sprites.map((sprite) => sprite.label));
+
+    expect(labels.size).toBeGreaterThan(1);
+    expect(labels.size).toBeLessThan(sprites.length);
   });
 });
 
