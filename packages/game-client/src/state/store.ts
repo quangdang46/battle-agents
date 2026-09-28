@@ -27,6 +27,7 @@
  * this map has no entries before the first frame.
  */
 
+import { foldToolChain, type ToolChainData, type ToolEventLike } from '../game/tool-chain.js';
 import type { GameEvent } from '@battle-agents/core';
 
 import { ZONE_FOR_EVENT, zoneForTool } from '../zones.js';
@@ -119,11 +120,15 @@ function stringAt(payload: Payload, key: string): string | undefined {
 
 const EMPTY: readonly string[] = Object.freeze([]);
 
+/** How many tool events the chain is folded over. */
+const TOOL_EVENT_MEMORY = 512;
+
 export class WorldStore {
   readonly #agents = new Map<string, AgentView>();
   readonly #listeners = new Set<StoreListener>();
   #hydrated = false;
   #protocolVersion: string | undefined;
+  readonly #toolEvents: ToolEventLike[] = [];
 
   /**
    * Installs the opening snapshot, discarding anything held.
@@ -201,6 +206,21 @@ export class WorldStore {
     const sessionId = stringAt(payload, 'sessionId');
     if (sessionId === undefined) return EMPTY;
 
+    // The tool chain is folded here rather than in a component, because the
+    // ORDER of tool events is the whole content: fold it at the source and the
+    // order is guaranteed, fold it at the reader and a component that skips a
+    // frame reports a different history than one that does not.
+    if (event.type.startsWith('tool.')) {
+      this.#toolEvents.push({
+        type: event.type,
+        occurredAt: event.occurredAt,
+        payload: payload as Readonly<Record<string, unknown>>,
+      });
+      // Bounded, oldest out. A tab left open over a long run would otherwise
+      // grow this without limit, and the fold is O(n) in its length.
+      if (this.#toolEvents.length > TOOL_EVENT_MEMORY) this.#toolEvents.shift();
+    }
+
     const patch = this.#reduce(event, sessionId, payload);
     if (patch === undefined) return EMPTY;
 
@@ -227,6 +247,19 @@ export class WorldStore {
    * it; the client's only correct response is to stop patching and wait for a
    * fresh `full_state`.
    */
+  /**
+   * The tool chain over everything this store has seen.
+   *
+   * Recomputed on read rather than kept current on write, because nothing in
+   * the world renders it and a fold over 512 events is cheap next to the 2000
+   * events/s this client is built for. The moment something DOES render it
+   * per frame, this wants to be incremental -- and the note is here so that is a
+   * deliberate change rather than an accident.
+   */
+  toolChain(): ToolChainData {
+    return foldToolChain(this.#toolEvents);
+  }
+
   invalidate(): void {
     this.#publish({ kind: 'resync' });
   }

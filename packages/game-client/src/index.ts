@@ -44,6 +44,27 @@ export {
   type FrameRenderer,
 } from './game/frame-loop.js';
 export { installCameraGuards } from './game/camera-guards.js';
+export {
+  foldToolChain,
+  type ToolChainData,
+  type ToolEventLike,
+  type ToolTransition,
+} from './game/tool-chain.js';
+export {
+  scatterDecorations,
+  cellHash,
+  decoRule,
+  type DecoKind,
+  type DecoPlacement,
+} from './game/decorations.js';
+export { pointOnRoad, roadCurve, roadCurves, type RoadNode, type RoadPoint } from './game/roads.js';
+export {
+  MAX_MESSAGE_ARCS,
+  MESSAGE_ARC_TTL_MS,
+  arcPoint,
+  messageArcs,
+  type MessageArc,
+} from './game/message-flow.js';
 
 /* ── terrain ── */
 
