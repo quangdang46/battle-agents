@@ -764,15 +764,6 @@ function isEmptyListInput(input: unknown): boolean {
 /* ───────────────────────────── sweep ───────────────────────────── */
 
 /**
- * Closes the battles whose grace period has run out.
- *
- * An explicit action because the runtime has no clock and core is frozen. Nothing
- * schedules work, and a feature that quietly evaluated elapsed time on the next
- * read would be a read that writes — the defect packages/api already had to be
- * taught about in `inspect`, where two inspect calls moved a counter. A host calls
- * this on a timer; a test calls it against a clock it controls.
- */
-/**
  * One battle's transition, and the event that says it happened.
  *
  * The two sweeps were near-identical loops differing only in which battles they
@@ -804,6 +795,17 @@ async function moveAndEmit(
   return true;
 }
 
+/* ───────────────────────────── sweep ───────────────────────────── */
+
+/**
+ * Closes the battles whose grace period has run out.
+ *
+ * An explicit action because the runtime has no clock and core is frozen. Nothing
+ * schedules work, and a feature that quietly evaluated elapsed time on the next
+ * read would be a read that writes — the defect packages/api already had to be
+ * taught about in `inspect`, where two inspect calls moved a counter. A host calls
+ * this on a timer; a test calls it against a clock it controls.
+ */
 async function sweep(
   repository: BattleRepository,
   matchMs: number,
