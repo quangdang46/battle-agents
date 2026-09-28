@@ -53,6 +53,10 @@ for _ in $(seq 1 30); do
     docker inspect battle-agents-web-1 --format '{{range .Config.Env}}{{println .}}{{end}}' \
       | grep -qx 'AGENT_BATTLE_DEV_LOGIN=1' \
       || { echo "dev login did NOT reach the container" >&2; exit 1; }
+    # The cookie bypass -- real Better Auth sessions, exercising getSession --
+    # still exists in .tmp/auth-bypass.mts. The flag is the default because the
+    # operator asked to be able to OPEN the URL and play, with no cookie to
+    # paste, and the flag is the only path that needs nothing.
     echo "web up; the game is at http://127.0.0.1:3000/ (dev login on)"
     exit 0
   fi

@@ -8,6 +8,7 @@ import {
   loadSpriteAssets,
   spriteCache,
   type SceneConfig,
+  type SceneId,
   type SpriteAssets,
 } from '@battle-agents/game-client';
 import { useEffect, useRef, useState } from 'react';
@@ -71,6 +72,7 @@ export interface WorldCanvasProps {
   /** Reported to the shell, which draws the footer rather than the component. */
   readonly onStatus?: (status: WorldStatus) => void;
   readonly onAgents?: (count: number) => void;
+  readonly onZone?: (scene: SceneId) => void;
   readonly onArt?: (note: string) => void;
   /** Character ids lit by a control group. Recalled in the shell. */
   readonly highlighted?: readonly string[];
@@ -100,6 +102,7 @@ export function WorldCanvas({
   onStatus,
   onAgents,
   onArt,
+  onZone,
   fill = false,
   height = 460,
   highlighted = [],
@@ -317,6 +320,13 @@ export function WorldCanvas({
           const step = reducePointer(pointer, { type: 'pointerUp', point: toLocal(event) });
           pointer = step.state;
           if (step.intent.kind === 'select' && !step.intent.live) {
+            // A click that was not a drag. This is how a building becomes a
+            // doorway: the world is already drawing a marker for every zone in
+            // this scene, and all that was missing was asking which one a pixel
+            // is in. The point has to come back out of the WORLD layer, not the
+            // container, because the container carries the pan offset too.
+            const hit = view.zoneAt(toLocal(event).x - view.root.x, toLocal(event).y - view.root.y);
+            if (hit !== undefined) onZone?.(hit.zone as SceneId);
             // A committed marquee selects nobody yet: `onSelect` is where a host
             // with a selection model would take the ids under the rect. The world
             // here is a spectator view, so the rect is drawn and released.

@@ -395,6 +395,37 @@ export class PixiWorldView implements WorldViewLike {
     }
   }
 
+  /**
+   * The zone a click at this world-layer point lands on, or undefined.
+   *
+   * This is the whole of "the Arena is a building you walk into" rather than a
+   * tab: the world is already drawing a marker for every zone in this scene, and
+   * all that was missing was a way to ask which one a pixel is in.
+   *
+   * The radius is in TILES, not pixels, and it is deliberately generous — a
+   * building sprite is much wider than the one cell its marker is keyed to, and
+   * a hit test that is technically correct and feels broken is worse than one
+   * that is a tile generous. The nearest zone wins, so overlapping buildings at
+   * a junction resolve to the one actually under the cursor.
+   */
+  zoneAt(x: number, y: number, reachTiles = 2.5): { zone: keyof typeof ZONE_PLACEMENT; label: string } | undefined {
+    let best: { zone: keyof typeof ZONE_PLACEMENT; label: string; distance: number } | undefined;
+    for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
+      const placement = ZONE_PLACEMENT[zone];
+      if (placement.scene !== this.#scene.id) continue;
+      const at = this.#projection.toScreen(placement.gx, placement.gy);
+      // Compared in SCREEN distance, not grid distance: the two scales the
+      // projection uses differ by a factor of two, and a grid comparison would
+      // make a hit box twice as tall as it is wide.
+      const distance = Math.hypot(x - at.x, y - at.y);
+      if (distance > reachTiles * TILE_WORLD_PX) continue;
+      if (best === undefined || distance < best.distance) {
+        best = { zone, label: placement.label, distance };
+      }
+    }
+    return best === undefined ? undefined : { zone: best.zone, label: best.label };
+  }
+
   setHighlighted(agentIds: readonly string[]): void {
     const lit = new Set(agentIds);
     for (const node of this.#units.values()) {

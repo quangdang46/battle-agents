@@ -4,7 +4,6 @@ import { CITY, ARENA, GUILD_HALL, type SceneConfig, type SceneId } from '@battle
 import { useCallback, useEffect, useState } from 'react';
 
 import { usePixelFont } from './game-chrome.js';
-import { ScenePlates, PLATES } from './pixel-hud.js';
 import {
   assignControlGroup,
   recallControlGroup,
@@ -95,6 +94,11 @@ export function GameShell({
   const selectedCharacter =
     characters.find((card) => card.id === selectedAgentId) ?? null;
 
+  // Going somewhere is a click on the building, not a tab. A hit on a zone
+  // that belongs to ANOTHER scene moves the camera there, which is the whole of
+  // what a scene switch is: the view is rebuilt because the view is what a scene
+  // IS, while the store, the client, the socket and the camera are what the
+  // player has been looking at all along.
   const choose = useCallback((id: SceneId) => {
     const found = SCENES.find((candidate) => candidate.id === id);
     if (found !== undefined) setScene(found);
@@ -126,8 +130,6 @@ export function GameShell({
         return;
       }
 
-      const plate = PLATES.find((candidate) => candidate.key === event.key);
-      if (plate !== undefined) choose(plate.scene.id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -168,7 +170,6 @@ export function GameShell({
         }}
       >
         <div style={{ pointerEvents: 'auto' }}>
-          <ScenePlates current={scene.id} onTravel={choose} />
           {devLogin ? (
             <p style={{ margin: '0.35rem 0 0', color: '#f5d78a', fontSize: '0.62rem' }}>
               DEV LOGIN — no GitHub session
@@ -188,6 +189,7 @@ export function GameShell({
           touched when `window` changes. */}
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <WorldCanvas
+          onZone={choose}
           scene={scene}
           fill
           onStatus={setStatus}

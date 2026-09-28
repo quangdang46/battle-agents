@@ -22,12 +22,23 @@ export interface Projection {
   toScreen(gx: number, gy: number): { x: number; y: number };
   /** Value for depth-sorting (zIndex) units/buildings. */
   depth(gx: number, gy: number): number;
+  /**
+   * The grid cell a SCREEN point lands in, in world-layer coordinates.
+   *
+   * Added for hit-testing, which is how a building becomes a doorway: you click
+   * a pixel, and something has to say which cell that pixel is. Both projections
+   * are invertible, and each inverse is the algebra of its forward written
+   * backwards -- `fromScreen` is not an approximation of `toScreen` called
+   * again, which is the thing that would make a click land a tile off.
+   */
+  fromScreen(x: number, y: number): { gx: number; gy: number };
 }
 
 export function topdown(tile: number): Projection {
   return {
     toScreen: (gx, gy) => ({ x: gx * tile, y: gy * tile }),
     depth: (_gx, gy) => gy,
+    fromScreen: (x, y) => ({ gx: Math.floor(x / tile), gy: Math.floor(y / tile) }),
   };
 }
 
@@ -36,5 +47,13 @@ export function isometric(tileW: number, tileH: number): Projection {
   return {
     toScreen: (gx, gy) => ({ x: ((gx - gy) * tileW) / 2, y: ((gx + gy) * tileH) / 2 }),
     depth: (gx, gy) => gx + gy,
+    fromScreen: (x, y) => {
+      // Undo the 2:1 diamond: y separates the two axes and x separates them
+      // again. A tile is the half-parallelogram, so the +0.5 lands the click in
+      // the cell whose CENTRE it was nearest.
+      const a = x / (tileW / 2) + 0.5;
+      const b = y / (tileH / 2) + 0.5;
+      return { gx: Math.floor((a + b) / 2), gy: Math.floor((b - a) / 2) };
+    },
   };
 }
