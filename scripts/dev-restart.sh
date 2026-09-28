@@ -35,12 +35,24 @@ pnpm -r build >/dev/null
 echo "restarting the web app with a clean .next"
 docker compose -f compose.yaml down web >/dev/null 2>&1 || true
 rm -rf apps/web/.next
-docker compose -f compose.yaml -f .tmp/compose.devlogin.yaml up -d --wait web >/dev/null
+# --force-recreate, without it this silently kept the OLD container. Compose
+# compared the config it was given, and the web service's own definition has not
+# changed, so `up -d` decided there was nothing to do and left a container that
+# was started WITHOUT the dev-login override.
+#
+# It went unnoticed because checking the bypass from a shell cannot see it: `/`
+# answers 307, so `curl / | grep` reads an empty body and looks identical to a
+# game that loaded. Only a browser can answer the question, which is why the
+# script now verifies the variable it set rather than the page it produced.
+docker compose -f compose.yaml -f .tmp/compose.devlogin.yaml up -d --force-recreate --wait web >/dev/null
 
 # `next dev` answers / before it has compiled the first route, so a 307 from the
 # root is the signal to wait on rather than a success to report.
 for _ in $(seq 1 30); do
   if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:3000/ || true)" = "307" ]; then
+    docker inspect battle-agents-web-1 --format '{{range .Config.Env}}{{println .}}{{end}}' \
+      | grep -qx 'AGENT_BATTLE_DEV_LOGIN=1' \
+      || { echo "dev login did NOT reach the container" >&2; exit 1; }
     echo "web up; the game is at http://127.0.0.1:3000/ (dev login on)"
     exit 0
   fi
