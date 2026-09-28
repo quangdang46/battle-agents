@@ -313,6 +313,71 @@ const PROP_TILES: readonly { readonly pack: string; readonly tile: string }[] = 
   { pack: 'kenney-tiny-dungeon', tile: 'tile_0029' },
 ];
 
+/**
+ * The arcane-agents characters, as heroes with a WORKING cycle.
+ *
+ * ## Why these six
+ *
+ * The pack is MIT and ships twenty characters, 52 frames each. Six are vendored
+ * because a cast of six that varies reads as a crowd and twenty reads as a
+ * loading screen -- the same reasoning that chose twelve bases and rejected four
+ * hundred. What makes them worth the six is `animations/working/`: a frame set
+ * for an agent with a tool in its hand, which is exactly the state `HeroSheet`
+ * already models and exactly what `AgentView.tool` selects. Every other
+ * character pack vendored here has idle and walk and nothing for work.
+ *
+ * ## Single frames, not sheets
+ *
+ * `rotations/<dir>.png` is one file and `animations/walk/<dir>/<n>.png` is a
+ * directory of numbered frames -- so `loadOne` cannot read them, being built for
+ * TexturePacker manifests. They are listed by a small fetch instead. Six
+ * characters times eight frames is 48 requests, which is a lot for a local dev
+ * server on a cold compile; that is the price and it is a one-off at load.
+ */
+const ARCANE_CHARACTERS: readonly string[] = [
+  'assassin-shadow',
+  'barbarian-wild',
+  'blood-elf-spellarcher',
+  'chronomancer',
+  'crystal-mage',
+  'dwarf-warrior-short',
+];
+const ARCANE_DIRECTION = 'west';
+const ARCANE_FRAME_COUNT = 8;
+
+async function loadArcane(baseUrl: string, missing: string[]): Promise<readonly HeroSheet[]> {
+  const sheets = await Promise.all(
+    ARCANE_CHARACTERS.map(async (name) => {
+      const root = `${baseUrl}/art/arcane-agents-characters/${name}`;
+      const grab = async (dir: string): Promise<Texture[]> => {
+        const frames: Texture[] = [];
+        for (let index = 0; index < ARCANE_FRAME_COUNT; index += 1) {
+          try {
+            frames.push(await Assets.load<Texture>(`${root}/${dir}/${index}.png`));
+          } catch {
+            missing.push(`arcane-agents-characters/${name}/${dir}/${index}.png`);
+          }
+        }
+        return frames;
+      };
+      // The idle is the single south-facing still, so it is loaded on its own
+      // rather than repeated out of the walk cycle: a character that breathes by
+      // playing its walk loop twice a second is worse than one that stands.
+      let idle: Texture[] = [];
+      try {
+        idle = [await Assets.load<Texture>(`${root}/rotations/south.png`)];
+      } catch {
+        missing.push(`arcane-agents-characters/${name}/rotations/south.png`);
+      }
+      const walk = await grab(`animations/walk/${ARCANE_DIRECTION}`);
+      const work = await grab('animations/working');
+      if (idle.length === 0 && walk.length === 0 && work.length === 0) return undefined;
+      return { name: `arcane-${name}`, idle, walk, work } satisfies HeroSheet;
+    }),
+  );
+  return sheets.filter((sheet) => sheet !== undefined);
+}
+
 async function loadProps(
   baseUrl: string,
   missing: string[],
@@ -446,6 +511,7 @@ async function loadEverything(
   const heroes = [
     ...(await loadHeroes(root, missing)),
     ...(await loadTroops(baseUrl, missing)),
+    ...(await loadArcane(baseUrl, missing)),
   ];
   const terrain = await loadTerrain(root, missing, terrainStyle);
 

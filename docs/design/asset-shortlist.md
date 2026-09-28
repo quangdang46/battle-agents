@@ -13,6 +13,7 @@ Paths are `apps/web/public/art/<pack>/`, per §19 — with a rewrite so the URL
 ## The shortlist
 
 | Pack            | Source                                                                                              | Licence | Style                                                                    | Role                                       |
+| arcane-agents-characters | [arcane-agents](https://github.com/ThomasRice) `assets/characters/` | MIT | single 64x64 frames, NOT sheets: `rotations/<dir>.png` plus `animations/walk/<dir>/<n>.png` and `animations/working/<n>.png` | six characters with four facing directions, a walk cycle and a WORKING cycle -- the one art here that carries the tool-aware state `HeroSheet` already models |
 | --------------- | --------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------ | ------------------------------------------ |
 | age-of-agents   | [agentsmill/age-of-agents](https://github.com/agentsmill/age-of-agents) `packages/client/public/assets/{fantasy,scifi,emblems}` | MIT | fantasy/scifi pixel, **TexturePacker sheets with `.json` frame manifests** | the characters, buildings and terrain the game actually draws |
 | tiny-swords-cc0 | [Pixel Frog, Tiny Swords update 010](https://pixelfrog-assets.itch.io/tiny-swords), via agent-quest | CC0-1.0 | fantasy pixel, 64px tile grid; frames are source-scale sheets, not 16×16 | V0 characters, terrain, buildings, effects |
