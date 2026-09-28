@@ -31,6 +31,17 @@
 import type { Texture } from 'pixi.js';
 
 import type { ZoneId } from '@battle-agents/protocol';
+import type { TerrainId } from '../game/terrain-map.js';
+
+
+/**
+ * The ground kinds, in the order a variant maps onto them.
+ *
+ * Exported because the VIEW picks a tile with an integer and has to mean the same
+ * thing by that integer. Two files each holding this list is two files that can
+ * disagree about which integer is water.
+ */
+export const TERRAIN_KINDS: readonly TerrainId[] = ['grass', 'dirt', 'rock', 'water'];
 
 import { PixelCanvas, hex, withAlpha } from './pixel-canvas.js';
 import { buildingForZone, type SpriteAssets } from './asset-atlas.js';
@@ -285,8 +296,16 @@ export class SpriteCache {
           : buildingForZone(assets.buildings, key.zone as ZoneId);
       case 'building':
         return assets.buildings.values().next().value as Texture | undefined;
-      case 'terrain-tile':
-        return assets.terrain[key.variant % Math.max(1, assets.terrain.length)];
+      case 'terrain-tile': {
+        // The variant IS the terrain kind, and the tile within it. Falling back to
+        // grass rather than returning nothing, because a missing ground sheet must
+        // leave a world that has a floor, not a hole in one.
+        const bucket = Math.abs(key.variant) % TERRAIN_KINDS.length;
+        const kind: TerrainId = TERRAIN_KINDS[bucket] ?? 'grass';
+        const sheet = assets.terrain[kind] ?? assets.terrain['grass'];
+        if (sheet === undefined || sheet.length === 0) return undefined;
+        return sheet[key.variant % sheet.length];
+      }
       default:
         return undefined;
     }

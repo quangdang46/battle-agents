@@ -36,9 +36,10 @@
  * with whatever it managed to read and records what it did not, so the caller
  * can say so rather than discovering it as an empty city.
  */
-import { Assets, Rectangle, Texture } from 'pixi.js';
+import { Assets, Texture } from 'pixi.js';
 
 import { ZONE_PLACEMENT } from '../zones.js';
+import type { TerrainId } from '../game/terrain-map.js';
 import type { ZoneId } from '@battle-agents/protocol';
 
 /** Where the pack lives, relative to the app root. */
@@ -73,7 +74,8 @@ export interface SpriteAssets {
   /** By building id — `guild`, `arena`, `forge`, and so on. */
   readonly buildings: ReadonlyMap<string, Texture>;
   /** Ground tiles, in sheet order. */
-  readonly terrain: readonly Texture[];
+  /** Ground, BY KIND, because a flat list of tiles is a list you cannot choose from. */
+  readonly terrain: Readonly<Record<string, readonly Texture[]>>;
   /** Ids that were named but could not be loaded. */
   readonly missing: readonly string[];
 }
@@ -92,7 +94,7 @@ const ZONE_BUILDING: Readonly<Record<string, string>> = {
 };
 
 /** Terrain, in the order the client walks it. Named here, not discovered. */
-const TERRAIN_IDS: readonly string[] = ['dirt', 'rock', 'water'];
+const TERRAIN_IDS: readonly TerrainId[] = ['dirt', 'rock', 'water', 'grass'];
 
 /**
  * A Kenney tileset, loaded as a grid of 16px tiles.
@@ -103,29 +105,6 @@ const TERRAIN_IDS: readonly string[] = ['dirt', 'rock', 'water'];
  * here rather than handing the client a 432px image is what makes it a GROUND
  * the city stands on rather than a picture of one.
  */
-async function loadKenneyTerrain(
-  url: string,
-  tilePx: number,
-): Promise<readonly Texture[] | undefined> {
-  try {
-    const sheet = await Assets.load<Texture>(url);
-    const tiles: Texture[] = [];
-    for (let gy = 0; gy * tilePx < Math.floor(sheet.height); gy += 1) {
-      for (let gx = 0; gx * tilePx < Math.floor(sheet.width); gx += 1) {
-        tiles.push(
-          new Texture({
-            source: sheet.source,
-            frame: new Rectangle(gx * tilePx, gy * tilePx, tilePx, tilePx),
-          }),
-        );
-      }
-    }
-    return tiles;
-  } catch {
-    return undefined;
-  }
-}
-
 interface RawSheet {
   readonly textures?: Readonly<Record<string, Texture>>;
 }
@@ -270,27 +249,32 @@ async function loadHeroes(root: string, missing: string[]): Promise<readonly Her
   return loaded.filter((hero): hero is HeroSheet => hero !== undefined) as readonly HeroSheet[];
 }
 
-async function loadTerrain(root: string, missing: string[]): Promise<readonly Texture[]> {
-  const sheets = await Promise.all(TERRAIN_IDS.map((id) => loadOne(`${root}/tilemap/${id}`)));
-  sheets.forEach((frames, index) => {
-    if (frames === undefined || frames.length === 0) missing.push(`tilemap/${TERRAIN_IDS[index]}`);
-  });
-  const fromPacker = sheets.flatMap((frames) => frames ?? []);
-
-  // The Kenney tilesets, which are the actual GROUND. The age-of-agents sheets
-  // are three large framed tiles; these are 16px cells that tile, and a city
-  // whose floor is three repeated 256px textures is a backdrop rather than a
-  // place. The urban pack is the largest (27x18 cells) and reads as a city
-  // street, which is what a Coding City is.
-  const kenney = await loadKenneyTerrain(
-    '/art/kenney-rpg-urban-pack/Tilemap/tilemap_packed.png',
-    16,
+/**
+ * Ground, keyed by the terrain it is.
+ *
+ * It was one flat array, which is a list of tiles and not a map of them: a
+ * renderer that wanted GRASS had to know that grass was somewhere in the middle
+ * of a concatenation of three other terrains. Nothing could ask for ground
+ * without knowing the load order, so nothing asked — the tiles were fetched and
+ * never drawn, and the city had no floor.
+ *
+ * Keyed, a caller asks for grass and gets grass.
+ */
+async function loadTerrain(
+  root: string,
+  missing: string[],
+): Promise<Readonly<Record<string, readonly Texture[]>>> {
+  const entries = await Promise.all(
+    TERRAIN_IDS.map(async (id) => {
+      const frames = await loadOne(`${root}/tilemap/${id}`);
+      if (frames === undefined || frames.length === 0) {
+        missing.push(`tilemap/${id}`);
+        return undefined;
+      }
+      return [id, frames] as const;
+    }),
   );
-  if (kenney === undefined || kenney.length === 0) {
-    missing.push('kenney-rpg-urban-pack/Tilemap/tilemap_packed.png');
-    return fromPacker;
-  }
-  return [...fromPacker, ...kenney];
+  return Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== undefined));
 }
 
 /**

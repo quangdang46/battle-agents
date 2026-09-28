@@ -24,6 +24,7 @@ import { ZONE_PLACEMENT, placementFor } from '../zones.js';
 import { advanceMotion, motionAt, type CharacterMotion } from './motion.js';
 import { stableHash } from '../sprites/sprite-factory.js';
 import { skyTint } from './sky.js';
+import { terrainSampler } from './terrain-map.js';
 import { zoneSlot } from './zone-slot.js';
 import { wanderOffset } from './idle-wander.js';
 import { pickLine } from './dialogue.js';
@@ -34,6 +35,7 @@ import {
   TILE_WORLD_PX,
   spriteCache,
   spriteKey,
+  TERRAIN_KINDS,
   type SpriteCache,
   type SpriteKind,
 } from '../sprites/sprite-factory.js';
@@ -220,6 +222,19 @@ export class PixiWorldView implements WorldViewLike {
    * the terrain having a tile for every cell.
    */
   readonly skyLayer = new Container();
+  /**
+   * The ground.
+   *
+   * It was missing, and that is what made the city look like components stacked on
+   * a flat colour: the tiles were FETCHED — a 27x18 sheet, plus three per-terrain
+   * sheets from age-of-agents — and nothing ever asked for one, so the world had
+   * no floor. A character standing on nothing reads as a sprite on a page.
+   *
+   * Built once, at construction, because terrain does not change with a delta and
+   * re-laying 32x32 sprites per event is the O(scene) cost this view exists to
+   * avoid.
+   */
+  readonly terrainLayer = new Container();
 
   readonly #units = new Map<string, UnitNode>();
   /** Elapsed world time in ms, driving both the animation cycle and the sky. */
@@ -233,7 +248,8 @@ export class PixiWorldView implements WorldViewLike {
     this.#cache = options.cache ?? spriteCache();
     this.#sky = new Graphics();
     this.skyLayer.addChild(this.#sky);
-    this.worldLayer.addChild(this.skyLayer, this.zoneLayer, this.unitLayer);
+    this.worldLayer.addChild(this.terrainLayer, this.skyLayer, this.zoneLayer, this.unitLayer);
+    this.#drawTerrain();
     this.#drawZones();
     this.#paintSky();
   }
@@ -463,6 +479,40 @@ export class PixiWorldView implements WorldViewLike {
    * NOT re-create anything: `animationFor` returns the frames the cache already
    * holds, and the assignment is a pointer swap.
    */
+  /**
+   * Lays the ground for this scene, one sprite per cell.
+   *
+   * The kind of ground comes from `terrainSampler` on the scene seed, so it is
+   * the SAME ground on every reload and in every browser — a world that reshuffles
+   * its own floor is not a place, it is noise. The tile WITHIN a kind is varied by
+   * a second hash of the cell, so a field of grass is not one tile stamped 1024
+   * times, which is the other way this looks like a spreadsheet.
+   *
+   * A cell whose sheet did not load draws nothing rather than a fallback colour,
+   * because a flat square of `#2a3a2a` is more obviously wrong than absence is.
+   */
+  #drawTerrain(): void {
+    const sample = terrainSampler(this.#scene.seed);
+    for (let gy = 0; gy < this.#scene.h; gy += 1) {
+      for (let gx = 0; gx < this.#scene.w; gx += 1) {
+        const kind = sample(gx, gy);
+        // The variant carries BOTH the kind and the choice within it, so a
+        // caller with one integer can ask for a specific piece of ground.
+        const variety = (gx * 7 + gy * 13) % 3;
+        const kindIndex = Math.max(0, TERRAIN_KINDS.indexOf(kind));
+        const texture = this.#cache.get(
+          spriteKey('terrain-tile', kindIndex * 4 + variety),
+        );
+        if (texture === undefined) continue;
+        const at = this.#projection.toScreen(gx, gy);
+        const tile = new Sprite(texture);
+        tile.position.set(at.x, at.y);
+        tile.zIndex = -1;
+        this.terrainLayer.addChild(tile);
+      }
+    }
+  }
+
   /**
    * Lays down the day's light over the scene.
    *

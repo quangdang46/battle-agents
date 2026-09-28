@@ -299,7 +299,8 @@ export function battleFeature(dependencies: BattleDependencies): GameFeature {
       defineAction({
         id: BATTLE_FINISH,
         permissions: [BATTLE_FINISH],
-        run: (input: unknown, context) => finish(repository, input, context),
+        run: (input: unknown, context) =>
+          finish(repository, gateIsOn(context.runtime), input, context),
       }),
       defineAction({
         id: BATTLE_WEIGHTS_READ,
@@ -503,6 +504,7 @@ async function arenaGate(
 
 async function finish(
   repository: BattleRepository,
+  gateOn: boolean,
   input: unknown,
   context: RuntimeContext,
 ): Promise<BattleView> {
@@ -631,7 +633,7 @@ async function finish(
       mode: battle.mode,
       weights,
       outcome: outcome.kind === 'won' ? 'won' : 'no-winner',
-      reason: outcome.kind === 'won' ? outcome.reason : outcome.reason,
+      reason: outcome.reason,
       winnerSessionIds: [...winners].sort(),
       participants: after.map((participant) => participant.sessionId),
       scores: [...scored]
@@ -644,7 +646,12 @@ async function finish(
     }),
   );
 
-  return viewOf({ battle: finished, participants: after, state, gateIsOn: true });
+  // The gate is threaded, not assumed. It was a literal `true` here while
+  // every other read path was passed the real value — so a battle read after
+  // `reputation.read` was uninstalled still reported the arena as gated, and
+  // the degradation the whole flag exists to report went missing from one of the
+  // six surfaces that can see a battle.
+  return viewOf({ battle: finished, participants: after, state, gateIsOn: gateOn });
 }
 
 function criteriaOf(result: BattleResultInput): CriterionResult[] {
