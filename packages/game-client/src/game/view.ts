@@ -27,6 +27,7 @@ import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
 import { pointOnRoad, roadCurves, type RoadNode } from './roads.js';
+import type { SceneId } from '../scenes/scene-config.js';
 import { MESSAGE_ARC_TTL_MS, type MessageArc } from './message-flow.js';
 import { placeProps, SCENE_PROPS } from './props.js';
 import { zoneSlot } from './zone-slot.js';
@@ -344,6 +345,7 @@ export class PixiWorldView implements WorldViewLike {
     this.#drawTerrain();
     this.decoLayer.addChild(...this.#buildDecorations(), ...this.#buildProps());
     this.fxLayer.addChild(this.#buildActivityFx());
+    this.#drawDoorways();
     this.#drawZones();
     this.#paintSky();
   }
@@ -408,11 +410,36 @@ export class PixiWorldView implements WorldViewLike {
    * that is a tile generous. The nearest zone wins, so overlapping buildings at
    * a junction resolve to the one actually under the cursor.
    */
-  zoneAt(x: number, y: number, reachTiles = 2.5): { zone: keyof typeof ZONE_PLACEMENT; label: string } | undefined {
-    let best: { zone: keyof typeof ZONE_PLACEMENT; label: string; distance: number } | undefined;
+  /**
+   * The zone a CONTAINER point lands on, undoing this view's own transforms.
+   *
+   * The layer stack is root -> worldLayer(position, scale) -> the sprites, and
+   * the caller only knows where it clicked on screen. Doing the conversion here
+   * is the point: an earlier version took the container point minus `root.x` and
+   * called it world space, which ignores the worldLayer's own pan AND its zoom,
+   * so a click landed a whole tile off the moment either was anything but
+   * identity. The one caller got it wrong in one place; a view that exposes only
+   * its own coordinates cannot get it wrong at all.
+   */
+  zoneAtScreen(
+    containerX: number,
+    containerY: number,
+    reachTiles = 2.5,
+  ): { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId } | undefined {
+    const scale = this.worldLayer.scale.x || 1;
+    const worldX = (containerX - this.root.position.x - this.worldLayer.position.x) / scale;
+    const worldY = (containerY - this.root.position.y - this.worldLayer.position.y) / scale;
+    return this.zoneAt(worldX, worldY, reachTiles / scale);
+  }
+
+  zoneAt(x: number, y: number, reachTiles = 2.5): { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId } | undefined {
+    let best: { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId; distance: number } | undefined;
     for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
       const placement = ZONE_PLACEMENT[zone];
-      if (placement.scene !== this.#scene.id) continue;
+      // NOT filtered by scene. A zone belonging to another scene is a
+      // doorway -- the Guild Hall is a building in the city you walk into, not
+      // a tab you press -- and a doorway you cannot reach is a label. This is
+      // the line the three tabs drew and this does not.
       const at = this.#projection.toScreen(placement.gx, placement.gy);
       // Compared in SCREEN distance, not grid distance: the two scales the
       // projection uses differ by a factor of two, and a grid comparison would
@@ -420,10 +447,10 @@ export class PixiWorldView implements WorldViewLike {
       const distance = Math.hypot(x - at.x, y - at.y);
       if (distance > reachTiles * TILE_WORLD_PX) continue;
       if (best === undefined || distance < best.distance) {
-        best = { zone, label: placement.label, distance };
+        best = { zone, label: placement.label, scene: placement.scene, distance };
       }
     }
-    return best === undefined ? undefined : { zone: best.zone, label: best.label };
+    return best === undefined ? undefined : { zone: best.zone, label: best.label, scene: best.scene };
   }
 
   setHighlighted(agentIds: readonly string[]): void {
@@ -1008,6 +1035,34 @@ export class PixiWorldView implements WorldViewLike {
       }
     }
     return group;
+  }
+
+  /**
+   * The doorways: one marker per zone that lives in ANOTHER scene.
+   *
+   * Without these the city has no visible Guild Hall and no visible Arena, and
+   * a building you cannot see is not a building you can walk into. They are
+   * drawn smaller and behind the in-scene markers, so the places of THIS scene
+   * still read first and a doorway reads as "somewhere else" rather than as a
+   * zone that happens to be far away.
+   */
+  #drawDoorways(): void {
+    for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
+      const placement = ZONE_PLACEMENT[zone];
+      if (placement.scene === this.#scene.id) continue;
+      const at = this.#projection.toScreen(placement.gx, placement.gy);
+      const texture = this.#cache.get(spriteKey('zone-marker', paletteIndexFor(zone), zone));
+      if (texture === undefined) continue;
+      const marker = new Sprite(texture);
+      marker.anchor.set(0.5, 0.5);
+      marker.scale.set(PLACEHOLDER_SCALE * 0.8);
+      marker.position.set(at.x, at.y);
+      marker.alpha = 0.85;
+      // Behind the in-scene markers: a doorway is a way out, not a place you
+      // are standing in.
+      marker.zIndex = this.#projection.depth(placement.gx, placement.gy) - 2;
+      this.zoneLayer.addChild(marker);
+    }
   }
 
   #drawZones(): void {

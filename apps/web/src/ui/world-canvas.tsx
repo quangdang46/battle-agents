@@ -325,8 +325,9 @@ export function WorldCanvas({
             // this scene, and all that was missing was asking which one a pixel
             // is in. The point has to come back out of the WORLD layer, not the
             // container, because the container carries the pan offset too.
-            const hit = view.zoneAt(toLocal(event).x - view.root.x, toLocal(event).y - view.root.y);
-            if (hit !== undefined) onZone?.(hit.zone as SceneId);
+            const point = toLocal(event);
+            const hit = view.zoneAtScreen(point.x, point.y);
+            if (hit !== undefined) onZone?.(hit.scene);
             // A committed marquee selects nobody yet: `onSelect` is where a host
             // with a selection model would take the ids under the rect. The world
             // here is a spectator view, so the rect is drawn and released.
