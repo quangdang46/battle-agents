@@ -57,7 +57,7 @@ function assetsWith(overrides: Partial<SpriteAssets> = {}): SpriteAssets {
       ['shrine', texture('shrine')],
       ['barracks', texture('barracks')],
     ]),
-    terrain: [texture('dirt'), texture('rock')],
+    terrain: { grass: [texture('dirt')], dirt: [texture('rock')] },
     missing: [],
     ...overrides,
   };
@@ -152,7 +152,7 @@ describe('a cache with art attached', () => {
     // A 404 on every sheet is what a half-copied pack looks like. The honest
     // outcome is the placeholder world, not an exception and not a blank canvas.
     const cache = new SpriteCache();
-    cache.attach(assetsWith({ heroes: [], buildings: new Map(), terrain: [] }));
+    cache.attach(assetsWith({ heroes: [], buildings: new Map(), terrain: { grass: [texture('dirt')], dirt: [texture('rock')] } }));
 
     expect(cache.get(spriteKey('agent', 0))).toBeDefined();
     expect(cache.stats.fromAssets).toBe(0);

@@ -7,7 +7,6 @@ import { TERRAIN_KINDS } from '../../packages/game-client/src/sprites/sprite-fac
 import { WorldStore } from '../../packages/game-client/src/state/store.js';
 import { terrainSampler } from '../../packages/game-client/src/game/terrain-map.js';
 import type { SpriteAssets } from '../../packages/game-client/src/sprites/asset-atlas.js';
-import type { Texture } from 'pixi.js';
 
 /**
  * The city has a floor.
@@ -31,14 +30,14 @@ import type { Texture } from 'pixi.js';
  * the right colour. What it can say is whether a sprite exists for every cell of
  * the scene, and that is the property that a missing layer cannot fake.
  */
-function aTexture(label: string): Texture {
-  return { label } as unknown as Texture;
+function aTexture(label: string): never {
+  return { label } as never;
 }
 
 /** An atlas with ground and nothing else — the world without characters. */
 function anAtlasWithGround(): SpriteCache {
   const cache = new SpriteCache();
-  const terrain: Record<string, Texture[]> = {
+  const terrain = {
     grass: [aTexture('grass-0'), aTexture('grass-1')],
     dirt: [aTexture('dirt-0')],
     rock: [aTexture('rock-0')],
@@ -63,7 +62,7 @@ function aCity(): PixiWorldView {
 }
 
 function childrenOf(container: unknown): unknown[] {
-  return (container as { readonly children: readonly unknown[] }).children;
+  return [...(container as { readonly children: readonly unknown[] }).children];
 }
 
 describe('the ground', () => {

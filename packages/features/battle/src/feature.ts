@@ -772,6 +772,38 @@ function isEmptyListInput(input: unknown): boolean {
  * taught about in `inspect`, where two inspect calls moved a counter. A host calls
  * this on a timer; a test calls it against a clock it controls.
  */
+/**
+ * One battle's transition, and the event that says it happened.
+ *
+ * The two sweeps were near-identical loops differing only in which battles they
+ * walked and what they said about it, so a change to the shared half had to be
+ * written twice and the second copy was the one that drifted. The DIFFERENCES are
+ * arguments now; validate, move, emit live here once.
+ */
+async function moveAndEmit(
+  repository: BattleRepository,
+  context: RuntimeContext,
+  battle: {
+    readonly id: string;
+    readonly status: string;
+    readonly pausedAt: string | null;
+    readonly resumeDeadline: string | null;
+    readonly startedAt: string;
+  },
+  transition: 'abandon' | 'expire',
+  now: string,
+  eventType: string,
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  const status = toKnownBattleStatus(battle.status);
+  if (status === undefined) return false;
+  const to = nextBattleStatus(status, transition);
+  if (to === undefined) return false;
+  if ((await repository.move(battle.id, status, to, now)) === undefined) return false;
+  await context.runtime.emit(event(context, eventType, { battleId: battle.id, ...payload }));
+  return true;
+}
+
 async function sweep(
   repository: BattleRepository,
   matchMs: number,
@@ -782,52 +814,30 @@ async function sweep(
   const expired: string[] = [];
 
   for (const battle of await repository.pausedBefore(now)) {
-    const status = toKnownBattleStatus(battle.status);
-    if (status === undefined) {
-      continue;
-    }
-    const to = nextBattleStatus(status, 'abandon');
-    if (to === undefined) {
-      continue;
-    }
-    if ((await repository.move(battle.id, status, to, now)) === undefined) {
-      continue;
-    }
-    abandoned.push(battle.id);
-    await context.runtime.emit(
-      event(context, BATTLE_ABANDONED, {
-        battleId: battle.id,
+    if (
+      await moveAndEmit(repository, context, battle, 'abandon', now, BATTLE_ABANDONED, {
         reason: 'resume-grace-expired',
         pausedAt: battle.pausedAt,
         resumeDeadline: battle.resumeDeadline,
-      }),
-    );
+      })
+    ) {
+      abandoned.push(battle.id);
+    }
   }
 
   for (const battle of await repository.list({ status: 'running' })) {
     if (Date.parse(now) - Date.parse(battle.startedAt) < matchMs) {
       continue;
     }
-    const status = toKnownBattleStatus(battle.status);
-    if (status === undefined) {
-      continue;
-    }
-    const to = nextBattleStatus(status, 'expire');
-    if (to === undefined) {
-      continue;
-    }
-    if ((await repository.move(battle.id, status, to, now)) === undefined) {
-      continue;
-    }
-    expired.push(battle.id);
-    await context.runtime.emit(
-      event(context, BATTLE_EXPIRED, {
-        battleId: battle.id,
+    if (
+      await moveAndEmit(repository, context, battle, 'expire', now, BATTLE_EXPIRED, {
         reason: 'match-duration-elapsed',
         startedAt: battle.startedAt,
         matchMs,
-      }),
-    );
+      })
+    ) {
+      expired.push(battle.id);
+    }
   }
   return { abandoned, expired };
 }

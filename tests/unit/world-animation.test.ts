@@ -49,7 +49,7 @@ function assets(): SpriteAssets {
       { name: 'golem-default', idle: frames('gidle', 4), walk: frames('gwalk', 6), work: frames('gwork', 9) },
     ],
     buildings: new Map([['arena', texture('arena')]]),
-    terrain: [],
+    terrain: { grass: [texture('dirt')], dirt: [texture('rock')] },
     missing: [],
   };
 }
