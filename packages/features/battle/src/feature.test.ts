@@ -1138,6 +1138,30 @@ describe('a disconnect, a window, and a sweep', () => {
     );
   });
 
+  it('emits the event for each battle it moves, carrying the reason it moved it', async () => {
+    // The sweep's RETURN value was covered and its EVENTS were not. Folding two
+    // loops into one can leave the report identical while dropping, reordering
+    // or duplicating the event — the report is a list of ids and says nothing
+    // about what was said about them.
+    const world = await harness();
+    const battle = await fight(world);
+    world.setNow('2026-09-26T10:05:00.000Z');
+    await endSession(world, 'session-552');
+    world.setNow('2026-09-26T10:20:01.000Z');
+
+    const seenBefore = world.events.length;
+    await world.act<SweepReport>('battle.sweep', {});
+    const emitted = world.events.slice(seenBefore);
+
+    const abandoned = emitted.filter((event) => event.type === 'battle.abandoned');
+    expect(abandoned).toHaveLength(1);
+    const payload = (abandoned[0] as { readonly payload?: Record<string, unknown> }).payload;
+    expect(payload?.['battleId']).toBe(battle.id);
+    // The REASON is what a reader of the log needs, and what a loop that
+    // forgot its payload would quietly leave absent.
+    expect(payload?.['reason']).toBe('resume-grace-expired');
+  });
+
   it('pauses only the battle the ended session was in', async () => {
     const world = await harness();
     const other = await world.act<BattleView>('battle.create', {
