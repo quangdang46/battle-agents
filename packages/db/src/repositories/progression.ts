@@ -25,8 +25,7 @@ import type { Database } from '../client.js';
  * honest.
  */
 
-/** The shape the feature's port expects, kept honest by a conformance check. */
-export /**
+/**
  * The builds a character can be, spelled out rather than imported.
  *
  * The duplication is the price of the layering rule: this package may not
@@ -34,20 +33,14 @@ export /**
  * that, where a cast to `string` would be a claim that the two can drift
  * freely. If a build is added to the feature and not here, the conformance
  * check in apps/web fails — which is the point of spelling it out.
+ *
+ * An array with the union derived from it, rather than a union and a separate
+ * `Set` of the same eight names. This file already spells the skills out that
+ * way a few lines below, and the two idioms sat either side of each other
+ * holding identical lists: adding a build meant editing the union AND the set,
+ * and editing only the union compiles cleanly and narrows nothing.
  */
-type BuildName =
-  | 'generalist'
-  | 'debugger'
-  | 'researcher'
-  | 'builder'
-  | 'tester'
-  | 'refactorer'
-  | 'security'
-  | 'infrastructure';
-
-const DEFAULT_BUILD: BuildName = 'generalist';
-
-const BUILD_NAMES: ReadonlySet<string> = new Set<BuildName>([
+const BUILD_NAMES = [
   'generalist',
   'debugger',
   'researcher',
@@ -56,7 +49,11 @@ const BUILD_NAMES: ReadonlySet<string> = new Set<BuildName>([
   'refactorer',
   'security',
   'infrastructure',
-]);
+] as const;
+
+type BuildName = (typeof BUILD_NAMES)[number];
+
+const DEFAULT_BUILD: BuildName = 'generalist';
 
 /**
  * The eight skills, spelled out for the same reason the builds are.
@@ -119,7 +116,7 @@ interface StoredSignal {
 }
 
 function isBuildName(value: string | undefined): value is BuildName {
-  return value !== undefined && BUILD_NAMES.has(value);
+  return value !== undefined && (BUILD_NAMES as readonly string[]).includes(value);
 }
 
 export interface ProgressionRow {

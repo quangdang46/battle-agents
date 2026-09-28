@@ -382,26 +382,23 @@ export class DrizzlePayoutIntentStore {
     readonly recordedAt: string;
     readonly reportedBy: string;
   }): Promise<void> {
+    // The insert and the conflict update carry the same six fields, so they are
+    // built once. Written out twice they were two independent branches that had
+    // to be edited together: the two calls to `toIntentState` were separate
+    // expressions, so a fourth state would be narrowed on the way in and left
+    // un-narrowed on the way through the conflict, which is a write that only
+    // takes the path a retry takes.
+    const row = {
+      amountCents: intent.amountCents,
+      state: toIntentState(intent.state),
+      mode: toIntentMode(intent.mode),
+      recordedAt: new Date(intent.recordedAt),
+      reportedBy: intent.reportedBy,
+    };
     await this.#database
       .insert(payoutIntents)
-      .values({
-        bountyId: intent.bountyId,
-        amountCents: intent.amountCents,
-        state: toIntentState(intent.state),
-        mode: toIntentMode(intent.mode),
-        recordedAt: new Date(intent.recordedAt),
-        reportedBy: intent.reportedBy,
-      })
-      .onConflictDoUpdate({
-        target: payoutIntents.bountyId,
-        set: {
-          amountCents: intent.amountCents,
-          state: toIntentState(intent.state),
-          mode: toIntentMode(intent.mode),
-          recordedAt: new Date(intent.recordedAt),
-          reportedBy: intent.reportedBy,
-        },
-      });
+      .values({ ...row, bountyId: intent.bountyId })
+      .onConflictDoUpdate({ target: payoutIntents.bountyId, set: row });
   }
 
   async currentFor(bountyId: string): Promise<StoredPayoutIntent | undefined> {

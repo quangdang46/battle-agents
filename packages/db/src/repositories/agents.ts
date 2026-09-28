@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
+import { toHarness } from '../harness.js';
 import { agents, installations } from '../schema/index.js';
 
 /**
@@ -16,14 +17,12 @@ import { agents, installations } from '../schema/index.js';
  * comparing the owner afterwards would be correct and slower, and would also
  * mean the only thing standing between two users' characters is a comparison
  * somebody can forget to write.
+ *
+ * The harness is narrowed by `toHarness` from `../harness.js`, which
+ * `social.ts` also reads. The list used to be written out here and there, and
+ * two copies of one list is how a character ends up named one harness on a
+ * profile and another on the leaderboard.
  */
-
-const HARNESSES = new Set(['claude', 'codex', 'opencode', 'cursor', 'pi', 'gemini', 'amp']);
-
-/** The stored harness, narrowed. Anything unrecognised becomes 'other'. */
-function toHarness(stored: string): string {
-  return HARNESSES.has(stored) ? stored : 'other';
-}
 
 export class DrizzleAgentRepository {
   readonly #database: Database;

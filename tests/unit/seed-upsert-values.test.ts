@@ -65,8 +65,32 @@ function upsertSetBlocks(source: string): string[] {
   return blocks;
 }
 
+/**
+ * The drizzle table identifiers the seed imports.
+ *
+ * A tautological `set` names a `Column`, and a `Column` is reached as
+ * `<table>.<column>` where `<table>` is one of these. Matching on the actual
+ * import list is what makes the rule mean something: the previous version
+ * matched any `lowercase.identifier`, which also matched a loop variable over
+ * fixtures — `set: { amountCents: funding.amountCents }` was reported as a
+ * tautology, and the check was one rename away from being right for the wrong
+ * reason. It is now narrower in form and wider in coverage: every table the
+ * seed can possibly be tautological about is checked, rather than whichever ones
+ * happen to start with a lowercase letter.
+ */
+function importedTables(source: string): ReadonlySet<string> {
+  const importBlock = source.match(/import \{([\s\S]*?)\} from '\.\.\/schema\/index\.js';/);
+  return new Set(
+    (importBlock?.[1] ?? '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter((name) => /^[a-z][A-Za-z]*$/.test(name)),
+  );
+}
+
 describe('the seed sets values, never columns', () => {
   const source = readFileSync(SEED_SOURCE, 'utf8');
+  const tables = importedTables(source);
 
   it('finds the upserts to check, so an empty match is not a pass', () => {
     // A scan that matches nothing is a scan that reports success forever. This
@@ -74,20 +98,37 @@ describe('the seed sets values, never columns', () => {
     expect(upsertSetBlocks(source).length).toBeGreaterThan(10);
   });
 
+  it('finds the tables a tautology could name, so an empty match is not a pass', () => {
+    // Same reason as above, one level down: a rule keyed off a list that came
+    // back empty would reject nothing and pass forever.
+    expect(tables.size).toBeGreaterThan(10);
+    expect([...tables]).toContain('bountyFunds');
+  });
+
   it('sets no field to a table.column reference', () => {
     const offenders = upsertSetBlocks(source)
       .flatMap((block) => block.split('\n'))
-      .filter((line) => /:\s*[a-z][A-Za-z]*\.[a-z][A-Za-z]*\s*[},]/.test(line))
+      .filter((line) =>
+        [...tables].some((table) =>
+          new RegExp(`:\\s*${table}\\.[a-z][A-Za-z]*\\s*[},]`).test(line),
+        ),
+      )
       .map((line) => line.trim());
 
     expect(offenders).toEqual([]);
   });
 
-  it('sets the funding amounts from the fixtures, which is the money column', () => {
-    // Named rather than implied, because this is the one that would have been
-    // noticed if anything had compared the seeded amounts to the fixtures.
-    const fundingBlock = source.match(/insert\(bountyFunds\)[\s\S]*?\n\s*\}\);/);
-    expect(fundingBlock).not.toBeNull();
-    expect(fundingBlock?.[0]).toContain('SEED_LEAD_FUNDING.amountCents');
+  it('sets each funding amount from its own fixture, which is the money column', () => {
+    // Both grants, not one. The multi-row form of this statement gave BOTH rows
+    // the lead's amount on a re-seed, and a check that only looked for the lead's
+    // name could not have seen it — that check would have passed on the broken
+    // version for exactly the reason it passed on the tautology.
+    const statement = source.match(
+      /for \(const funding of \[([^\]]*)\]\)[\s\S]*?insert\(bountyFunds\)[\s\S]*?set: \{([^}]*)\}/,
+    );
+    expect(statement).not.toBeNull();
+    expect(statement?.[1]).toContain('SEED_LEAD_FUNDING');
+    expect(statement?.[1]).toContain('SEED_MATCHING_FUNDING');
+    expect(statement?.[2]).toMatch(/amountCents:\s*funding\.amountCents/);
   });
 });

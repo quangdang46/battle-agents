@@ -1,6 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
+import { toHarness } from '../harness.js';
 import { achievements, agents, messages, projects } from '../schema/index.js';
 import { agentStats } from '../schema/features/progression.js';
 
@@ -31,12 +32,9 @@ import { agentStats } from '../schema/features/progression.js';
 /** Win rate crosses this boundary in basis points, as it does everywhere else. */
 const WIN_RATE_SCALE = 10_000;
 
-/** The stored harness, narrowed. Anything unrecognised becomes 'other'. */
-const HARNESSES = new Set(['claude', 'codex', 'opencode', 'cursor', 'pi', 'gemini', 'amp']);
-
-function toHarness(stored: string): string {
-  return HARNESSES.has(stored) ? stored : 'other';
-}
+// The harness is narrowed by the shared `toHarness`, which `agents.ts` also
+// reads. This file used to carry its own copy of the list beside its own copy
+// of the function; the two agreeing was never checked by anything.
 
 export interface SocialMessageRow {
   readonly id: string;

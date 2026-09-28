@@ -29,7 +29,7 @@ import { agents, users } from '../platform.js';
  * why — a stored total drifts the moment a second funder arrives, and then the
  * leaderboard is a number nobody can reconstruct.
  *
- * So: `guilds` has no balance column, and `checkNoCachedGuildTotals` fails the
+ * So: `guilds` has no balance column, and `checkNoCachedTotals` fails the
  * build if one appears. The balance is `SUM(contributions) - SUM(commitments)`
  * over `guild_treasury_entries`, exposed as a view for the same reason the
  * bounty's is. A guild's standing is `COUNT` over `guild_work_log`, so the
