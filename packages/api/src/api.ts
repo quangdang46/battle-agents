@@ -118,12 +118,57 @@ export interface ApplicationApi {
  * able to outlive one, and the removal test is right to fail. The agent
  * feature satisfies this shape structurally.
  */
+/**
+ * Why a credential was refused.
+ *
+ * A CLOSED union of all SEVEN, and it was `string` before. Two things were wrong
+ * with that, and the second was mine:
+ *
+ * 1. `string` is a field no transport can act on. A caller holding a 401 has to
+ *    decide something — sign in again, the token is stale, or the call needed a
+ *    scope it does not have — and three situations should not read as each other.
+ * 2. Narrowing it to the three the AGENT FEATURE produces looked like a fix and
+ *    was a regression. The other four — `missing`, `malformed`, `unknown`,
+ *    `token-in-url` — are raised by the HTTP layer itself
+ *    (`packages/db/src/auth.ts`), and a narrower union stopped matching them, so
+ *    every "refuses … without a credential" route answered **500 instead of
+ *    401**. Eleven tests went red on a change whose whole point was to catch
+ *    more.
+ *
+ * The seven are spelled out rather than imported, for the reason in the note
+ * above: `packages/db` re-exports its auth module from its barrel, and the api
+ * taking that path would be an import across a layer for the sake of a type
+ * alias. Three come from the credential check, four from the transport.
+ */
+export type AuthenticationFailureReason =
+  | 'missing'
+  | 'malformed'
+  | 'unknown'
+  | 'token-in-url'
+  | 'revoked'
+  | 'expired'
+  | 'scope-missing';
+
 export interface AuthenticationFailure extends Error {
-  readonly reason: string;
+  readonly reason: AuthenticationFailureReason;
+  /** Which scope was missing, when the reason is `scope-missing`. */
+  readonly required?: string | undefined;
 }
 
+export const AUTHENTICATION_REASONS: ReadonlySet<string> = new Set<AuthenticationFailureReason>([
+  'missing',
+  'malformed',
+  'unknown',
+  'token-in-url',
+  'revoked',
+  'expired',
+  'scope-missing',
+]);
+
 export function isAuthenticationFailure(error: unknown): error is AuthenticationFailure {
-  return error instanceof Error && typeof (error as { reason?: unknown }).reason === 'string';
+  if (!(error instanceof Error)) return false;
+  const candidate = error as { reason?: unknown };
+  return typeof candidate.reason === 'string' && AUTHENTICATION_REASONS.has(candidate.reason);
 }
 
 /** Thrown when an action id names nothing in the registry. */

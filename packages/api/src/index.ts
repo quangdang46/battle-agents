@@ -1,6 +1,7 @@
 export {
   createApplicationApi,
   isAuthenticationFailure,
+  AUTHENTICATION_REASONS,
   PRIMITIVES,
   UnknownActionError,
   UnknownDomainError,
@@ -8,6 +9,7 @@ export {
 export type {
   ApplicationApi,
   AuthenticationFailure,
+  AuthenticationFailureReason,
   Discovery,
   DomainDetail,
   InspectQuery,

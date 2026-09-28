@@ -1,4 +1,9 @@
-import { isAuthenticationFailure } from '@battle-agents/api';
+import {
+  isAuthenticationFailure,
+  AUTHENTICATION_REASONS,
+  type AuthenticationFailure,
+  type AuthenticationFailureReason,
+} from '@battle-agents/api';
 import { authenticate } from '@battle-agents/db';
 import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
@@ -224,22 +229,67 @@ export function toAuthenticationFailure(error: unknown): never {
     throw withReason(
       new Error(error instanceof Error ? error.message : String(error), { cause: error }),
       nested,
+      readRequiredScope(error),
     );
   }
   throw error;
 }
 
-function readNestedReason(error: unknown): string | undefined {
+
+/**
+ * The reason, as a CLOSED value, taken from either shape.
+ *
+ * Read as `string` and returned as `string`, this function was how a valid
+ * reason became an unusable one: the api contract has three and a transport can
+ * act on each differently, but anything typed `string` at either end is a
+ * string a caller has to guess the meaning of. An unrecognised reason is
+ * `expired` rather than passed through — a credential this server cannot
+ * account for is, from the caller side, one that will not be accepted again.
+ */
+function readNestedReason(error: unknown): AuthenticationFailureReason | undefined {
   if (typeof error !== 'object' || error === null || !('failure' in error)) return undefined;
   const failure = (error as { failure: unknown }).failure;
   if (typeof failure !== 'object' || failure === null || !('reason' in failure)) return undefined;
-  const reason = (failure as { reason: unknown }).reason;
-  return typeof reason === 'string' ? reason : undefined;
+  return toReason((failure as { reason: unknown }).reason);
 }
 
-function withReason(error: Error, reason: string): Error & { reason: string } {
-  const annotated = error as Error & { reason: string };
-  annotated.reason = reason;
+function toReason(value: unknown): AuthenticationFailureReason | undefined {
+  return typeof value === 'string' && AUTHENTICATION_REASONS.has(value)
+    ? (value as AuthenticationFailureReason)
+    : undefined;
+}
+
+/**
+ * The scope a refusal named, when one did. Read here because a nested failure
+ * carries it and the top-level shape does not.
+ */
+function readRequiredScope(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('failure' in error)) return undefined;
+  const failure = (error as { failure: unknown }).failure;
+  if (typeof failure !== 'object' || failure === null || !('required' in failure)) return undefined;
+  const required = (failure as { required: unknown }).required;
+  return typeof required === 'string' ? required : undefined;
+}
+
+/**
+ * Annotates an error as an authentication failure, typed rather than cast.
+ *
+ * The first version took a `reason: string` and assigned it onto an `Error`,
+ * which typechecks because the field was declared and lies about everything it
+ * does not check. A caller receiving `reason: 'typo-in-a-harness'` would be
+ * told a credential was revoked, or expired, or missing a scope, at whichever of
+ * them the string happened to be compared against.
+ */
+function withReason(
+  error: Error,
+  reason: AuthenticationFailureReason,
+  required?: string,
+): AuthenticationFailure {
+  const annotated = error as AuthenticationFailure;
+  Object.defineProperty(annotated, 'reason', { value: reason, enumerable: true });
+  if (required !== undefined) {
+    Object.defineProperty(annotated, 'required', { value: required, enumerable: true });
+  }
   return annotated;
 }
 
