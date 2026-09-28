@@ -22,9 +22,10 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 
 import { ZONE_PLACEMENT, placementFor } from '../zones.js';
 import { advanceMotion, motionAt, type CharacterMotion } from './motion.js';
-import { stableHash } from '../sprites/sprite-factory.js';
+import { stableHash, DECORATION_KINDS,} from '../sprites/sprite-factory.js';
 import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
+import { scatterDecorations } from './decorations.js';
 import { zoneSlot } from './zone-slot.js';
 import { wanderOffset } from './idle-wander.js';
 import { pickLine } from './dialogue.js';
@@ -245,6 +246,8 @@ export class PixiWorldView implements WorldViewLike {
    * avoid.
    */
   readonly terrainLayer = new Container();
+  /** Trees, rocks, bushes and flowers, between the ground and the sky. */
+  readonly decoLayer = new Container();
 
   readonly #units = new Map<string, UnitNode>();
   /** Elapsed world time in ms, driving both the animation cycle and the sky. */
@@ -258,8 +261,9 @@ export class PixiWorldView implements WorldViewLike {
     this.#cache = options.cache ?? spriteCache();
     this.#sky = new Graphics();
     this.skyLayer.addChild(this.#sky);
-    this.worldLayer.addChild(this.terrainLayer, this.skyLayer, this.fxLayer, this.zoneLayer, this.unitLayer);
+    this.worldLayer.addChild(this.terrainLayer, this.decoLayer, this.skyLayer, this.fxLayer, this.zoneLayer, this.unitLayer);
     this.#drawTerrain();
+    this.decoLayer.addChild(...this.#buildDecorations());
     this.fxLayer.addChild(this.#buildActivityFx());
     this.#drawZones();
     this.#paintSky();
@@ -751,6 +755,41 @@ export class PixiWorldView implements WorldViewLike {
    * to; drawing the table unfiltered put the Arena and the Guild Hall on top of
    * the Coding City, so `/arena` and `/city` rendered the same picture.
    */
+  /**
+   * A sprite per scattered decoration, in this scene.
+   *
+   * The scatter itself is a pure function in `decorations.ts`; this is the part
+   * that needs a projection and a cache. One sprite per placement, drawn once --
+   * the same restraint as the FX layer, and for the same reason: `frame-loop`
+   * has a budget and 1024 cells of scatter is a lot of children to add to it.
+   */
+  #buildDecorations(): Sprite[] {
+    const placements = scatterDecorations({
+      w: this.#scene.w,
+      h: this.#scene.h,
+      kindAt: terrainSampler(this.#scene.seed),
+      clearOf: (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[])
+        .map((zone) => ZONE_PLACEMENT[zone])
+        .filter((placement) => placement.scene === this.#scene.id),
+    });
+
+    return placements.flatMap((placement) => {
+      const texture = this.#cache.get(
+        spriteKey('deco', DECORATION_KINDS.indexOf(placement.kind)),
+      );
+      // A sheet that did not load draws nothing, which is more obviously right
+      // than a coloured square pretending to be a tree.
+      if (texture === undefined) return [];
+      const at = this.#projection.toScreen(placement.gx, placement.gy);
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 1);
+      sprite.scale.set(PLACEHOLDER_SCALE);
+      sprite.position.set(at.x, at.y);
+      sprite.zIndex = this.#projection.depth(placement.gx, placement.gy);
+      return [sprite];
+    });
+  }
+
   /**
    * A puff of particles over every zone in this scene that currently holds
    * agents.

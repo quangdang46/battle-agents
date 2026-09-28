@@ -78,7 +78,10 @@ export const TILE_WORLD_PX = PLACEHOLDER_TILE_PX * PLACEHOLDER_SCALE;
  */
 export const REAL_ASSET_SCALE = TILE_WORLD_PX / TILE_SOURCE_PX;
 
-export type SpriteKind = 'agent' | 'building' | 'zone-marker' | 'terrain-tile' | 'subagent' | 'particle';
+/** Kept in step with the loader's own list; the two must not drift. */
+export const DECORATION_KINDS = ['tree', 'bush', 'rock', 'flower'] as const;
+
+export type SpriteKind = 'agent' | 'building' | 'zone-marker' | 'terrain-tile' | 'subagent' | 'particle' | 'deco';
 
 /** A cache key. Two equal keys must return the same object. */
 export interface SpriteKey {
@@ -295,6 +298,13 @@ export class SpriteCache {
           ?.idle[0];
       case 'particle':
         return assets.particle;
+      case 'deco': {
+        // The variant IS the kind: there are four decoration sheets and no
+        // palette, so a colour index here would address a sheet that does not
+        // exist.
+        const kind = DECORATION_KINDS[Math.abs(Math.trunc(key.variant))] ?? 'tree';
+        return assets.decorations?.[kind]?.[0];
+      }
       case 'zone-marker':
         return key.zone === undefined
           ? undefined

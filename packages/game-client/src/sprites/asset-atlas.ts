@@ -79,6 +79,17 @@ export interface SpriteAssets {
   /**
    * The particle sheet, for the FX layer.
    *
+   * Optional, and so are the decorations below. Both were made REQUIRED first,
+   * which is defensible until the second one arrives: every caller that builds a
+   * SpriteAssets -- including two tests that are a seam, not a caller -- then has
+   * to write `particle: undefined` for a pack that simply has no particles, and
+   * a field that must be spelled out to mean "absent" is a field whose absence
+   * nobody notices. A theme without a particle sheet is a real state.
+   *
+   * `| undefined` as well as `?`, because this repository compiles with
+   * `exactOptionalPropertyTypes`: a bare `?` means "may be OMITTED", which the
+   * loader above cannot honour because it always assigns the result.
+   *
    * `kenney-particle-pack` is 194 vendored CC0 files that nothing loaded. It was
    * named at `apps/web/src/ui/game-chrome.tsx:26` in a JSDoc line asserting it
    * was "loaded for the event layer that draws them" -- and no such layer
@@ -86,7 +97,12 @@ export interface SpriteAssets {
    * a claim about code that was never written. `check-game-first.sh` rule 3 now
    * strips comments before asking, and it is why this line is code now.
    */
-  readonly particle: Texture | undefined;
+  readonly particle?: Texture | undefined;
+  /**
+   * Decorations, by kind. Four TexturePacker sheets the pack has shipped since
+   * day one and nothing loaded, so the city had no trees in it.
+   */
+  readonly decorations?: Readonly<Record<string, readonly Texture[]>> | undefined;
   /** Ids that were named but could not be loaded. */
   readonly missing: readonly string[];
 }
@@ -247,6 +263,34 @@ async function loadTroops(baseUrl: string, missing: string[]): Promise<HeroSheet
   return sheets.filter((sheet) => sheet !== undefined);
 }
 
+/**
+ * The decoration sheets, by kind.
+ *
+ * The names are listed rather than read from the pack's `index.json` because
+ * `loadOne` needs a path and nothing else here does: an id the pack does not
+ * have simply lands in `missing`, named, which is the behaviour that is wanted.
+ */
+const DECORATION_KINDS = ['bush', 'flower', 'rock', 'tree'] as const;
+
+async function loadDecorations(
+  root: string,
+  missing: string[],
+): Promise<Readonly<Record<string, readonly Texture[]>>> {
+  const entries = await Promise.all(
+    DECORATION_KINDS.map(async (id) => {
+      const frames = await loadOne(`${root}/decorations/${id}`);
+      if (frames === undefined || frames.length === 0) {
+        missing.push(`decorations/${id}`);
+        return undefined;
+      }
+      return [id, frames] as const;
+    }),
+  );
+  return Object.fromEntries(
+    entries.filter((entry): entry is NonNullable<typeof entry> => entry !== undefined),
+  );
+}
+
 /** Loads one PNG as a single texture — the path for the manifest-less buildings. */
 async function loadTexture(path: string): Promise<Texture | undefined> {
   try {
@@ -345,6 +389,12 @@ async function loadEverything(
     missing.push('kenney-particle-pack/PNG (Transparent)/circle_05.png');
   }
 
+  // The four decoration sheets. They have TexturePacker manifests like the
+  // buildings do, so they go through `loadOne` rather than a second loader --
+  // and the index.json is read rather than the four names hardcoded, so a pack
+  // that adds a fifth decoration does not need a change here to show it.
+  const decorations = await loadDecorations(root, missing);
+
   // Widened, not replaced. The age-of-agents heroes carry three NAMED
   // animations and the tool-aware `work` state reads them, so the tiny-swords
   // troops join the cast rather than take it over -- and they are appended
@@ -373,7 +423,7 @@ async function loadEverything(
     }),
   );
 
-  return { theme, heroes, buildings, terrain, particle, missing };
+  return { theme, heroes, buildings, terrain, particle, decorations, missing };
 }
 
 /**
