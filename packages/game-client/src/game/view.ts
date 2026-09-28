@@ -211,6 +211,15 @@ export class PixiWorldView implements WorldViewLike {
   /** Everything the host draws into. */
   readonly worldLayer = new Container();
   /** Zone markers. Static: added once, never touched by a delta. */
+  /**
+   * The activity layer, between the sky and the zones.
+   *
+   * A building with agents working in it used to look exactly like a building
+   * with nobody in it, which is the one signal a coding city cannot afford to
+   * lose: the whole point of the world is to watch agents doing real work, and
+   * the art for saying so was vendored and unused.
+   */
+  readonly fxLayer = new Container();
   readonly zoneLayer = new Container();
   /** Agent sprites, added and removed as agents come and go. */
   readonly unitLayer = new Container();
@@ -249,8 +258,9 @@ export class PixiWorldView implements WorldViewLike {
     this.#cache = options.cache ?? spriteCache();
     this.#sky = new Graphics();
     this.skyLayer.addChild(this.#sky);
-    this.worldLayer.addChild(this.terrainLayer, this.skyLayer, this.zoneLayer, this.unitLayer);
+    this.worldLayer.addChild(this.terrainLayer, this.skyLayer, this.fxLayer, this.zoneLayer, this.unitLayer);
     this.#drawTerrain();
+    this.fxLayer.addChild(this.#buildActivityFx());
     this.#drawZones();
     this.#paintSky();
   }
@@ -741,6 +751,46 @@ export class PixiWorldView implements WorldViewLike {
    * to; drawing the table unfiltered put the Arena and the Guild Hall on top of
    * the Coding City, so `/arena` and `/city` rendered the same picture.
    */
+  /**
+   * A puff of particles over every zone in this scene that currently holds
+   * agents.
+   *
+   * Deliberately not a per-frame emitter. This is drawn once per rebuild, so it
+   * costs one container per zone and no update loop at all -- `delta-cost.test.ts`
+   * already pins a frame budget for the 2000 events/s target in plan 7.2, and
+   * the first thing in the client that updated particles every frame is exactly
+   * how that budget gets spent by accident.
+   */
+  #buildActivityFx(): Container {
+    const group = new Container();
+    const texture = this.#cache.get(spriteKey('particle', 0));
+    if (texture === undefined) return group;
+
+    const busy = new Set<string>();
+    for (const agent of this.#store.allAgents()) busy.add(agent.zone);
+
+    for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
+      const placement = ZONE_PLACEMENT[zone];
+      if (placement.scene !== this.#scene.id) continue;
+      if (!busy.has(zone)) continue;
+      const at = this.#projection.toScreen(placement.gx, placement.gy);
+      // Three puffs, fanned above the roofline. A fixed count, not a random
+      // one: Math.random here would give every rebuild a different city, and
+      // `terrain-map.ts` already set the precedent that a world which reshuffles
+      // itself is noise rather than a place.
+      for (const [index, offset] of [-14, 0, 14].entries()) {
+        const puff = new Sprite(texture);
+        puff.anchor.set(0.5);
+        puff.alpha = 0.5 - index * 0.12;
+        puff.scale.set(0.4);
+        puff.position.set(at.x + offset, at.y - 26 - index * 7);
+        puff.zIndex = this.#projection.depth(placement.gx, placement.gy) + 1;
+        group.addChild(puff);
+      }
+    }
+    return group;
+  }
+
   #drawZones(): void {
     for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
       const placement = ZONE_PLACEMENT[zone];

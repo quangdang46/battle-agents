@@ -44,6 +44,8 @@ function frames(prefix: string, count: number): never[] {
 function assets(): SpriteAssets {
   return {
     theme: 'fantasy',
+    // A pack with no particle texture is a real state, not a missing field.
+    particle: undefined,
     heroes: [
       { name: 'fable-default', idle: frames('idle', 4), walk: frames('walk', 6), work: frames('work', 9) },
       { name: 'golem-default', idle: frames('gidle', 4), walk: frames('gwalk', 6), work: frames('gwork', 9) },

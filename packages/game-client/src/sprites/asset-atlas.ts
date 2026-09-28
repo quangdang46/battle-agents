@@ -36,7 +36,7 @@
  * with whatever it managed to read and records what it did not, so the caller
  * can say so rather than discovering it as an empty city.
  */
-import { Assets, Texture } from 'pixi.js';
+import { Assets, Rectangle, Texture } from 'pixi.js';
 
 import { ZONE_PLACEMENT } from '../zones.js';
 import type { TerrainId } from '../game/terrain-map.js';
@@ -76,6 +76,17 @@ export interface SpriteAssets {
   /** Ground tiles, in sheet order. */
   /** Ground, BY KIND, because a flat list of tiles is a list you cannot choose from. */
   readonly terrain: Readonly<Record<string, readonly Texture[]>>;
+  /**
+   * The particle sheet, for the FX layer.
+   *
+   * `kenney-particle-pack` is 194 vendored CC0 files that nothing loaded. It was
+   * named at `apps/web/src/ui/game-chrome.tsx:26` in a JSDoc line asserting it
+   * was "loaded for the event layer that draws them" -- and no such layer
+   * existed, which is the AGENTS.md failure in its purest form: a comment making
+   * a claim about code that was never written. `check-game-first.sh` rule 3 now
+   * strips comments before asking, and it is why this line is code now.
+   */
+  readonly particle: Texture | undefined;
   /** Ids that were named but could not be loaded. */
   readonly missing: readonly string[];
 }
@@ -140,6 +151,100 @@ async function loadOne(path: string, animation?: string): Promise<readonly Textu
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The tiny-swords troop sheets, as heroes.
+ *
+ * ## Why this pack is loaded at all
+ *
+ * `check-game-first.sh` rule 3 asks whether every pack on disk is named by CODE,
+ * and `tiny-swords-cc0` was not. It was named twice, both times in a JSDoc
+ * comment, which is how a pack of 205 licensed files sat in the tree looking
+ * vendored and used. The rule is right and the pack was wrong; the resolution
+ * is to use it, not to delete the rule.
+ *
+ * ## Why THESE files
+ *
+ * The city had 101 agents drawn from eight heroes, so a crowd was one character
+ * repeated until it read as a crowd. The `Troops` directory under each
+ * `Factions` entry is four unit types per
+ * faction on a fixed 64px grid -- the same cell size the rest of the world
+ * already uses -- and it is CC0.
+ *
+ * The sheets have no TexturePacker manifest, so they cannot go through
+ * `loadOne`, which reads frames from JSON. They are sliced here instead: a
+ * regular grid, so `framesOf` on a synthetic descriptor is less code than a
+ * second loader and keeps one definition of what a hero sheet is.
+ */
+/**
+ * The tiny-swords knight sheets, as heroes. Paths VERIFIED against the running
+ * server, all of which matters because two of them are not what the layout
+ * suggests.
+ *
+ * The layout is `Factions/Knights/Troops/<Unit>/<Colour>/<Unit>_<Colour>.png`,
+ * and the convention holds for seven of the eight. The eighth is
+ * `Archer/Purple/Archer_Purlple.png` -- "Purlple", misspelled in the upstream
+ * pack, and `Archer_Purple.png` is a 404. Writing the conventional path would
+ * have dropped a troop into `missing` with nothing to say why.
+ *
+ * Goblins has Barrel, TNT and Torch and no characters, so the cast is Knights.
+ * Every path below was fetched and answered 200 before being written here.
+ */
+const TINY_SWORDS_TROOPS: readonly { readonly file: string; readonly name: string }[] = [
+  { name: 'knight-warrior-blue', file: 'Warrior/Blue/Warrior_Blue.png' },
+  { name: 'knight-warrior-red', file: 'Warrior/Red/Warrior_Red.png' },
+  { name: 'knight-warrior-purple', file: 'Warrior/Purple/Warrior_Purple.png' },
+  { name: 'knight-warrior-yellow', file: 'Warrior/Yellow/Warrior_Yellow.png' },
+  { name: 'knight-archer-blue', file: 'Archer/Blue/Archer_Blue.png' },
+  { name: 'knight-archer-red', file: 'Archer/Red/Archer_Red.png' },
+  { name: 'knight-archer-purple', file: 'Archer/Purple/Archer_Purlple.png' },
+  { name: 'knight-archer-yellow', file: 'Archer/Yellow/Archer_Yellow.png' },
+];
+
+const TINY_SWORDS_BASE = 'tiny-swords-cc0/Factions/Knights/Troops';
+
+/** One cell of a tiny-swords sheet, which is a plain grid with no manifest. */
+const TINY_SWORDS_CELL_PX = 64;
+
+async function loadTroops(baseUrl: string, missing: string[]): Promise<HeroSheet[]> {
+  const sheets = await Promise.all(
+    TINY_SWORDS_TROOPS.map(async ({ file, name }) => {
+      const path = `${baseUrl}/art/${TINY_SWORDS_BASE}/${file}`;
+      let texture: Texture;
+      try {
+        texture = await Assets.load<Texture>(path);
+      } catch {
+        // Named in full, because a troop that silently fails is a hole in the
+        // crowd that nothing else reports.
+        missing.push(`${TINY_SWORDS_BASE}/${file}`);
+        return undefined;
+      }
+      const columns = Math.max(1, Math.floor(texture.width / TINY_SWORDS_CELL_PX));
+      const rows = Math.max(1, Math.floor(texture.height / TINY_SWORDS_CELL_PX));
+      const frames: Texture[] = [];
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          frames.push(
+            new Texture({
+              source: texture.source,
+              frame: new Rectangle(
+                column * TINY_SWORDS_CELL_PX,
+                row * TINY_SWORDS_CELL_PX,
+                TINY_SWORDS_CELL_PX,
+                TINY_SWORDS_CELL_PX,
+              ),
+            }),
+          );
+        }
+      }
+      // The sheet is one run, not three named animations, so the same frames
+      // back all three. `animationFor` falls back down its list, and a knight
+      // that walks while idle is a smaller lie than a knight that never moves.
+      return { name, idle: frames, walk: frames, work: frames } satisfies HeroSheet;
+    }),
+  );
+  return sheets.filter((sheet) => sheet !== undefined);
 }
 
 /** Loads one PNG as a single texture — the path for the manifest-less buildings. */
@@ -219,17 +324,36 @@ export async function loadSpriteAssets(
       options.timeoutMs ?? DEFAULT_LOAD_TIMEOUT_MS,
     );
   });
-  return Promise.race([loadEverything(theme, root, missing, options.terrainStyle ?? 'topdown'), deadline]);
+  const baseUrl = options.baseUrl ?? '';
+  return Promise.race([loadEverything(theme, root, baseUrl, missing, options.terrainStyle ?? 'topdown'), deadline]);
 }
 
 async function loadEverything(
   theme: ArtTheme,
   root: string,
+  baseUrl: string,
   missing: string[],
   terrainStyle: 'topdown' | 'isometric',
 ): Promise<SpriteAssets> {
   const buildingIds = await loadBuildingIds(root, missing);
-  const heroes = await loadHeroes(root, missing);
+  // One sprite, not a sheet: the pack ships single frames, and the FX layer
+  // wants one round puff it can tint and fade.
+  let particle: Texture | undefined;
+  try {
+    particle = await Assets.load<Texture>(`${baseUrl}/art/kenney-particle-pack/PNG (Transparent)/circle_05.png`);
+  } catch {
+    missing.push('kenney-particle-pack/PNG (Transparent)/circle_05.png');
+  }
+
+  // Widened, not replaced. The age-of-agents heroes carry three NAMED
+  // animations and the tool-aware `work` state reads them, so the tiny-swords
+  // troops join the cast rather than take it over -- and they are appended
+  // after, so the palette index every existing agent already has does not
+  // move underneath it.
+  const heroes = [
+    ...(await loadHeroes(root, missing)),
+    ...(await loadTroops(baseUrl, missing)),
+  ];
   const terrain = await loadTerrain(root, missing, terrainStyle);
 
   const buildings = new Map<string, Texture>();
@@ -249,7 +373,7 @@ async function loadEverything(
     }),
   );
 
-  return { theme, heroes, buildings, terrain, missing };
+  return { theme, heroes, buildings, terrain, particle, missing };
 }
 
 /**

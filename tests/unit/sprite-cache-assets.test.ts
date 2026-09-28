@@ -42,6 +42,8 @@ function texture(name: string): never {
 function assetsWith(overrides: Partial<SpriteAssets> = {}): SpriteAssets {
   return {
     theme: 'fantasy',
+    // A pack with no particle texture is a real state, not a missing field.
+    particle: undefined,
     heroes: [
       { name: 'fable-default', idle: [texture('fable-idle-0')], walk: [texture('fable-walk-0')], work: [texture('fable-work-0')] },
       { name: 'golem-default', idle: [texture('golem-idle-0')], walk: [texture('golem-walk-0')], work: [texture('golem-work-0')] },

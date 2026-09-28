@@ -50,6 +50,15 @@ selftest() {
   # silently stop matching.
   scratch="$(mktemp -d)"
   cp -R apps "$scratch/apps" 2>/dev/null
+  # rule 3 reads packages/game-client/src as well as apps/web/src, so a
+  # scratch copy of apps alone makes every pack named only in the game client
+  # look orphaned -- it reported `age-of-agents` that way, a failure in the
+  # fixture rather than in the rule. Only the sources rule 3 reads are copied:
+  # copying all of `packages` drags 25MB of build output into every self-test
+  # case, and the copy is slow enough that a case times out and reports the
+  # rule as broken.
+  mkdir -p "$scratch/packages/game-client"
+  cp -R packages/game-client/src "$scratch/packages/game-client/src" 2>/dev/null
   mkdir -p "$scratch/apps/web/public/art/never-referenced-pack"
   if (cd "$scratch" && run_checks) >/dev/null 2>&1; then
     report "self-test: an unreferenced art pack did not fail the checker"
@@ -127,11 +136,39 @@ run_checks() {
 
   # A pack present on disk but named nowhere in the app is the same defect with
   # a different symptom, so it is checked rather than trusted.
+  #
+  # AND IT HAS TO MEAN CODE. This was `grep -rq "$name"` over the sources, which
+  # cannot tell a comment from a call -- and a comment is not a load. Two packs
+  # passed on that basis alone:
+  #
+  #   tiny-swords-cc0      named only at sprite-factory.ts:10 and :60, both JSDoc
+  #   kenney-particle-pack named only at game-chrome.tsx:26, a JSDoc line that
+  #                        asserts it is "loaded for the event layer that draws
+  #                        them" -- and no such layer exists
+  #
+  # The rule's own comment here used to say "A comment mentioning a pack does not
+  # load it", directly above a grep that could not enforce it. Strip block and
+  # line comments first, exactly as tests/unit/scaffold.test.ts does, and then
+  # ask whether any CODE names the pack.
+  #
+  # Expect this to go red on first run. That is the point: the two packs above
+  # are the truth, and the fix is to wire them or record the decision -- never to
+  # loosen the rule back into one that cannot fail.
+  strip_comments() {
+    sed -e 's://[^"]*$::' "$1" | perl -0pe 's{/\*.*?\*/}{}gs'
+  }
   for pack in apps/web/public/art/*/; do
     [ -d "$pack" ] || continue
     name="$(basename "$pack")"
-    if ! grep -rq "$name" apps/web/src packages/game-client/src 2>/dev/null; then
-      report "rule-3: art pack '$name' is on disk and named by no code"
+    named_in_code=1
+    while IFS= read -r file; do
+      if strip_comments "$file" | grep -q "$name"; then
+        named_in_code=0
+        break
+      fi
+    done < <(find apps/web/src packages/game-client/src -type f \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null)
+    if [ "$named_in_code" -ne 0 ]; then
+      report "rule-3: art pack '$name' is on disk and named by no CODE (a comment is not a load)"
       out=1
     fi
   done

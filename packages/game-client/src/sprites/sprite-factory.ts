@@ -78,7 +78,7 @@ export const TILE_WORLD_PX = PLACEHOLDER_TILE_PX * PLACEHOLDER_SCALE;
  */
 export const REAL_ASSET_SCALE = TILE_WORLD_PX / TILE_SOURCE_PX;
 
-export type SpriteKind = 'agent' | 'building' | 'zone-marker' | 'terrain-tile' | 'subagent';
+export type SpriteKind = 'agent' | 'building' | 'zone-marker' | 'terrain-tile' | 'subagent' | 'particle';
 
 /** A cache key. Two equal keys must return the same object. */
 export interface SpriteKey {
@@ -293,6 +293,8 @@ export class SpriteCache {
         if (assets.heroes.length === 0) return undefined;
         return assets.heroes[((key.variant % assets.heroes.length) + assets.heroes.length) % assets.heroes.length]
           ?.idle[0];
+      case 'particle':
+        return assets.particle;
       case 'zone-marker':
         return key.zone === undefined
           ? undefined
