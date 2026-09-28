@@ -13,7 +13,29 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 import { browserEventSource } from './browser-event-source.js';
-import { idlePointer, reducePointer } from '@battle-agents/game-client';
+import {
+  idlePointer,
+  isometric,
+  reducePointer,
+  TILE_WORLD_PX,
+} from '@battle-agents/game-client';
+
+/**
+ * The projection the city is drawn in, and therefore the ground it asks for.
+ *
+ * The buildings in this pack are isometric art, so a flat square of ground
+ * under them is a floor from a different game. The view defaulted to
+ * `topdown`, and the loader defaulted to the 2D `tilemap/` directory — which
+ * does not contain a grass tile at all, so every grass cell drew nothing and
+ * the dirt and rock cells that did resolve were flat squares lying under
+ * isometric walls. The city had no floor and the art line reported "1 missing"
+ * without saying which.
+ *
+ * Isometric tiles are diamonds of twice the width and half the height, so the
+ * projection takes both and the view still advances one cell by one cell.
+ */
+const ISO_TILE_W = TILE_WORLD_PX;
+const ISO_TILE_H = TILE_WORLD_PX / 2;
 
 /**
  * One PixiJS world, with the scene as a prop rather than a page.
@@ -128,13 +150,22 @@ export function WorldCanvas({
     let cancelled = false;
     void (async () => {
       try {
-        const loaded = await loadSpriteAssets();
+        // The default deadline is 5s, which is a safety net against a promise
+        // that never settles, not a budget for compiling a page. Against a cold
+        // `next dev` the pack loses that race and the world renders as
+        // procedural placeholders -- a diamond of coloured squares that looks
+        // like a deliberate art style and is not one.
+        const loaded = await loadSpriteAssets({ terrainStyle: 'isometric', timeoutMs: 30_000 });
+        // `terrain` is a map keyed by terrain id, not a list, so `.length` on it
+        // is `undefined` and the status line read "undefined terrain" while the
+        // ground was in fact all there.
+        const terrainCount = Object.keys(loaded.terrain).length;
         if (cancelled) return;
         spriteCache().attach(loaded);
         setAssets(loaded);
         const note =
           loaded.missing.length === 0
-            ? `art: ${loaded.heroes.length} heroes, ${loaded.buildings.size} buildings, ${loaded.terrain.length} terrain`
+            ? `art: ${loaded.heroes.length} heroes, ${loaded.buildings.size} buildings, ${terrainCount} terrain`
             : `art: ${loaded.heroes.length} heroes, ${loaded.buildings.size} buildings, ${loaded.missing.length} missing`;
         setArtNote(note);
         onArt?.(note);
@@ -194,9 +225,14 @@ export function WorldCanvas({
         // one it was handed. A view over a different store is the silent
         // empty-world failure: the client writes deltas into a store the view
         // never reads.
-        const view = new PixiWorldView({ store, scene });
+        const view = new PixiWorldView({ store, scene, projection: isometric(ISO_TILE_W, ISO_TILE_H) });
         app.stage.addChild(view.root);
 
+        // The camera. `fit` was already called here; what it measured was a
+        // square of `scene.w * TILE_WORLD_PX`, which is right for `topdown` and
+        // half the width of an isometric map, so the city was fitted into a box
+        // half its size and sat in the corner. It measures the projected bounds
+        // now.
         const observer = new ResizeObserver(() => {
           view.fit(container.clientWidth, container.clientHeight);
         });
@@ -348,7 +384,7 @@ export function WorldCanvas({
     if (!ready || container === null || current === undefined) return;
     const previous = current.app.stage.children[0];
     if (previous !== undefined) current.app.stage.removeChild(previous);
-    const view = new PixiWorldView({ store: current.store, scene });
+    const view = new PixiWorldView({ store: current.store, scene, projection: isometric(ISO_TILE_W, ISO_TILE_H) });
     current.app.stage.addChild(view.root);
     view.fit(container.clientWidth, container.clientHeight);
     // A rebuild attaches a NEW view, and the client holds the old one. Pointing

@@ -320,12 +320,36 @@ export class PixiWorldView implements WorldViewLike {
     // guild hall 24x20 while the city is 32, and fitting all three to a 32-wide
     // world left the smaller scenes showing a third of a map and a band of
     // nothing.
-    const worldPx = this.#scene.w * TILE_WORLD_PX;
-    const scale = Math.min(width / worldPx, height / worldPx);
+    // The projected bounds, not `scene.w * TILE_WORLD_PX`.
+    //
+    // That was a square, which is right for `topdown` and wrong by a factor of
+    // two for `isometric`: a 2:1 diamond maps the map's corners to a span of
+    // `(w + h) * tileW / 2` across, so fitting a square put the whole city in
+    // one corner of the canvas and left the rest empty. Measured from the
+    // projection itself, so it is correct for whichever one this view was built
+    // with rather than correct for the one that was there first.
+    const corners = [
+      this.#projection.toScreen(0, 0),
+      this.#projection.toScreen(this.#scene.w, 0),
+      this.#projection.toScreen(0, this.#scene.h),
+      this.#projection.toScreen(this.#scene.w, this.#scene.h),
+    ];
+    const minX = Math.min(...corners.map((point) => point.x));
+    const maxX = Math.max(...corners.map((point) => point.x));
+    const minY = Math.min(...corners.map((point) => point.y));
+    const maxY = Math.max(...corners.map((point) => point.y));
+    const worldW = maxX - minX;
+    const worldH = maxY - minY;
+    if (worldW <= 0 || worldH <= 0) return;
+
+    const scale = Math.min(width / worldW, height / worldH);
     this.worldLayer.scale.set(scale);
+    // Centred on the bounds, and shifted by `-min` because the isometric origin
+    // puts cell (0,0) at a negative x: without it the world is centred on the
+    // origin rather than on the map, which is a half-map offset to the right.
     this.worldLayer.position.set(
-      (width - worldPx * scale) / 2,
-      (height - worldPx * scale) / 2,
+      (width - worldW * scale) / 2 - minX * scale,
+      (height - worldH * scale) / 2 - minY * scale,
     );
   }
 

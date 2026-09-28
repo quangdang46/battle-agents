@@ -165,6 +165,21 @@ export interface LoadSpriteAssetsOptions {
    * and the caller already renders one.
    */
   readonly timeoutMs?: number;
+  /**
+   * Which ground the pack should load. The pack ships both, and they are not
+   * interchangeable.
+   *
+   * `topdown` reads `tilemap/`, a flat 2D grid. `isometric` reads
+   * `tilemap-iso/`, a single 32x32 diamond per terrain.
+   *
+   * The default is `topdown` only because it was the only thing that was ever
+   * asked for, and it is the wrong answer for a city drawn in isometric: the
+   * 2D grass tile does not exist in that directory at all, so every grass cell
+   * silently drew nothing, and the dirt and rock cells that did resolve were
+   * flat squares lying under isometric buildings. The city had no floor, and the
+   * `missing` count said "1" without saying which one or why.
+   */
+  readonly terrainStyle?: 'topdown' | 'isometric';
 }
 
 /** The pack is a few dozen local files fetched from the same origin. */
@@ -204,17 +219,18 @@ export async function loadSpriteAssets(
       options.timeoutMs ?? DEFAULT_LOAD_TIMEOUT_MS,
     );
   });
-  return Promise.race([loadEverything(theme, root, missing), deadline]);
+  return Promise.race([loadEverything(theme, root, missing, options.terrainStyle ?? 'topdown'), deadline]);
 }
 
 async function loadEverything(
   theme: ArtTheme,
   root: string,
   missing: string[],
+  terrainStyle: 'topdown' | 'isometric',
 ): Promise<SpriteAssets> {
   const buildingIds = await loadBuildingIds(root, missing);
   const heroes = await loadHeroes(root, missing);
-  const terrain = await loadTerrain(root, missing);
+  const terrain = await loadTerrain(root, missing, terrainStyle);
 
   const buildings = new Map<string, Texture>();
   await Promise.all(
@@ -304,12 +320,19 @@ async function loadHeroes(root: string, missing: string[]): Promise<readonly Her
 async function loadTerrain(
   root: string,
   missing: string[],
+  style: 'topdown' | 'isometric',
 ): Promise<Readonly<Record<string, readonly Texture[]>>> {
+  // The directory carries the projection in its name, which is why these cannot
+  // be one folder with two layouts inside it: the frame manifest has to match
+  // the sheet it describes.
+  const dir = style === 'isometric' ? 'tilemap-iso' : 'tilemap';
   const entries = await Promise.all(
     TERRAIN_IDS.map(async (id) => {
-      const frames = await loadOne(`${root}/tilemap/${id}`);
+      const frames = await loadOne(`${root}/${dir}/${id}`);
       if (frames === undefined || frames.length === 0) {
-        missing.push(`tilemap/${id}`);
+        // Named with the directory, because "1 missing" against a city with no
+        // floor is not a diagnosis.
+        missing.push(`${dir}/${id}`);
         return undefined;
       }
       return [id, frames] as const;
