@@ -267,6 +267,13 @@ export class WorldStore {
         patch.set(sessionId, patching(base, { online: false, tool: undefined, zone: 'idle' }));
         return patch;
       }
+      case 'message.sent': {
+        // A message is not a place and does not move anyone, so it patches
+        // nothing. It is recorded so the view can DRAW it -- the two agents
+        // talking to each other is the thing that makes a city of coding
+        // agents look like one, and the protocol already emits the event.
+        return undefined;
+      }
       case 'tool.started': {
         const tool = stringAt(payload, 'tool');
         if (tool === undefined) return undefined;

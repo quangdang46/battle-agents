@@ -27,6 +27,7 @@ import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
 import { pointOnRoad, roadCurves, type RoadNode } from './roads.js';
+import { MESSAGE_ARC_TTL_MS, type MessageArc } from './message-flow.js';
 import { zoneSlot } from './zone-slot.js';
 import { wanderOffset } from './idle-wander.js';
 import { pickLine } from './dialogue.js';
@@ -247,6 +248,35 @@ export class PixiWorldView implements WorldViewLike {
    * avoid.
    */
   readonly terrainLayer = new Container();
+  /**
+   * Ages the message arcs and redraws them. Called from `animate`, which runs
+   * on the existing frame loop -- so there is no second loop, and the cost is
+   * bounded by `MAX_MESSAGE_ARCS` rather than by the number of agents.
+   */
+  #redrawArcs(): void {
+    this.messageLayer.removeChildren();
+    for (const arc of this.#arcs) {
+      const from = this.#projection.toScreen(arc.fromG[0], arc.fromG[1]);
+      const to = this.#projection.toScreen(arc.toG[0], arc.toG[1]);
+      const line = new Graphics();
+      line
+        .moveTo(from.x, from.y)
+        .quadraticCurveTo((from.x + to.x) / 2, Math.min(from.y, to.y) - 26, to.x, to.y)
+        .stroke({ color: 0x8ab4f8, width: 1, alpha: 0.5 });
+      this.messageLayer.addChild(line);
+    }
+  }
+
+  /**
+   * The arcs a message draws between two agents.
+   *
+   * Event-driven and bounded, not per-frame: one arc per `message.sent`, aged
+   * out on a timer, capped at `MAX_MESSAGE_ARCS`. The reference's trails were
+   * redrawn every frame for every agent, which is 2020 circles a frame at this
+   * population -- the exact shape `delta-cost.test.ts` exists to catch.
+   */
+  readonly messageLayer = new Container();
+  #arcs: MessageArc[] = [];
   /** Trees, rocks, bushes and flowers, between the ground and the sky. */
   readonly decoLayer = new Container();
 
@@ -263,7 +293,7 @@ export class PixiWorldView implements WorldViewLike {
     this.#cache = options.cache ?? spriteCache();
     this.#sky = new Graphics();
     this.skyLayer.addChild(this.#sky);
-    this.worldLayer.addChild(this.terrainLayer, this.decoLayer, this.skyLayer, this.fxLayer, this.zoneLayer, this.unitLayer);
+    this.worldLayer.addChild(this.terrainLayer, this.decoLayer, this.skyLayer, this.fxLayer, this.messageLayer, this.zoneLayer, this.unitLayer);
     this.#drawTerrain();
     this.decoLayer.addChild(...this.#buildDecorations());
     this.fxLayer.addChild(this.#buildActivityFx());
@@ -666,6 +696,16 @@ export class PixiWorldView implements WorldViewLike {
       if (index === node.frame) continue;
       node.frame = index;
       node.sprite.texture = frames[index]!;
+    }
+
+    // Message arcs age out here rather than on a loop of their own: this method
+    // already runs on the frame loop, so a second one would be a second tick
+    // per frame for a visual that lives 2.6 seconds. Bounded by
+    // MAX_MESSAGE_ARCS, not by the number of agents.
+    const alive = this.#arcs.filter((arc) => elapsedMs - arc.bornAtMs < MESSAGE_ARC_TTL_MS);
+    if (alive.length !== this.#arcs.length) {
+      this.#arcs = alive;
+      this.#redrawArcs();
     }
   }
 
