@@ -155,7 +155,20 @@ export interface LoadSpriteAssetsOptions {
   readonly theme?: ArtTheme;
   /** Prepended to every path. Set it when the app is served under a sub-path. */
   readonly baseUrl?: string;
+  /**
+   * How long the whole pack may take before it is called a failure.
+   *
+   * Not a nicety. A load that never settles is a world that never appears, and
+   * a promise that hangs looks exactly like a slow network from the outside —
+   * so a wrong path, an uninitialised asset system and a slow disk are the same
+   * silent failure. Timing out turns all three into an error a caller can see,
+   * and the caller already renders one.
+   */
+  readonly timeoutMs?: number;
 }
+
+/** The pack is a few dozen local files fetched from the same origin. */
+const DEFAULT_LOAD_TIMEOUT_MS = 5_000;
 
 /**
  * Loads the pack, or as much of it as answers.
@@ -167,10 +180,38 @@ export interface LoadSpriteAssetsOptions {
 export async function loadSpriteAssets(
   options: LoadSpriteAssetsOptions = {},
 ): Promise<SpriteAssets> {
+  // Pixi's asset system has to be initialised before anything loads, and
+  // `Assets.load` does NOT initialise it for you: without this the promise
+  // never settles. It never rejects either, so a caller awaiting it waits for
+  // ever and the world simply never appears — the canvas is never created, the
+  // status line stays at "starting", and nothing anywhere reports an error.
+  //
+  // That is the whole of why this looked like a working game with an invisible
+  // world: every test that mattered here called `attach()` with a fake atlas and
+  // never went near the network path, and a screenshot was the only thing that
+  // could have caught it.
+  await Assets.init();
+
   const theme = options.theme ?? 'fantasy';
   const root = `${options.baseUrl ?? ''}${ART_BASE}/${theme}`;
   const missing: string[] = [];
 
+  // Race the whole pack against a deadline, so a load that hangs becomes an
+  // error the caller renders rather than a world that never arrives.
+  const deadline = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new Error(`the ${theme} art pack did not load in time`)),
+      options.timeoutMs ?? DEFAULT_LOAD_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([loadEverything(theme, root, missing), deadline]);
+}
+
+async function loadEverything(
+  theme: ArtTheme,
+  root: string,
+  missing: string[],
+): Promise<SpriteAssets> {
   const buildingIds = await loadBuildingIds(root, missing);
   const heroes = await loadHeroes(root, missing);
   const terrain = await loadTerrain(root, missing);

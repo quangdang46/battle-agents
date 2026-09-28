@@ -229,7 +229,13 @@ export function GameShell({
         <span style={{ color: '#4d5566' }}>{SCENE_HINTS[scene.id] ?? ''}</span>
         <span>status: {status}</span>
         <span>agents: {agents}</span>
-        {art === '' ? null : <span>{art}</span>}
+        {/* The art state is ALWAYS shown, including while it loads and
+            especially after it fails. It was empty until the first success, which
+            is the same silence that let a black screen look like a running game
+            for hours: nothing on the page distinguished "loading" from "hung". */}
+        <span style={{ color: art.startsWith('art unavailable') ? '#f0a0a0' : undefined }}>
+          {art === '' ? 'art: loading' : art}
+        </span>
       </footer>
     </div>
   );
