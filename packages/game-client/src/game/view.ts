@@ -28,6 +28,7 @@ import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
 import { pointOnRoad, roadCurves, type RoadNode } from './roads.js';
 import { MESSAGE_ARC_TTL_MS, type MessageArc } from './message-flow.js';
+import { placeProps, SCENE_PROPS } from './props.js';
 import { zoneSlot } from './zone-slot.js';
 import { wanderOffset } from './idle-wander.js';
 import { pickLine } from './dialogue.js';
@@ -249,6 +250,34 @@ export class PixiWorldView implements WorldViewLike {
    */
   readonly terrainLayer = new Container();
   /**
+   * The dressing for this scene, from whichever Kenney pack matches it.
+   *
+   * Drawn into the decoration layer rather than a new one: a prop is standing
+   * on the ground, and putting it above the units would float it over their
+   * heads.
+   */
+  #buildProps(): Sprite[] {
+    const specs = SCENE_PROPS[this.#scene.id];
+    if (specs === undefined) return [];
+    const zones = (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[])
+      .map((zone) => ZONE_PLACEMENT[zone])
+      .filter((placement) => placement.scene === this.#scene.id);
+
+    return placeProps(specs, zones).flatMap(({ gx, gy, prop }) => {
+      const texture = this.#cache.get(spriteKey('prop', prop.index));
+      // A prop that did not load draws nothing, for the same reason a tree does.
+      if (texture === undefined) return [];
+      const at = this.#projection.toScreen(gx, gy);
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 1);
+      sprite.scale.set(PLACEHOLDER_SCALE);
+      sprite.position.set(at.x, at.y);
+      sprite.zIndex = this.#projection.depth(gx, gy);
+      return [sprite];
+    });
+  }
+
+  /**
    * Ages the message arcs and redraws them. Called from `animate`, which runs
    * on the existing frame loop -- so there is no second loop, and the cost is
    * bounded by `MAX_MESSAGE_ARCS` rather than by the number of agents.
@@ -295,7 +324,7 @@ export class PixiWorldView implements WorldViewLike {
     this.skyLayer.addChild(this.#sky);
     this.worldLayer.addChild(this.terrainLayer, this.decoLayer, this.skyLayer, this.fxLayer, this.messageLayer, this.zoneLayer, this.unitLayer);
     this.#drawTerrain();
-    this.decoLayer.addChild(...this.#buildDecorations());
+    this.decoLayer.addChild(...this.#buildDecorations(), ...this.#buildProps());
     this.fxLayer.addChild(this.#buildActivityFx());
     this.#drawZones();
     this.#paintSky();

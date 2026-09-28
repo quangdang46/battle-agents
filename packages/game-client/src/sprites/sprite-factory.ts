@@ -78,10 +78,23 @@ export const TILE_WORLD_PX = PLACEHOLDER_TILE_PX * PLACEHOLDER_SCALE;
  */
 export const REAL_ASSET_SCALE = TILE_WORLD_PX / TILE_SOURCE_PX;
 
+/** The prop keys, index-aligned with `PROP_TILES` in asset-atlas.ts. */
+export const PROP_KEYS: readonly string[] = [
+  'kenney-tiny-town/tile_0004',
+  'kenney-tiny-town/tile_0006',
+  'kenney-tiny-town/tile_0015',
+  'kenney-tiny-town/tile_0016',
+  'kenney-tiny-town/tile_0018',
+  'kenney-tiny-dungeon/tile_0002',
+  'kenney-tiny-dungeon/tile_0006',
+  'kenney-tiny-dungeon/tile_0009',
+  'kenney-tiny-dungeon/tile_0029',
+];
+
 /** Kept in step with the loader's own list; the two must not drift. */
 export const DECORATION_KINDS = ['tree', 'bush', 'rock', 'flower'] as const;
 
-export type SpriteKind = 'agent' | 'building' | 'zone-marker' | 'terrain-tile' | 'subagent' | 'particle' | 'deco';
+export type SpriteKind = 'agent' | 'building' | 'zone-marker' | 'terrain-tile' | 'subagent' | 'particle' | 'deco' | 'prop';
 
 /** A cache key. Two equal keys must return the same object. */
 export interface SpriteKey {
@@ -298,6 +311,12 @@ export class SpriteCache {
           ?.idle[0];
       case 'particle':
         return assets.particle;
+      case 'prop': {
+        // The variant is an INDEX into PROP_TILES, not a name, so the key stays
+        // a small integer and the pack/tile pair lives in one table that the
+        // loader and this switch cannot disagree about.
+        return assets.props?.[PROP_KEYS[Math.abs(Math.trunc(key.variant))] ?? ''];
+      }
       case 'deco': {
         // The variant IS the kind: there are four decoration sheets and no
         // palette, so a colour index here would address a sheet that does not

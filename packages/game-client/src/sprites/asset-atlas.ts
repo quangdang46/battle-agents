@@ -103,6 +103,16 @@ export interface SpriteAssets {
    * day one and nothing loaded, so the city had no trees in it.
    */
   readonly decorations?: Readonly<Record<string, readonly Texture[]>> | undefined;
+  /**
+   * Scene props, by `pack/tile`.
+   *
+   * The two Kenney packs the plan wanted used as TERRAIN are neither terrain:
+   * measured and then looked at, `kenney-tiny-town` is grass, dirt and a shelf
+   * of tan towers and trees, and `kenney-tiny-dungeon` is a dark red floor and
+   * a wall of stone, chests and banners. So they are loaded as what they are --
+   * see `props.ts`, which carries the evidence and the contact sheet.
+   */
+  readonly props?: Readonly<Record<string, Texture>> | undefined;
   /** Ids that were named but could not be loaded. */
   readonly missing: readonly string[];
 }
@@ -291,6 +301,38 @@ async function loadDecorations(
   );
 }
 
+const PROP_TILES: readonly { readonly pack: string; readonly tile: string }[] = [
+  { pack: 'kenney-tiny-town', tile: 'tile_0004' },
+  { pack: 'kenney-tiny-town', tile: 'tile_0006' },
+  { pack: 'kenney-tiny-town', tile: 'tile_0015' },
+  { pack: 'kenney-tiny-town', tile: 'tile_0016' },
+  { pack: 'kenney-tiny-town', tile: 'tile_0018' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0002' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0006' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0009' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0029' },
+];
+
+async function loadProps(
+  baseUrl: string,
+  missing: string[],
+): Promise<Readonly<Record<string, Texture>>> {
+  const entries = await Promise.all(
+    PROP_TILES.map(async ({ pack, tile }) => {
+      const key = `${pack}/${tile}`;
+      try {
+        return [key, await Assets.load<Texture>(`${baseUrl}/art/${pack}/Tiles/${tile}.png`)] as const;
+      } catch {
+        missing.push(key);
+        return undefined;
+      }
+    }),
+  );
+  return Object.fromEntries(
+    entries.filter((entry): entry is NonNullable<typeof entry> => entry !== undefined),
+  );
+}
+
 /** Loads one PNG as a single texture — the path for the manifest-less buildings. */
 async function loadTexture(path: string): Promise<Texture | undefined> {
   try {
@@ -394,6 +436,7 @@ async function loadEverything(
   // and the index.json is read rather than the four names hardcoded, so a pack
   // that adds a fifth decoration does not need a change here to show it.
   const decorations = await loadDecorations(root, missing);
+  const props = await loadProps(baseUrl, missing);
 
   // Widened, not replaced. The age-of-agents heroes carry three NAMED
   // animations and the tool-aware `work` state reads them, so the tiny-swords
@@ -423,7 +466,7 @@ async function loadEverything(
     }),
   );
 
-  return { theme, heroes, buildings, terrain, particle, decorations, missing };
+  return { theme, heroes, buildings, terrain, particle, decorations, props, missing };
 }
 
 /**
