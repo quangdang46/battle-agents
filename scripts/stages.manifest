@@ -20,6 +20,13 @@ build
 # stage still reports green. It runs right after `build` because everything
 # downstream (unit, integration, typecheck) reads the union it verifies.
 codegen-drift
+# `dist-exports` exists because every other stage reads `src` and the
+# application reads `dist`. Vitest aliases each package to src/index.ts and
+# typecheck uses tsconfig paths, so a build artifact older than its source is
+# invisible to all of them. `game-client` shipped five exports its barrel had
+# and its `dist` did not: the whole game failed to import and `/` rendered no
+# world, with the gate green throughout. See scripts/check-dist-exports.py.
+dist-exports
 compose
 migrations
 seed

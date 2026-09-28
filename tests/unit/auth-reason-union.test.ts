@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -45,8 +45,20 @@ const AUTH_SOURCE = join(REPO, 'packages', 'db', 'src', 'auth.ts');
 const CREDENTIAL_SOURCE = join(REPO, 'packages', 'features', 'agent', 'src', 'credential.ts');
 const API_SOURCE = join(REPO, 'packages', 'api', 'src', 'api.ts');
 
-/** Every `reason: '…'` literal in a file — the reasons it can actually produce. */
+/**
+ * Every `reason: '…'` literal in a file — the reasons it can actually produce.
+ *
+ * A file that is not there contributes nothing rather than throwing. This is the
+ * `removal-test.sh` trap the repository already names in AGENTS.md: it strips
+ * each feature in turn and runs the unit suite, so a test that reads
+ * a feature's `src` directory at a fixed path fails on the very removal it was
+ * written to prove clean. This is the fifth one written that way and the second
+ * to survive a green gate, because a stage that cannot fail is worse than no
+ * stage. `packages/db` and `packages/api` are never stripped, so those two still
+ * fail loudly if they go missing.
+ */
 function reasonsIn(path: string): string[] {
+  if (!existsSync(path)) return [];
   const source = readFileSync(path, 'utf8');
   return [...source.matchAll(/reason:\s*'([a-z-]+)'/g)].map((match) => match[1] as string);
 }

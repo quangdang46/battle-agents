@@ -44,6 +44,7 @@ readonly RUN_ID
 readonly CANONICAL_STAGES=(
   build
   codegen-drift
+  dist-exports
   compose
   migrations
   seed
@@ -539,6 +540,30 @@ run_stage_build() {
   fi
 }
 
+run_stage_dist_exports() {
+  # The web application resolves the workspace through each package's `main`,
+  # which points at `dist`. Every stage that reads TypeScript reads `src`: vitest
+  # aliases @battle-agents/* to src/index.ts on purpose, and typecheck goes
+  # through tsconfig paths. So a package whose `dist` predates its `src` passes
+  # every check in this file and the browser still cannot import it.
+  #
+  # It happened. `game-client` had five exports in its barrel that its `dist`
+  # did not, and the result was a home page with no world on it: five
+  # "is not exported from '@battle-agents/game-client'" warnings and a blank
+  # screen. Nothing in the gate was red, because nothing in the gate read
+  # `dist`.
+  local export_status=0
+  ( cd "$REPO_ROOT" && python3 scripts/check-dist-exports.py ) || export_status=$?
+
+  if [ "$export_status" -ne 0 ]; then
+    STAGE_STATUS="$STATUS_FAIL"
+    printf '  a built package does not export what its source barrel does (exit %s).\n' "$export_status"
+    printf '  The application resolves these packages through dist, so it runs the\n'
+    printf '  build, not the source every other stage here reads. Run `pnpm -r build`.\n'
+    return 1
+  fi
+}
+
 run_stage_codegen_drift() {
   # The action-id union is generated from each feature's manifest and committed,
   # so it can go stale the same way a migration artifact does: a feature adds an
@@ -749,6 +774,7 @@ run_stage() {
     schema-hygiene) run_stage_schema_hygiene ;;
     build) run_stage_build ;;
     codegen-drift) run_stage_codegen_drift ;;
+    dist-exports) run_stage_dist_exports ;;
     schema-drift) run_stage_schema_drift ;;
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;

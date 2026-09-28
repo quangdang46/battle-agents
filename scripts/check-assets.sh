@@ -109,7 +109,13 @@ for pack in "${PACKS[@]}"; do
   [ -f "${pack}/LICENSE.txt" ] || fail "${name} ships no LICENSE.txt beside the pack."
 
   # RULE 2. What the shortlist claims, against what is actually shipped.
-  claimed="$(grep -E "^\| ${name} \|" "$SHORTLIST" | head -1)" ||
+  # Column padding is not a licence question. The first version of this line
+  # required exactly one space on each side of the name, so a row written as
+  # `| age-of-agents   |` -- which is what the shortlist actually contains, and
+  # what a markdown table formatter produces from it -- was reported as a pack
+  # shipped without a row. The pack was documented; the check could not see it.
+  # `\|[[:space:]]+` and `[[:space:]]*\|` accept both the padded and the exact form.
+  claimed="$(grep -E "^\|[[:space:]]+${name}[[:space:]]*\|" "$SHORTLIST" | head -1)" ||
     fail "${name} is shipped but absent from docs/design/asset-shortlist.md. Every pack needs a row."
   [ -n "$claimed" ] ||
     fail "${name} is shipped but absent from docs/design/asset-shortlist.md. Every pack needs a row."
