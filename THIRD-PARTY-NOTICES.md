@@ -63,7 +63,7 @@ the row exists so the claim in the parser header can be checked against a named 
 
 | Repository                      | Upstream                                     | Commit         | License     | Status                                        |
 | ------------------------------- | -------------------------------------------- | -------------- | ----------- | --------------------------------------------- |
-| agentworld-openagents (Kaetram) | https://github.com/openagents-org/agentworld | `df5237da96a3` | MPL-2.0     | Never copied. Patterns only, rewritten clean. |
+| agentworld-openagents (Kaetram) | https://github.com/openagents-org/agentworld | `df5237da96a3` | MPL-2.0 | Never copied. Patterns only, rewritten clean. **2026-09-29: the 531 sprites were briefly vendored, and the copy was reverted** -- see `ba-openagents-mpl-sprite-licence-pop`. `check-licenses.sh` carries a `COPYLEFT_NOTICE_PATTERN` that denies Mozilla and GNU notices outright, so the failure was a POLICY, not an allowlist entry, and the pack's own MPL-2.0 status is exactly what that policy exists to catch. |
 | learn-spine                     | —                                            | `e4a6996a3d6d` | unconfirmed | Checkout is empty; hands off until re-cloned. |
 
 ## Vendored files
