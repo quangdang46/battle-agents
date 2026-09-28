@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { browserEventSource } from './browser-event-source.js';
 import {
   idlePointer,
+  installCameraGuards,
   isometric,
   reducePointer,
   TILE_WORLD_PX,
@@ -115,6 +116,7 @@ export function WorldCanvas({
    * be a DIFFERENT function object, so the remove would silently match nothing
    * and the listener would outlive the world.
    */
+  const cameraGuards = useRef<(() => void) | undefined>(undefined);
   const pointerHandlers = useRef<{
     down: (event: PointerEvent) => void;
     move: (event: PointerEvent) => void;
@@ -237,6 +239,21 @@ export function WorldCanvas({
           view.fit(container.clientWidth, container.clientHeight);
         });
         observer.observe(container);
+
+        // The camera guards, which were exported from the game client and
+        // called from nowhere in this repository. Without them a trackpad pinch
+        // -- which arrives as a `wheel` event with ctrlKey -- and Safari's
+        // gesturestart/gesturechange are both treated as PAGE zoom, so pinching
+        // the Coding City scaled the scene tabs and the status bar instead of
+        // the world. The guard calls preventDefault and leaves the zoom to the
+        // client, which is the whole of what it is.
+        //
+        // Installed per mount and removed in the cleanup below, because the
+        // guard saves and restores `touch-action` and `overscroll-behavior` on
+        // the host and the document: a world that tore itself down and left
+        // `overscroll-behavior: none` behind would break scrolling on the rest
+        // of the page.
+        cameraGuards.current = installCameraGuards(container);
         view.fit(container.clientWidth, container.clientHeight);
 
         // Pointer input, through the pure state machine so the gesture rules
@@ -342,6 +359,12 @@ export function WorldCanvas({
         pointerHandlers.current = null;
       }
       container.removeEventListener('contextmenu', preventDefaultContextMenu);
+      // A ref and not a local, because the install happens inside the async
+      // IIFE and the removal happens in the effect's own cleanup -- two different
+      // function scopes, and a `let` in either one is invisible to the other.
+      // `pointerHandlers` above is the same shape for the same reason.
+      cameraGuards.current?.();
+      cameraGuards.current = undefined;
       const current = world.current;
       if (current !== undefined) {
         // The interval is cleared HERE, in the effect's own cleanup. It used to
