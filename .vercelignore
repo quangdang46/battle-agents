@@ -1,0 +1,54 @@
+# Everything here is absent from the deployed image, and one entry is not a size
+# question but a correctness one. Both reasons are stated per entry, because a
+# line without a reason is a line that gets deleted by the next person who does
+# not know what it was for.
+
+# `.tmp` is the size that matters: 5.0 GB of other projects' checkouts, staged
+# assets and vendored packs. `vercel deploy` uploads the DIRECTORY, not the git
+# index, so gitignoring it does nothing here — only this file does. Without it a
+# deploy is slow at best and over the upload limit at worst.
+.tmp/
+
+# Build output and installed dependencies. Vercel installs from pnpm-lock.yaml
+# with the installCommand in vercel.json, so shipping a local node_modules is
+# not only wasteful: a host-specific tree in the upload is a tree that disagrees
+# with the lockfile the build is supposed to resolve from.
+node_modules/
+.next/
+apps/web/.next/
+apps/web/dist/
+packages/*/dist/
+packages/*/*/dist/
+
+# The M0 stack, the local Compose file and the env template. Compose is the
+# LOCAL development environment and is deliberately kept in the repo (section
+# 37); it has no business in a production image.
+compose*.yaml
+.env
+.env.example
+
+# Native build output from the sibling Rust projects that share this directory,
+# and the beads database — the tracker is source of truth on disk, not a build
+# input, and shipping it would let a deploy write to it.
+target/
+.beads/
+
+# Tooling directories that carry no runtime meaning.
+.git/
+.github/
+docs/
+scripts/
+.vscode/
+.idea/
+
+# Test and gate artifacts. None of these are production inputs, and the gate
+# scripts in scripts/ run in CI against the checkout, not in the deployment.
+coverage/
+*.log
+.DS_Store
+
+# The city art under apps/web/public/art IS required and is deliberately absent
+# from this list. An earlier revision of this file excluded `apps/web/public/`
+# wholesale, which would have shipped a Next.js app that renders a world with no
+# sprites in it. `public/` must reach the deployment; the `dist/` entries above
+# are the build output that shares the name, not the art.
