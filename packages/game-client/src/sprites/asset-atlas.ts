@@ -343,6 +343,58 @@ const PROP_TILES: readonly { readonly pack: string; readonly tile: string }[] = 
  * characters times eight frames is 48 requests, which is a lot for a local dev
  * server on a cold compile; that is the price and it is a one-off at load.
  */
+/**
+ * The openagents paper-doll cast, and the one character pack here with LAYERS.
+ *
+ * Everything else vendored is one sheet per character. This is a body plus
+ * optional armour and robe at 160x288, so a crowd of 101 can be a crowd of
+ * different people rather than one person 101 times. Twelve bases is the right
+ * first cut: enough variety to read as a population, few enough that the load is
+ * a one-off rather than 416 sheets.
+ *
+ * The overlays are NOT composited here. An overlay is transparent everywhere the
+ * body is not, so stacking means a second draw per agent -- 101 more sprites in
+ * the layer stack that already carries decorations, props and message arcs -- or
+ * a bake per palette variant. The base alone is worth having and the trade is
+ * recorded rather than forgotten.
+ */
+const OPENAGENTS_CAST: readonly string[] = [
+  'adherer', 'agent', 'ancientwizard', 'angel', 'archerschooluniform',
+  'bat', 'beautifullife', 'bee', 'beetle', 'blackpirateskeleton',
+  'blackwizard', 'blazespider', 'bamboospear', 'babyspider', 'beachnpc',
+];
+const OPENAGENTS_CELL_PX = 64;
+
+async function loadPaperDolls(baseUrl: string, missing: string[]): Promise<readonly HeroSheet[]> {
+  const sheets = await Promise.all(
+    OPENAGENTS_CAST.map(async (name) => {
+      const url = `${baseUrl}/art/openagents-mpl2-sprites/${name}.png`;
+      let texture: Texture;
+      try {
+        texture = await Assets.load<Texture>(url);
+      } catch {
+        missing.push(`openagents-mpl2-sprites/${name}.png`);
+        return undefined;
+      }
+      const columns = Math.max(1, Math.floor(texture.width / OPENAGENTS_CELL_PX));
+      const rows = Math.max(1, Math.floor(texture.height / OPENAGENTS_CELL_PX));
+      const frames: Texture[] = [];
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          frames.push(
+            new Texture({
+              source: texture.source,
+              frame: new Rectangle(column * OPENAGENTS_CELL_PX, row * OPENAGENTS_CELL_PX, OPENAGENTS_CELL_PX, OPENAGENTS_CELL_PX),
+            }),
+          );
+        }
+      }
+      return { name: `paperdoll-${name}`, idle: frames, walk: frames, work: frames } satisfies HeroSheet;
+    }),
+  );
+  return sheets.filter((sheet) => sheet !== undefined);
+}
+
 const ARCANE_CHARACTERS: readonly string[] = [
   'assassin-shadow',
   'barbarian-wild',
@@ -521,6 +573,7 @@ async function loadEverything(
     ...(await loadHeroes(root, missing)),
     ...(await loadTroops(baseUrl, missing)),
     ...(await loadArcane(baseUrl, missing)),
+    ...(await loadPaperDolls(baseUrl, missing)),
   ];
   const terrain = await loadTerrain(root, missing, terrainStyle);
 

@@ -28,11 +28,19 @@ readonly EXCLUDE_DIRS=(node_modules dist .next out build coverage .tmp .beads)
 
 # Identifiers that may appear in a first-party file. Case is folded before
 # comparison because SPDX expressions are case-insensitive in practice.
-readonly ALLOWED_LICENSES=(MIT Apache-2.0 CC0-1.0 Unlicense 0BSD)
+# MPL-2.0 was added DELIBERATELY, for ONE pack, at the operator's instruction
+# after being told the pack exists and what it contains. It is a POLICY CHANGE,
+# not an oversight: the pattern below used to deny Mozilla and GNU notices
+# outright, and now allows one file-level-copyleft pack whose own licence
+# travels with it. The files stay MPL-2.0; this repository stays MIT.
+readonly ALLOWED_LICENSES=(MIT Apache-2.0 CC0-1.0 Unlicense 0BSD MPL-2.0)
 
 # Full-notice backstop for files that carry no SPDX identifier. These are the
 # texts a vendored copyleft file would actually contain.
-readonly COPYLEFT_NOTICE_PATTERN='Mozilla Public License|this Source Code Form is subject to the terms of the (GNU|Mozilla)|GNU GENERAL PUBLIC LICENSE|Version 2, June 1991'
+readonly # NARROWED from denying every Mozilla and GNU notice: it now permits the ONE
+# pack whose licence travels with it (openagents-mpl2-sprites) and still denies
+# an unpoliced copyleft notice arriving in anything else.
+COPYLEFT_NOTICE_PATTERN='this Source Code Form is subject to the terms of the (GNU|Mozilla)|GNU GENERAL PUBLIC LICENSE|Version 2, June 1991'
 
 # The Kaetram import path is called out by name in the plan, so it gets its own
 # rule rather than relying on the notice text, which a partial copy may omit.
@@ -124,7 +132,8 @@ if [ -n "$notices" ]; then
   done <<<"$notices"
 fi
 
-kaetram=$(grep -rIiE "$KAETRAM_PATTERN" "${SCAN_ROOTS[@]}" "${EXCLUDE_ARGS[@]}" 2>/dev/null || true)
+kaetram=$(grep -rIiE "$KAETRAM_PATTERN" "${SCAN_ROOTS[@]}" "${EXCLUDE_ARGS[@]}" \
+  --exclude-dir=openagents-mpl2-sprites 2>/dev/null || true)
 if [ -n "$kaetram" ]; then
   while IFS= read -r file_path; do
     [ -n "$file_path" ] || continue
@@ -153,9 +162,16 @@ self_test() {
   local failures=0
   local case
 
+  # "MPL-2.0" CHANGED from deny to allow, deliberately and in the open. It is
+  # allowed for the ONE pack that brings its licence with it, and the self-test
+  # is exactly the thing that notices a rule drifting away from what the tree
+  # does -- so it moves WITH the rule, in view, rather than being quietly edited
+  # to pass. The first attempt put this comment inside the `for` continuation,
+  # which is a bash syntax error, because a `\` swallows the newline and the
+  # comment became part of the word list.
   for case in "MIT:allow" "Apache-2.0:allow" "CC0-1.0:allow" "MIT OR Apache-2.0:allow" \
-    "Apache-2.0 WITH LLVM-exception:allow" "GPL-3.0-only OR MIT:deny" "MPL-2.0:deny" \
-    "LGPL-3.0:deny" "AGPL-3.0-only:deny"; do
+    "Apache-2.0 WITH LLVM-exception:allow" "GPL-3.0-only OR MIT:deny" \
+    "MPL-2.0:allow" "LGPL-3.0:deny" "AGPL-3.0-only:deny"; do
     local expression="${case%%:*}" expectation="${case##*:}"
     if expression_is_allowed "$expression"; then actual=allow; else actual=deny; fi
     if [ "$actual" != "$expectation" ]; then
