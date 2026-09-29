@@ -125,6 +125,11 @@ export function WorldCanvas({
    */
   const cameraGuards = useRef<(() => void) | undefined>(undefined);
   const wheelHandlers = useRef<((event: WheelEvent) => void) | null>(null);
+  const panHandlers = useRef<{
+    down: (e: PointerEvent) => void; move: (e: PointerEvent) => void;
+    up: (e: PointerEvent) => void; cancel: (e: PointerEvent) => void;
+    spaceDown: (e: KeyboardEvent) => void; spaceUp: () => void;
+  } | null>(null);
   const pointerHandlers = useRef<{
     down: (event: PointerEvent) => void;
     move: (event: PointerEvent) => void;
@@ -296,6 +301,59 @@ export function WorldCanvas({
           const rect = container.getBoundingClientRect();
           return { x: event.clientX - rect.left, y: event.clientY - rect.top };
         };
+        // INFINITE CANVAS PAN. Middle-mouse, or Space held and any button
+        // dragged -- the two conventions Figma, Miro and tldraw all use, because
+        // left-drag is a marquee and you cannot have both.
+        //
+        // The drag is 1:1 with the mouse: no pan-speed multiplier. Every
+        // reference implementation that felt wrong did it the same way -- a
+        // multiplier makes the map move slower or faster than the cursor, and
+        // the whole point of dragging is that what was under the pointer stays
+        // under the pointer.
+        let panOrigin: { x: number; y: number } | undefined;
+        let panAt: { x: number; y: number } | undefined;
+        const spaceDown = (event: KeyboardEvent): void => {
+          if (event.code === 'Space') container.style.cursor = 'grab';
+        };
+        const spaceUp = (): void => {
+          container.style.cursor = '';
+        };
+
+        const onPanDown = (event: PointerEvent): void => {
+          if (event.button !== 1 && !(event.button === 0 && spaceHeld)) return;
+          event.preventDefault();
+          container.setPointerCapture(event.pointerId);
+          const point = toLocal(event);
+          // `origin = point - currentPosition`, so the map does not JUMP to the
+          // cursor on the first move. That is the standard correction and it is
+          // what stops a drag from lurching.
+          panOrigin = { x: point.x - view.root.x, y: point.y - view.root.y };
+          panAt = { x: point.x, y: point.y };
+        };
+        const onPanMove = (event: PointerEvent): void => {
+          if (panOrigin === undefined || panAt === undefined) return;
+          const point = toLocal(event);
+          view.root.position.set(point.x - panOrigin.x, point.y - panOrigin.y);
+          panAt = point;
+        };
+        const onPanUp = (event: PointerEvent): void => {
+          if (panOrigin === undefined) return;
+          panOrigin = undefined;
+          panAt = undefined;
+          if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
+        };
+        let spaceHeld = false;
+        container.addEventListener('pointerdown', onPanDown);
+        container.addEventListener('pointermove', onPanMove);
+        container.addEventListener('pointerup', onPanUp);
+        container.addEventListener('pointercancel', onPanUp);
+        window.addEventListener('keydown', spaceDown);
+        window.addEventListener('keyup', spaceUp);
+        panHandlers.current = {
+          down: onPanDown, move: onPanMove, up: onPanUp, cancel: onPanUp,
+          spaceDown, spaceUp,
+        };
+
         const onPointerDown = (event: PointerEvent): void => {
           const step = reducePointer(pointer, {
             type: 'pointerDown',
@@ -398,6 +456,16 @@ export function WorldCanvas({
       // IIFE and the removal happens in the effect's own cleanup -- two different
       // function scopes, and a `let` in either one is invisible to the other.
       // `pointerHandlers` above is the same shape for the same reason.
+      if (panHandlers.current !== null) {
+        const h = panHandlers.current;
+        container.removeEventListener('pointerdown', h.down);
+        container.removeEventListener('pointermove', h.move);
+        container.removeEventListener('pointerup', h.up);
+        container.removeEventListener('pointercancel', h.cancel);
+        window.removeEventListener('keydown', h.spaceDown);
+        window.removeEventListener('keyup', h.spaceUp);
+        panHandlers.current = null;
+      }
       if (wheelHandlers.current !== null) {
         container.removeEventListener('wheel', wheelHandlers.current);
         wheelHandlers.current = null;

@@ -351,6 +351,8 @@ export class PixiWorldView implements WorldViewLike {
   /** The scale `fit` chose. Zoom bounds are relative to it, not to 1. */
   #zoom = 1;
   #slew: { fromX: number; fromY: number; toX: number; toY: number; startedAt: number } | undefined;
+  #viewportWidth = 0;
+  #viewportHeight = 0;
   readonly #sky: Graphics;
 
   constructor(options: PixiViewOptions) {
@@ -400,6 +402,40 @@ export class PixiWorldView implements WorldViewLike {
    * a zoom feel like a camera rather than a slider.
    */
   /**
+   * The rectangle the camera may not leave, in world-layer pixels.
+   *
+   * A drag with no bound finds the edge of the world and keeps going, and the
+   * player ends up looking at black with the city off to one side -- which reads
+   * as a bug in the pan rather than as the edge of the map. Stardew exposes the
+   * same thing as XRange/YRange, and the Unity implementation everyone copies
+   * clamps `camBounds` the same way.
+   *
+   * Wider than the map on purpose: the viewport is bigger than a quarter of it at
+   * the minimum zoom, so clamping to the exact bounds would put the map's own
+   * edge against the screen edge and read as a wall.
+   */
+  #clampToWorld(): void {
+    const w = this.#scene.w;
+    const h = this.#scene.h;
+    const slopX = (w * TILE_WORLD_PX) / 6;
+    const slopY = (h * TILE_WORLD_PX) / 6;
+    const minX = -slopX;
+    const maxX = w * TILE_WORLD_PX + slopX - this.#viewportWidth;
+    const minY = -slopY;
+    const maxY = h * TILE_WORLD_PX + slopY - this.#viewportHeight;
+    this.worldLayer.position.set(
+      Math.max(minX, Math.min(maxX, this.worldLayer.position.x)),
+      Math.max(minY, Math.min(maxY, this.worldLayer.position.y)),
+    );
+  }
+
+  /** Let the host tell the view how big the window is, for the bounds above. */
+  setViewport(width: number, height: number): void {
+    this.#viewportWidth = width;
+    this.#viewportHeight = height;
+  }
+
+  /**
    * Move the camera to a grid cell. This is what walking is, now.
    *
    * There is one city, so going to the Guild Hall is not a different world to
@@ -426,6 +462,7 @@ export class PixiWorldView implements WorldViewLike {
 
   /** The camera moves itself. Called from animate, so there is no second loop. */
   advanceCamera(): void {
+    this.#clampToWorld();
     const slew = this.#slew;
     if (slew === undefined) return;
     const t = Math.min(1, (this.#elapsedMs - slew.startedAt) / CAMERA_SLEW_MS);
@@ -629,6 +666,12 @@ export class PixiWorldView implements WorldViewLike {
     const worldH = maxY - minY;
     if (worldW <= 0 || worldH <= 0) return;
 
+    // THIS IS AN INFINITE CANVAS, so `fit` does NOT frame the world. Framing it
+    // is what crams every district onto one screen and leaves the player with
+    // nothing to explore -- the complaint that produced the term. `fit` now
+    // establishes the ZOOM the canvas opens at and puts the middle of the map
+    // under the middle of the screen; the player pans from there.
+    //
     // NEVER UPSCALE past the art's native size. The city is smaller than the
     // canvas, so an uncapped fit magnifies it, and the sheets are 64px on a
     // 48px grid, so even 1:1 was a third too big. `ART_NATIVE_ZOOM` is 0.75 --
@@ -636,15 +679,22 @@ export class PixiWorldView implements WorldViewLike {
     //
     // A world smaller than its window shows its edges. That is what a
     // borderless canvas is FOR; filling it with magnified art is not.
-    const scale = Math.min(MAX_ZOOM, width / worldW, height / worldH);
+    // An infinite canvas opens at a ZOOM, not at a fit. Fitting is what puts
+    // the whole world on one screen and leaves nothing to explore; 0.75 is the
+    // art's native size and roughly a comfortable screenful at this tile size.
+    const scale = Math.min(MAX_ZOOM, 0.75);
     this.#zoom = scale;
     this.worldLayer.scale.set(this.#zoom);
     // Centred on the bounds, and shifted by `-min` because the isometric origin
     // puts cell (0,0) at a negative x: without it the world is centred on the
     // origin rather than on the map, which is a half-map offset to the right.
+    // Centre on the PLAZA -- (48,48), the middle of the 96x96 -- rather than
+    // the middle of everything, so the player opens where they actually are and
+    // pans outward to the districts.
+    const plaza = this.#projection.toScreen(48, 48);
     this.worldLayer.position.set(
-      (width - worldW * this.#zoom) / 2 - minX * this.#zoom,
-      (height - worldH * this.#zoom) / 2 - minY * this.#zoom,
+      width / 2 - plaza.x * this.#zoom,
+      height / 2 - plaza.y * this.#zoom,
     );
   }
 

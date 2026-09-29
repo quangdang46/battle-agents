@@ -52,16 +52,16 @@ export interface ZonePlacement {
  * document already describes.
  */
 export const ZONE_PLACEMENT: Readonly<Record<ZoneId, ZonePlacement>> = Object.freeze({
-  files: { scene: 'city', gx: 18, gy: 14, label: 'Workshop' },
-  terminal: { scene: 'city', gx: 10, gy: 20, label: 'Terminal' },
-  search: { scene: 'city', gx: 26, gy: 20, label: 'Search' },
-  web: { scene: 'city', gx: 26, gy: 12, label: 'Network' },
-  thinking: { scene: 'city', gx: 18, gy: 8, label: 'Research Lab' },
-  messaging: { scene: 'city', gx: 10, gy: 12, label: 'Comms' },
-  tasks: { scene: 'city', gx: 18, gy: 26, label: 'Quest Board' },
-  spawn: { scene: 'city', gx: 10, gy: 8, label: 'Rally' },
-  idle: { scene: 'city', gx: 18, gy: 18, label: 'Plaza' },
-  'bounty-board': { scene: 'city', gx: 30, gy: 18, label: 'Bounty Board' },
+  files: { scene: 'city', gx: 18, gy: 62, label: 'Workshop' },
+  terminal: { scene: 'city', gx: 40, gy: 40, label: 'Terminal' },
+  search: { scene: 'city', gx: 78, gy: 74, label: 'Search' },
+  web: { scene: 'city', gx: 18, gy: 40, label: 'Network' },
+  thinking: { scene: 'city', gx: 48, gy: 14, label: 'Research Lab' },
+  messaging: { scene: 'city', gx: 56, gy: 58, label: 'Comms' },
+  tasks: { scene: 'city', gx: 34, gy: 82, label: 'Quest Board' },
+  spawn: { scene: 'city', gx: 60, gy: 34, label: 'Rally' },
+  idle: { scene: 'city', gx: 48, gy: 48, label: 'Plaza' },
+  'bounty-board': { scene: 'city', gx: 48, gy: 64, label: 'Bounty Board' },
   // NOT another scene. The Arena is a place at the north end of the one
   // city, and the Guild Hall a place at the east end -- which is what makes them
   // walkable rather than switched to.
@@ -70,8 +70,8 @@ export const ZONE_PLACEMENT: Readonly<Record<ZoneId, ZonePlacement>> = Object.fr
   // to it moved the camera very little and the district was indistinguishable
   // from the city. A place you have to travel to is a different place; a place
   // you cannot see from the plaza is a coordinate.
-  'battle-arena': { scene: 'city', gx: 8, gy: 18, label: 'Arena' },
-  'guild-hall': { scene: 'city', gx: 30, gy: 18, label: 'Guild Hall' },
+  'battle-arena': { scene: 'city', gx: 16, gy: 16, label: 'Arena' },
+  'guild-hall': { scene: 'city', gx: 76, gy: 18, label: 'Guild Hall' },
 });
 
 /**

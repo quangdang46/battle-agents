@@ -4,6 +4,7 @@ import { PixiWorldView } from './view.js';
 import { placementFor, ZONE_PLACEMENT } from '../zones.js';
 import type { ZoneId } from '@battle-agents/protocol';
 import { TILE_WORLD_PX } from '../sprites/sprite-factory.js';
+import { MAX_ZOOM } from './view.js';
 
 import { WorldStore } from '../state/store.js';
 import { CITY, SCENES, type SceneConfig } from '../scenes/scene-config.js';
@@ -70,26 +71,25 @@ describe('fitting the city to the viewport', () => {
     expect(point.y).toBeLessThanOrEqual(VIEWPORT.height);
   });
 
-  it('brings EVERY placed zone inside it, not just the one that was reported', () => {
-    // The reported symptom was one agent; the defect is the whole map, and a
-    // fix aimed at the one placement would leave `battle-arena` off-screen.
+  it('does NOT bring every zone inside the viewport -- that is the canvas', () => {
+    // This used to be the whole point of the file. An infinite canvas opens at a
+    // ZOOM and the player pans; fitting every zone into one screen is the thing
+    // that made 96x96 pointless and is exactly the complaint the term arrived
+    // for. The map is bigger than the screen on purpose.
     const view = aView();
     view.fit(VIEWPORT.width, VIEWPORT.height);
-
-    // Driven off the placement TABLE rather than a hand-written list, for the
-    // reason view.ts gives: a zone added to the table must appear without a
-    // change here, and a list here would be a second copy that drifts.
-    //
-    // Scoped to the city, which is the change this test records: the table
-    // covers all three scenes, and a zone belonging to the arena is not on the
-    // city map to be brought into view.
-    for (const zone of zonesIn(CITY)) {
-      const point = screenOf(view, worldOf(zone));
-      expect(
-        point.x >= 0 && point.x <= VIEWPORT.width && point.y >= 0 && point.y <= VIEWPORT.height,
-        `${zone} lands at (${Math.round(point.x)}, ${Math.round(point.y)}), outside ${VIEWPORT.width}x${VIEWPORT.height}`,
-      ).toBe(true);
-    }
+    const placed = (Object.keys(ZONE_PLACEMENT) as ZoneId[]).filter(
+      (zone) => ZONE_PLACEMENT[zone].scene === CITY.id,
+    );
+    const corners = [
+      TILE_WORLD_PX * Math.min(...placed.map((z) => ZONE_PLACEMENT[z].gx)),
+      TILE_WORLD_PX * Math.min(...placed.map((z) => ZONE_PLACEMENT[z].gy)),
+      TILE_WORLD_PX * Math.max(...placed.map((z) => ZONE_PLACEMENT[z].gx)),
+      TILE_WORLD_PX * Math.max(...placed.map((z) => ZONE_PLACEMENT[z].gy)),
+    ];
+    // The span of the places, in world units, exceeds the viewport, so panning
+    // is required and the world cannot be one screen.
+    expect(corners[2]! - corners[0]!).toBeGreaterThan(VIEWPORT.width);
   });
 
   it('fits EVERY scene that still has a place in it', () => {
@@ -103,28 +103,12 @@ describe('fitting the city to the viewport', () => {
     expect(inhabited.map((scene) => scene.id)).toEqual(['city']);
   });
 
-  it('fits the one city, whatever its size, and does not throw on the empty ones', () => {
-    // The defect this whole change exists for was that the view ignored its
-    // scene. ONE city now, so the assertion is that it is fitted -- and that a
-    // grid with nothing in it does not throw, because the two dead scenes are
-    // still constructible until the next commit deletes them.
+  it('opens at the art\'s native zoom and does not throw on the empty scenes', () => {
     for (const scene of SCENES.filter((candidate) => zonesIn(candidate).length > 0)) {
-      const zones = zonesIn(scene);
-      expect(zones.length, `${scene.id} has no zones in the placement table`).toBeGreaterThan(0);
-
       const view = aView(scene);
       view.fit(VIEWPORT.width, VIEWPORT.height);
-
-      for (const zone of zones) {
-        const point = screenOf(view, worldOf(zone));
-        expect(
-          point.x >= 0 &&
-            point.x <= VIEWPORT.width &&
-            point.y >= 0 &&
-            point.y <= VIEWPORT.height,
-          `${scene.id}/${zone} lands at (${Math.round(point.x)}, ${Math.round(point.y)}), outside ${VIEWPORT.width}x${VIEWPORT.height}`,
-        ).toBe(true);
-      }
+      expect(view.root.scale.x).toBeGreaterThan(0);
+      expect(view.root.scale.x).toBeLessThanOrEqual(MAX_ZOOM);
     }
   });
 
@@ -167,16 +151,13 @@ describe('fitting the city to the viewport', () => {
     expect(view.root.scale.x).toBe(1);
   });
 
-  it('refits when the viewport changes, rather than fitting once and staying wrong', () => {
-    // The page resizes its canvas to its container, so a single fit at mount is
-    // correct only until the window moves.
+  it('refits when the viewport changes', () => {
     const view = aView();
-    view.fit(600, 300);
-    const small = view.root.scale.x;
-    view.fit(1200, 900);
-    const large = view.root.scale.x;
-
-    expect(large).toBeGreaterThan(small);
+    view.fit(VIEWPORT.width, VIEWPORT.height);
+    const first = view.root.position.x;
+    view.fit(VIEWPORT.width * 2, VIEWPORT.height * 2);
+    // A wider viewport centres the plaza differently, so the position moves.
+    expect(view.root.position.x).not.toBe(first);
   });
 
   it('leaves the node count alone — this is a camera, not a scene change', () => {

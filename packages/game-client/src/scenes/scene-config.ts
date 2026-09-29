@@ -29,7 +29,13 @@ export interface SceneConfig {
   readonly seed: number;
 }
 
-export const CITY: SceneConfig = { id: 'city', label: 'Coding City', w: 48, h: 48, seed: 1 };
+/**
+ * The canvas is INFINITE, so the grid is big enough to be worth exploring and
+ * the camera is not asked to frame all of it -- that is the change. 48 was three
+ * districts' worth; 96 is a city you have to pan across, which is the point of
+ * the term.
+ */
+export const CITY: SceneConfig = { id: 'city', label: 'Coding City', w: 96, h: 96, seed: 1 };
 export const ARENA: SceneConfig = { id: 'arena', label: 'Arena', w: 24, h: 24, seed: 2 };
 export const GUILD_HALL: SceneConfig = {
   id: 'guild-hall',
