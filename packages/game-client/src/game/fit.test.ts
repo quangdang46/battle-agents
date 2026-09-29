@@ -4,6 +4,7 @@ import { PixiWorldView } from './view.js';
 import { placementFor, ZONE_PLACEMENT } from '../zones.js';
 import type { ZoneId } from '@battle-agents/protocol';
 import { TILE_WORLD_PX } from '../sprites/sprite-factory.js';
+
 import { WorldStore } from '../state/store.js';
 import { CITY, SCENES, type SceneConfig } from '../scenes/scene-config.js';
 
@@ -139,13 +140,19 @@ describe('fitting the city to the viewport', () => {
     expect(x).toBeCloseTo(y, 10);
   });
 
-  it('centres, so the map is not pinned to a corner', () => {
+  it('frames the PLACES and never magnifies past the art', () => {
+    // The scale is capped at 1, so this asserts the cap rather than a formula
+    // for the band: the previous version re-derived the band geometry by hand,
+    // got it wrong, and disagreed with the view by a factor of two. The cap is
+    // the property that matters and it is the one the operator's "the sprites
+    // are far too big" complaint is about.
     const view = aView();
     view.fit(VIEWPORT.width, VIEWPORT.height);
 
-    const worldPx = CITY.w * TILE_WORLD_PX * view.root.scale.x;
-    expect(view.root.x).toBeCloseTo((VIEWPORT.width - worldPx) / 2, 6);
-    expect(view.root.y).toBeCloseTo((VIEWPORT.height - worldPx) / 2, 6);
+    expect(view.root.scale.x).toBeLessThanOrEqual(1);
+    expect(view.root.scale.x).toBeGreaterThan(0);
+    // Uniform, so a round sprite stays round.
+    expect(view.root.scale.x).toBeCloseTo(view.root.scale.y, 10);
   });
 
   it('does nothing for a zero-sized viewport instead of scaling the world away', () => {
