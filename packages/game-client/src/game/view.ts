@@ -341,9 +341,8 @@ export class PixiWorldView implements WorldViewLike {
   /** Elapsed world time in ms, driving both the animation cycle and the sky. */
   #elapsedMs = 0;
   #roadCache: ReturnType<typeof roadCurves> | undefined;
-  /** The fit scale, and the multiplier the user has zoomed by on top of it. */
+  /** The scale `fit` chose. Zoom bounds are relative to it, not to 1. */
   #zoom = 1;
-  #userZoom = 1;
   #slew: { fromX: number; fromY: number; toX: number; toY: number; startedAt: number } | undefined;
   readonly #sky: Graphics;
 
@@ -433,19 +432,26 @@ export class PixiWorldView implements WorldViewLike {
   }
 
   zoomBy(factor: number, viewport?: { width: number; height: number }): void {
-    const next = clampZoom(this.#zoom * this.#userZoom * factor, this.#zoom);
-    if (next === this.#zoom * this.#userZoom) return;
-    this.#userZoom = next / this.#zoom;
-    this.worldLayer.scale.set(next);
-    if (viewport !== undefined) {
-      // Keep the centre where it was: shift by the change in the world-space
-      // half-span, so a zoom in does not drift toward the origin.
-      const before = this.worldLayer.position.clone();
-      this.worldLayer.position.set(
-        viewport.width / 2 + (before.x - viewport.width / 2) * (this.#userZoom),
-        viewport.height / 2 + (before.y - viewport.height / 2) * (this.#userZoom),
-      );
-    }
+    // From the scale that is ACTUALLY on the layer, not from a remembered
+    // ratio. The remembered one drifted: a screenshot at minimum zoom showed the
+    // city pushed to the right of the frame, because `#userZoom` is relative to
+    // `#zoom`, and `#zoom` is rewritten by every `fit` -- so after the first
+    // resize the ratio no longer described the world and every wheel tick
+    // multiplied a wrong number.
+    const from = this.worldLayer.scale.x;
+    const to = clampZoom(from * factor, this.#zoom);
+    if (to === from) return;
+    this.worldLayer.scale.set(to);
+    if (viewport === undefined) return;
+    // Keep whatever was under the centre under the centre: the world point there
+    // is unchanged, so the screen position is `centre - worldPoint * scale`.
+    const ratio = to / from;
+    const cx = viewport.width / 2;
+    const cy = viewport.height / 2;
+    this.worldLayer.position.set(
+      cx + (this.worldLayer.position.x - cx) * ratio,
+      cy + (this.worldLayer.position.y - cy) * ratio,
+    );
   }
 
   /**
