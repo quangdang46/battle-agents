@@ -18,7 +18,7 @@
  * reachable from a delta.
  */
 
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Circle, Container, Graphics, Sprite, Text } from 'pixi.js';
 
 import { ZONE_PLACEMENT, placementFor } from '../zones.js';
 import { advanceMotion, motionAt, type CharacterMotion } from './motion.js';
@@ -353,6 +353,8 @@ export class PixiWorldView implements WorldViewLike {
   #slew: { fromX: number; fromY: number; toX: number; toY: number; startedAt: number } | undefined;
   #viewportWidth = 0;
   #viewportHeight = 0;
+  #hovered: string | undefined;
+  #hoverLabel: Container | undefined;
   readonly #sky: Graphics;
 
   constructor(options: PixiViewOptions) {
@@ -427,6 +429,58 @@ export class PixiWorldView implements WorldViewLike {
       Math.max(minX, Math.min(maxX, this.worldLayer.position.x)),
       Math.max(minY, Math.min(maxY, this.worldLayer.position.y)),
     );
+  }
+
+  /**
+   * The hover bar: who that is, and what they are doing right now.
+   *
+   * This is the `agent-hover-bar` idea from agent-move, and it is the one piece
+   * of that repo's UI that earns its place here. Everything else in that file
+   * is a dev dashboard; this one answers the question a spectator of a city of
+   * coding agents actually has, which is "who is that and are they working".
+   *
+   * `AgentView.tool` has been carried since the store was written and drawn by
+   * nothing. A character holding a tool and a character standing still are the
+   * SAME PICTURE, which means the world cannot show that anyone is working --
+   * the entire premise, answered by a sprite that looks identical either way.
+   */
+  #paintHover(agent: AgentView | undefined): void {
+    this.#hoverLabel?.removeFromParent();
+    this.#hoverLabel = undefined;
+    if (agent === undefined) return;
+
+    const where = this.#units.get(agent.agentId);
+    if (where === undefined) return;
+
+    const lines = [
+      agent.name ?? agent.agentId.slice(0, 8),
+      [agent.harness, agent.level === undefined ? undefined : `Lv${agent.level}`]
+        .filter(Boolean)
+        .join(' · '),
+      // THE LINE THAT MATTERS. An agent with a tool is working; one without is
+      // idle. Nothing else in the world says so.
+      agent.tool === undefined ? 'idle' : `working · ${agent.tool}`,
+    ];
+
+    const box = new Container();
+    lines.forEach((line, index) => {
+      const text = new Text({
+        text: line,
+        style: {
+          fill: index === 2 && agent.tool !== undefined ? 0x9fe0a0 : 0xd8dee9,
+          fontSize: index === 0 ? 13 : 11,
+          fontFamily: 'monospace',
+        },
+      });
+      text.x = -text.width / 2;
+      text.y = -46 + index * 15;
+      box.addChild(text);
+    });
+    box.x = where.screenX;
+    box.y = where.screenY;
+    box.zIndex = 1e6;
+    this.unitLayer.addChild(box);
+    this.#hoverLabel = box;
   }
 
   /** Let the host tell the view how big the window is, for the bounds above. */
@@ -754,6 +808,23 @@ export class PixiWorldView implements WorldViewLike {
       sprite.position.set(screen.x, screen.y);
       sprite.zIndex = depth;
       sprite.alpha = agent.online ? 1 : 0.45;
+      // HIT-TESTABLE. Every sprite in the world was decorative: no eventMode, no
+      // hit area, so a pointer event over an agent hit whatever was behind it --
+      // usually the terrain -- and there was no way to ask the world a question
+      // about a character. A city where you cannot find out what anyone is doing
+      // is wallpaper. `eventMode: 'static'` plus a circle the size of the
+      // figure is the whole of it.
+      sprite.eventMode = 'static';
+      sprite.hitArea = new Circle(0, 0, PLACEHOLDER_TILE_PX * 0.5);
+      sprite.cursor = 'help';
+      sprite.on('pointerover', () => {
+        this.#hovered = agent.agentId;
+        this.#paintHover(agent);
+      });
+      sprite.on('pointerout', () => {
+        if (this.#hovered === agent.agentId) this.#hovered = undefined;
+        this.#paintHover(undefined);
+      });
       this.unitLayer.addChild(sprite);
       // The control-group ring, built once and hidden. It is a separate object
       // rather than a tint on the sprite so the vendored art is never re-tinted
