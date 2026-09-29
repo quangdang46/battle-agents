@@ -22,7 +22,7 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 
 import { ZONE_PLACEMENT, placementFor } from '../zones.js';
 import { advanceMotion, motionAt, type CharacterMotion } from './motion.js';
-import { stableHash, DECORATION_KINDS,} from '../sprites/sprite-factory.js';
+import { ART_NATIVE_ZOOM, stableHash, DECORATION_KINDS,} from '../sprites/sprite-factory.js';
 import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
@@ -218,7 +218,14 @@ export interface PixiViewOptions {
 export const CAMERA_SLEW_MS = 220;
 
 export const MIN_ZOOM = 0.25;
-export const MAX_ZOOM = 1;
+/**
+ * The ceiling is the ART's native size, not the grid's. A 64px sheet on a 48px
+ * grid means a scale of 1 is already a third too big -- see ART_NATIVE_ZOOM in
+ * sprite-factory. The operator's "the sprites are far too large" was this
+ * number in the wrong unit, and no amount of looking at the city would have said
+ * so: the sprites were exactly the size the code asked for.
+ */
+export const MAX_ZOOM = ART_NATIVE_ZOOM;
 
 export function clampZoom(scale: number, fitScale: number): number {
   if (!Number.isFinite(scale) || scale <= 0) return fitScale;
@@ -622,12 +629,14 @@ export class PixiWorldView implements WorldViewLike {
     const worldH = maxY - minY;
     if (worldW <= 0 || worldH <= 0) return;
 
-    // NEVER UPSCALE past 1:1. This is the whole of "the sprites are far too
-    // big": the city is 32 tiles and the canvas is 1278px, so fitting a square
-    // map to the viewport scales it UP by two, and a 64px character becomes a
-    // billboard. A world that is smaller than its window shows its edges; that
-    // is what a borderless canvas is FOR. Fit down, never up.
-    const scale = Math.min(1, width / worldW, height / worldH);
+    // NEVER UPSCALE past the art's native size. The city is smaller than the
+    // canvas, so an uncapped fit magnifies it, and the sheets are 64px on a
+    // 48px grid, so even 1:1 was a third too big. `ART_NATIVE_ZOOM` is 0.75 --
+    // one art pixel per world pixel -- and that is the ceiling.
+    //
+    // A world smaller than its window shows its edges. That is what a
+    // borderless canvas is FOR; filling it with magnified art is not.
+    const scale = Math.min(MAX_ZOOM, width / worldW, height / worldH);
     this.#zoom = scale;
     this.worldLayer.scale.set(this.#zoom);
     // Centred on the bounds, and shifted by `-min` because the isometric origin

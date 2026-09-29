@@ -78,6 +78,20 @@ export const TILE_WORLD_PX = PLACEHOLDER_TILE_PX * PLACEHOLDER_SCALE;
  */
 export const REAL_ASSET_SCALE = TILE_WORLD_PX / TILE_SOURCE_PX;
 
+/**
+ * The zoom at which one ART pixel is one world pixel.
+ *
+ * The sheets are 64px cells drawn onto a 48px world grid, so a scale of 1 does
+ * NOT mean native: it means a third larger than native, and a 64px character
+ * covers more than its own cell. That is the operator's "nút quá to", and the
+ * 1:1 cap I put in was calibrated in the wrong unit -- the grid's rather than
+ * the art's.
+ *
+ * This is the ceiling a zoom should stop at. Past it the art is being magnified
+ * and stops looking drawn; below it, a pixel is a pixel.
+ */
+export const ART_NATIVE_ZOOM = TILE_WORLD_PX / TILE_SOURCE_PX;
+
 /** The prop keys, index-aligned with `PROP_TILES` in asset-atlas.ts. */
 export const PROP_KEYS: readonly string[] = [
   'kenney-tiny-dungeon/tile_0007',
