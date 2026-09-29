@@ -27,7 +27,6 @@ import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
 import { pointOnRoad, roadCurves, type RoadNode } from './roads.js';
-import { DOORWAY_PLACEMENT } from './doorways.js';
 import type { SceneId } from '../scenes/scene-config.js';
 import { MESSAGE_ARC_TTL_MS, type MessageArc } from './message-flow.js';
 import { placeProps, SCENE_PROPS } from './props.js';
@@ -359,7 +358,6 @@ export class PixiWorldView implements WorldViewLike {
     this.#drawTerrain();
     this.decoLayer.addChild(...this.#buildDecorations(), ...this.#buildProps());
     this.fxLayer.addChild(this.#buildActivityFx());
-    this.#drawDoorways();
     this.#drawZones();
     this.#paintSky();
   }
@@ -499,12 +497,14 @@ export class PixiWorldView implements WorldViewLike {
     // was one wearing a building's sprite.
     type ZoneKey = keyof typeof ZONE_PLACEMENT;
     type Cell = { gx: number; gy: number };
-    const clickable: [ZoneKey, Cell][] = [
-      ...(Object.keys(ZONE_PLACEMENT) as ZoneKey[])
-        .filter((zone) => ZONE_PLACEMENT[zone].scene === this.#scene.id)
-        .map((zone): [ZoneKey, Cell] => [zone, { gx: ZONE_PLACEMENT[zone].gx, gy: ZONE_PLACEMENT[zone].gy }]),
-      ...(Object.entries(DOORWAY_PLACEMENT) as [ZoneKey, Cell][]),
-    ];
+    // Every cell this scene can be clicked on: its own zones. There is no second
+    // list any more -- a doorway was a place in another scene, and there is only
+    // one scene, so a door to a place in the same room is a signpost.
+    const clickable: [ZoneKey, Cell][] = (
+      Object.keys(ZONE_PLACEMENT) as ZoneKey[]
+    )
+      .filter((zone) => ZONE_PLACEMENT[zone].scene === this.#scene.id)
+      .map((zone): [ZoneKey, Cell] => [zone, { gx: ZONE_PLACEMENT[zone].gx, gy: ZONE_PLACEMENT[zone].gy }]);
     for (const [zone, cell] of clickable) {
       const placement = ZONE_PLACEMENT[zone];
       if (placement === undefined) continue;
@@ -1114,25 +1114,6 @@ export class PixiWorldView implements WorldViewLike {
    * still read first and a doorway reads as "somewhere else" rather than as a
    * zone that happens to be far away.
    */
-  #drawDoorways(): void {
-    for (const [zone, door] of Object.entries(DOORWAY_PLACEMENT)) {
-      const placement = ZONE_PLACEMENT[zone as keyof typeof ZONE_PLACEMENT];
-      if (placement === undefined || placement.scene === this.#scene.id) continue;
-      const at = this.#projection.toScreen(door.gx, door.gy);
-      const texture = this.#cache.get(spriteKey('zone-marker', paletteIndexFor(zone), zone));
-      if (texture === undefined) continue;
-      const marker = new Sprite(texture);
-      marker.anchor.set(0.5, 0.5);
-      marker.scale.set(PLACEHOLDER_SCALE * 0.8);
-      marker.position.set(at.x, at.y);
-      marker.alpha = 0.85;
-      // Behind the in-scene markers: a doorway is a way out, not a place you
-      // are standing in.
-      marker.zIndex = this.#projection.depth(placement.gx, placement.gy) - 2;
-      this.zoneLayer.addChild(marker);
-    }
-  }
-
   #drawZones(): void {
     for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
       const placement = ZONE_PLACEMENT[zone];

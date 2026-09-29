@@ -123,10 +123,8 @@ export type { ZoneId } from '@battle-agents/protocol';
 
 /* ── scenes ── */
 
-export { ARENA, CITY, GUILD_HALL, SCENES, sceneById, type SceneConfig, type SceneId } from './scenes/scene-config.js';
+export { CITY, SCENES, DISTRICTS, CITY_GRID, districtAt, type SceneConfig, type SceneId, type District } from './scenes/scene-config.js';
 export { cityScene } from './scenes/city.js';
-export { arenaScene } from './scenes/arena.js';
-export { guildHallScene } from './scenes/guild-hall.js';
 
 /* ── the client that ties them together ── */
 

@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { PixiWorldView } from './view.js';
 import { placementFor, ZONE_PLACEMENT } from '../zones.js';
-import { DOORWAY_PLACEMENT } from './doorways.js';
 import type { ZoneId } from '@battle-agents/protocol';
-import { PLACEHOLDER_SCALE, TILE_WORLD_PX } from '../sprites/sprite-factory.js';
+import { TILE_WORLD_PX } from '../sprites/sprite-factory.js';
 import { WorldStore } from '../state/store.js';
-import { ARENA, CITY, GUILD_HALL, SCENES, type SceneConfig } from '../scenes/scene-config.js';
+import { CITY, SCENES, type SceneConfig } from '../scenes/scene-config.js';
 
 /**
  * The camera, proven as arithmetic rather than as pixels.
@@ -128,54 +127,6 @@ describe('fitting the city to the viewport', () => {
     }
   });
 
-  it('draws its own zones PLUS a doorway to each other scene', () => {
-    // This asserted the opposite once, and the opposite is what was wrong.
-    //
-    // It used to read "draws only its own zones, so the arena is not the city
-    // with an extra marker" -- a correct rule for a world whose scenes were
-    // switched by pressing a tab, where the city showing the arena's marker was
-    // a leak. It is not a leak any more: the city draws a doorway to the arena
-    // and the guild hall BECAUSE they are buildings you walk to, and a place you
-    // cannot see is not a place you can reach.
-    //
-    // So the property now is: every scene draws its own zones, plus one marker
-    // per zone belonging to another scene, and the counts still differ between
-    // scenes -- the arena is not the city, it is just reachable from it.
-    const city = aView(CITY);
-    const arena = aView(ARENA);
-    const guild = aView(GUILD_HALL);
-    // A doorway per OTHER SCENE, not per other-scene ZONE: `DOORWAY_PLACEMENT`
-    // holds one cell per place you can travel to, and a scene with five zones
-    // has one door, not five. Asserting against the zone table is what made this
-    // read 12 when the truth is 2.
-    // A doorway per place you can TRAVEL TO. A scene's own door is skipped --
-    // you are already inside it -- which is why the guild hall has one doorway
-    // and the city has two, and why counting the scene table gave 3 and 12.
-    const other = (scene: (typeof SCENES)[number]): number =>
-      zonesIn(scene).length +
-      Object.entries(DOORWAY_PLACEMENT).filter(([zone]) => {
-        const placement = ZONE_PLACEMENT[zone as ZoneId];
-        return placement !== undefined && placement.scene !== scene.id;
-      }).length;
-
-    expect(city.zoneLayer.children.length).toBe(other(CITY));
-    expect(arena.zoneLayer.children.length).toBe(other(ARENA));
-    expect(guild.zoneLayer.children.length).toBe(other(GUILD_HALL));
-    // The counts are now EQUAL, and that is the point: every scene draws its
-    // own zones plus a doorway to every other scene, so the marker count is the
-    // whole table. What still differs is WHICH are real, and that is the thing
-    // worth asserting -- otherwise this test would pass for three views that
-    // render identically.
-    //
-    // A doorway is drawn at 80% scale. So the guild hall, with one zone of its
-    // own, has exactly one full-size marker, and the city has ten.
-    const fullSize = (view: PixiWorldView): number =>
-      view.zoneLayer.children.filter((child) => Math.abs(child.scale.x - PLACEHOLDER_SCALE) < 0.001).length;
-    expect(fullSize(guild)).toBe(zonesIn(GUILD_HALL).length);
-    expect(fullSize(city)).toBe(zonesIn(CITY).length);
-    expect(fullSize(arena)).toBe(zonesIn(ARENA).length);
-    expect(fullSize(city)).toBeGreaterThan(fullSize(guild));
-  });
 
   it('scales uniformly, so a round sprite stays round', () => {
     // A non-uniform "fit" would fill the screen and squash every character into

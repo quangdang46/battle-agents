@@ -1,6 +1,6 @@
 'use client';
 
-import { CITY, ARENA, GUILD_HALL, type SceneConfig, type SceneId } from '@battle-agents/game-client';
+import { CITY, type SceneConfig, type SceneId } from '@battle-agents/game-client';
 import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { usePixelFont } from './game-chrome.js';
@@ -50,7 +50,9 @@ import { WorldCanvas, type WorldStatus } from './world-canvas.js';
  * than rebuilding it, so the characters on the map are the SAME characters and
  * the switch is a camera move rather than a page load.
  */
-const SCENES: readonly SceneConfig[] = [CITY, ARENA, GUILD_HALL];
+// ONE scene. The Arena and the Guild Hall are places in it, not grids you
+// load -- so the list has one entry and `choose` is a no-op for anything else.
+const SCENES: readonly SceneConfig[] = [CITY];
 
 const SCENE_HINTS: Readonly<Record<string, string>> = {
   city: 'Guild Hall · Research Lab · Workshop · Quest Board · Arena',

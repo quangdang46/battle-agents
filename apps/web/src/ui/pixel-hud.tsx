@@ -1,6 +1,6 @@
 'use client';
 
-import { CITY, ARENA, GUILD_HALL, type SceneConfig, type SceneId } from '@battle-agents/game-client';
+import { CITY, type SceneConfig, type SceneId } from '@battle-agents/game-client';
 
 import { GameIcon } from './game-chrome.js';
 
@@ -54,8 +54,6 @@ interface Plate {
  */
 const PLATES: readonly Plate[] = [
   { scene: CITY, key: '1', icon: 'home', tint: '#5b8dd6' },
-  { scene: ARENA, key: '2', icon: 'target', tint: '#c85b5b' },
-  { scene: GUILD_HALL, key: '3', icon: 'trophy', tint: '#c9a227' },
 ];
 
 /** Where each glyph lives, if the guessed name is not in the sheet. */
