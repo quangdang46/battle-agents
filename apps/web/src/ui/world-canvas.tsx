@@ -128,7 +128,8 @@ export function WorldCanvas({
   const panHandlers = useRef<{
     down: (e: PointerEvent) => void; move: (e: PointerEvent) => void;
     up: (e: PointerEvent) => void; cancel: (e: PointerEvent) => void;
-    spaceDown: (e: KeyboardEvent) => void; spaceUp: () => void;
+    spaceDown: (e: KeyboardEvent) => void; spaceUp: (e: KeyboardEvent) => void;
+    auxDown: (e: MouseEvent) => void;
   } | null>(null);
   const pointerHandlers = useRef<{
     down: (event: PointerEvent) => void;
@@ -312,11 +313,29 @@ export function WorldCanvas({
         // under the pointer.
         let panOrigin: { x: number; y: number } | undefined;
         let panAt: { x: number; y: number } | undefined;
+        // Space is the pan modifier, and it has to be TRACKED, not just styled.
+        // It was not: `spaceDown` set a cursor and nothing ever set the flag, so
+        // `spaceHeld` was permanently false and Space+drag could never fire. The
+        // cursor changed and nothing moved, which looks exactly like a canvas
+        // that supports zoom and not pan.
+        let spaceHeld = false;
         const spaceDown = (event: KeyboardEvent): void => {
-          if (event.code === 'Space') container.style.cursor = 'grab';
+          if (event.code !== 'Space') return;
+          // `preventDefault` or the page scrolls instead of the canvas, which is
+          // the other half of why Space+drag felt dead.
+          event.preventDefault();
+          spaceHeld = true;
+          container.style.cursor = 'grab';
         };
-        const spaceUp = (): void => {
+        const spaceUp = (event: KeyboardEvent): void => {
+          if (event.code !== 'Space') return;
+          spaceHeld = false;
           container.style.cursor = '';
+        };
+        // The middle button autoscrolls the PAGE in every browser, and it beats
+        // a pointerdown listener. Killed here or the canvas never sees the drag.
+        const onAuxDown = (event: MouseEvent): void => {
+          if (event.button === 1) event.preventDefault();
         };
 
         const onPanDown = (event: PointerEvent): void => {
@@ -342,8 +361,8 @@ export function WorldCanvas({
           panAt = undefined;
           if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
         };
-        let spaceHeld = false;
         container.addEventListener('pointerdown', onPanDown);
+        container.addEventListener('mousedown', onAuxDown, { passive: false });
         container.addEventListener('pointermove', onPanMove);
         container.addEventListener('pointerup', onPanUp);
         container.addEventListener('pointercancel', onPanUp);
@@ -351,7 +370,7 @@ export function WorldCanvas({
         window.addEventListener('keyup', spaceUp);
         panHandlers.current = {
           down: onPanDown, move: onPanMove, up: onPanUp, cancel: onPanUp,
-          spaceDown, spaceUp,
+          spaceDown, spaceUp, auxDown: onAuxDown,
         };
 
         const onPointerDown = (event: PointerEvent): void => {
@@ -462,6 +481,7 @@ export function WorldCanvas({
         container.removeEventListener('pointermove', h.move);
         container.removeEventListener('pointerup', h.up);
         container.removeEventListener('pointercancel', h.cancel);
+        container.removeEventListener('mousedown', h.auxDown);
         window.removeEventListener('keydown', h.spaceDown);
         window.removeEventListener('keyup', h.spaceUp);
         panHandlers.current = null;
