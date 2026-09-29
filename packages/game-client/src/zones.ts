@@ -65,8 +65,13 @@ export const ZONE_PLACEMENT: Readonly<Record<ZoneId, ZonePlacement>> = Object.fr
   // NOT another scene. The Arena is a place at the north end of the one
   // city, and the Guild Hall a place at the east end -- which is what makes them
   // walkable rather than switched to.
-  'battle-arena': { scene: 'city', gx: 10, gy: 8, label: 'Arena' },
-  'guild-hall': { scene: 'city', gx: 34, gy: 8, label: 'Guild Hall' },
+  // NEXT TO THE PLAZA, not at the map edge. At (10,8) on a 48x48 grid the
+  // Arena was open grass three-quarters of a map away from anything, so walking
+  // to it moved the camera very little and the district was indistinguishable
+  // from the city. A place you have to travel to is a different place; a place
+  // you cannot see from the plaza is a coordinate.
+  'battle-arena': { scene: 'city', gx: 8, gy: 18, label: 'Arena' },
+  'guild-hall': { scene: 'city', gx: 30, gy: 18, label: 'Guild Hall' },
 });
 
 /**

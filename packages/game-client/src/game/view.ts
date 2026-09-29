@@ -581,12 +581,39 @@ export class PixiWorldView implements WorldViewLike {
     // one corner of the canvas and left the rest empty. Measured from the
     // projection itself, so it is correct for whichever one this view was built
     // with rather than correct for the one that was there first.
-    const corners = [
-      this.#projection.toScreen(0, 0),
-      this.#projection.toScreen(this.#scene.w, 0),
-      this.#projection.toScreen(0, this.#scene.h),
-      this.#projection.toScreen(this.#scene.w, this.#scene.h),
-    ];
+    // The built-up band, not the whole grid. The grid is 48x48 so the districts
+    // have room; fitting THAT made a district six cells across a sliver in the
+    // corner, and walking to it moved the camera by a few pixels. Fitting the
+    // span of the ZONES -- the actual places -- is what makes a district
+    // somewhere you can be.
+    const placed = (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[])
+      .filter((zone) => ZONE_PLACEMENT[zone].scene === this.#scene.id)
+      .map((zone) => ZONE_PLACEMENT[zone]);
+    const pad = 3;
+    const corners =
+      placed.length === 0
+        ? [
+            this.#projection.toScreen(0, 0),
+            this.#projection.toScreen(this.#scene.w, this.#scene.h),
+          ]
+        : [
+            this.#projection.toScreen(
+              Math.max(0, Math.min(...placed.map((p) => p.gx)) - pad),
+              Math.max(0, Math.min(...placed.map((p) => p.gy)) - pad),
+            ),
+            this.#projection.toScreen(
+              Math.min(this.#scene.w, Math.max(...placed.map((p) => p.gx)) + pad),
+              Math.min(this.#scene.h, Math.max(...placed.map((p) => p.gy)) + pad),
+            ),
+            this.#projection.toScreen(
+              Math.max(0, Math.min(...placed.map((p) => p.gx)) - pad),
+              Math.min(this.#scene.h, Math.max(...placed.map((p) => p.gy)) + pad),
+            ),
+            this.#projection.toScreen(
+              Math.min(this.#scene.w, Math.max(...placed.map((p) => p.gx)) + pad),
+              Math.max(0, Math.min(...placed.map((p) => p.gy)) - pad),
+            ),
+          ];
     const minX = Math.min(...corners.map((point) => point.x));
     const maxX = Math.max(...corners.map((point) => point.x));
     const minY = Math.min(...corners.map((point) => point.y));
