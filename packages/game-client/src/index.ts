@@ -45,6 +45,16 @@ export {
 } from './game/frame-loop.js';
 export { installCameraGuards } from './game/camera-guards.js';
 export {
+  DEFAULT_RETRIEVAL_WEIGHTS,
+  cosine,
+  recency,
+  retrieve,
+  type FocalPoint,
+  type MemoryNode,
+  type RetrievalWeights,
+  type ScoredMemory,
+} from './game/recall.js';
+export {
   foldToolChain,
   type ToolChainData,
   type ToolEventLike,
