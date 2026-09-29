@@ -215,6 +215,9 @@ export interface PixiViewOptions {
  * 64px tile is a 128px tile and the city stops looking drawn. The bottom is a
  * quarter, because under that you are looking at a texture, not a place.
  */
+/** How long a camera move takes. Long enough to read as travel. */
+export const CAMERA_SLEW_MS = 220;
+
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 1;
 
@@ -342,6 +345,7 @@ export class PixiWorldView implements WorldViewLike {
   /** The fit scale, and the multiplier the user has zoomed by on top of it. */
   #zoom = 1;
   #userZoom = 1;
+  #slew: { fromX: number; fromY: number; toX: number; toY: number; startedAt: number } | undefined;
   readonly #sky: Graphics;
 
   constructor(options: PixiViewOptions) {
@@ -391,6 +395,45 @@ export class PixiWorldView implements WorldViewLike {
    * middle of the screen stays put while the edges move -- which is what makes
    * a zoom feel like a camera rather than a slider.
    */
+  /**
+   * Move the camera to a grid cell. This is what walking is, now.
+   *
+   * There is one city, so going to the Guild Hall is not a different world to
+   * load -- it is this world with the camera somewhere else. Nothing is torn
+   * down: the store, the socket, the asset cache, the 101 agents and the zoom
+   * the player chose all survive, which is the whole of what doctrine section 2
+   * was asking for and the three tabs were not delivering.
+   *
+   * The ease is `slew`, and it is 220ms rather than instant because an instant
+   * cut is what a tab does. Moving is what a camera does.
+   */
+  focusOn(gx: number, gy: number, viewport: { width: number; height: number }): void {
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+    const target = this.#projection.toScreen(gx, gy);
+    const zoom = this.worldLayer.scale.x;
+    this.#slew = {
+      fromX: this.worldLayer.position.x,
+      fromY: this.worldLayer.position.y,
+      toX: viewport.width / 2 - target.x * zoom,
+      toY: viewport.height / 2 - target.y * zoom,
+      startedAt: this.#elapsedMs,
+    };
+  }
+
+  /** The camera moves itself. Called from animate, so there is no second loop. */
+  advanceCamera(): void {
+    const slew = this.#slew;
+    if (slew === undefined) return;
+    const t = Math.min(1, (this.#elapsedMs - slew.startedAt) / CAMERA_SLEW_MS);
+    // Smoothstep, so it starts and stops rather than snapping at both ends.
+    const eased = t * t * (3 - 2 * t);
+    this.worldLayer.position.set(
+      slew.fromX + (slew.toX - slew.fromX) * eased,
+      slew.fromY + (slew.toY - slew.fromY) * eased,
+    );
+    if (t >= 1) this.#slew = undefined;
+  }
+
   zoomBy(factor: number, viewport?: { width: number; height: number }): void {
     const next = clampZoom(this.#zoom * this.#userZoom * factor, this.#zoom);
     if (next === this.#zoom * this.#userZoom) return;

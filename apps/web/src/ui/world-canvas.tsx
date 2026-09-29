@@ -8,12 +8,12 @@ import {
   loadSpriteAssets,
   spriteCache,
   type SceneConfig,
-  type SceneId,
   type SpriteAssets,
 } from '@battle-agents/game-client';
 import { useEffect, useRef, useState } from 'react';
 
 import { browserEventSource } from './browser-event-source.js';
+import { ZONE_PLACEMENT } from '@battle-agents/game-client';
 import {
   idlePointer,
   installCameraGuards,
@@ -72,7 +72,10 @@ export interface WorldCanvasProps {
   /** Reported to the shell, which draws the footer rather than the component. */
   readonly onStatus?: (status: WorldStatus) => void;
   readonly onAgents?: (count: number) => void;
-  readonly onZone?: (scene: SceneId) => void;
+  /** A cell was clicked. The host decides what that means -- today: walk there. */
+  readonly onZone?: (zone: { gx: number; gy: number; label: string }) => void;
+  /** The shell drives the camera through this: the view is built here, not there. */
+  readonly onView?: (view: { focusOn: (gx: number, gy: number, v: { width: number; height: number }) => void }) => void;
   readonly onArt?: (note: string) => void;
   /** Character ids lit by a control group. Recalled in the shell. */
   readonly highlighted?: readonly string[];
@@ -103,6 +106,7 @@ export function WorldCanvas({
   onAgents,
   onArt,
   onZone,
+  onView,
   fill = false,
   height = 460,
   highlighted = [],
@@ -232,6 +236,7 @@ export function WorldCanvas({
         // empty-world failure: the client writes deltas into a store the view
         // never reads.
         const view = new PixiWorldView({ store, scene, projection: isometric(ISO_TILE_W, ISO_TILE_H) });
+        onView?.(view);
         app.stage.addChild(view.root);
 
         // The camera. `fit` was already called here; what it measured was a
@@ -327,7 +332,10 @@ export function WorldCanvas({
             // container, because the container carries the pan offset too.
             const point = toLocal(event);
             const hit = view.zoneAtScreen(point.x, point.y);
-            if (hit !== undefined) onZone?.(hit.scene);
+            if (hit !== undefined) {
+              const placement = ZONE_PLACEMENT[hit.zone];
+              if (placement !== undefined) onZone?.({ gx: placement.gx, gy: placement.gy, label: hit.label });
+            }
             // A committed marquee selects nobody yet: `onSelect` is where a host
             // with a selection model would take the ids under the rect. The world
             // here is a spectator view, so the rect is drawn and released.

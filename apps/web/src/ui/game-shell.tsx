@@ -1,7 +1,7 @@
 'use client';
 
 import { CITY, ARENA, GUILD_HALL, type SceneConfig, type SceneId } from '@battle-agents/game-client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 
 import { usePixelFont } from './game-chrome.js';
 import {
@@ -104,6 +104,12 @@ export function GameShell({
     if (found !== undefined) setScene(found);
   }, []);
 
+  // The camera, for walking to a place in this one city.
+  const camera = useRef<{ focusOn: (gx: number, gy: number, v: { width: number; height: number }) => void } | null>(null);
+  const walkTo = useCallback((cell: { gx: number; gy: number }) => {
+    camera.current?.focusOn(cell.gx, cell.gy, { width: window.innerWidth, height: window.innerHeight });
+  }, []);
+
   // Number-row travel, and a Q/W/E… row for control groups.
   //
   // Two rows rather than one because the number row is already spoken for by the
@@ -189,7 +195,16 @@ export function GameShell({
           touched when `window` changes. */}
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <WorldCanvas
-          onZone={choose}
+          onView={(view) => {
+            camera.current = view;
+          }}
+          onZone={(cell) => {
+            // WALK, not switch. The camera moves; the world, the socket, the
+            // 101 agents and the player's zoom all stay. `choose` is what this
+            // used to do and it rebuilt a view to show a different copy of the
+            // same city.
+            walkTo(cell);
+          }}
           scene={scene}
           fill
           onStatus={setStatus}
