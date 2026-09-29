@@ -302,6 +302,15 @@ async function loadDecorations(
 }
 
 const PROP_TILES: readonly { readonly pack: string; readonly tile: string }[] = [
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0007' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0008' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0018' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0019' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0009' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0012' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0013' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0036' },
+  { pack: 'kenney-tiny-dungeon', tile: 'tile_0037' },
   { pack: 'kenney-tiny-town', tile: 'tile_0004' },
   { pack: 'kenney-tiny-town', tile: 'tile_0006' },
   { pack: 'kenney-tiny-town', tile: 'tile_0015' },

@@ -49,18 +49,31 @@ export interface PropSpec {
  */
 /** Keyed by ZONE, not by scene -- there is one scene now. */
 export const SCENE_PROPS: Readonly<Record<string, readonly PropSpec[]>> = {
-  'guild-hall': [
-    { pack: 'kenney-tiny-town', tile: 'tile_0004', index: 0, near: ['Guild Hall'] },
-    { pack: 'kenney-tiny-town', tile: 'tile_0006', index: 1, near: ['Guild Hall'] },
-    { pack: 'kenney-tiny-town', tile: 'tile_0015', index: 2, near: ['Guild Hall', 'Quest Board'] },
-    { pack: 'kenney-tiny-town', tile: 'tile_0016', index: 3, near: ['Quest Board'] },
-    { pack: 'kenney-tiny-town', tile: 'tile_0018', index: 4, near: ['Guild Hall', 'Workshop'] },
+  // THE ARENA IS A HOLLOW OF STONE, and it has to look like one rather than
+  // like another corner of the city. The tiles were chosen by looking at a
+  // contact sheet of all 132 in the pack -- 0000-0003 are the dark red floor,
+  // 0004-0023 the walls, arches, chests and statues, 0060-0083 the timber
+  // platforms. Picked by eye because the pack ships no tileset that names them.
+  'battle-arena': [
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0007', index: 5, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0008', index: 6, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0018', index: 7, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0019', index: 8, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0009', index: 9, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0012', index: 10, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0013', index: 11, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0036', index: 12, near: [] },
+    { pack: 'kenney-tiny-dungeon', tile: 'tile_0037', index: 13, near: [] },
   ],
-  arena: [
-    { pack: 'kenney-tiny-dungeon', tile: 'tile_0002', index: 5, near: ['Arena'] },
-    { pack: 'kenney-tiny-dungeon', tile: 'tile_0006', index: 6, near: ['Arena'] },
-    { pack: 'kenney-tiny-dungeon', tile: 'tile_0009', index: 7, near: ['Arena'] },
-    { pack: 'kenney-tiny-dungeon', tile: 'tile_0029', index: 8, near: ['Arena'] },
+  // THE GUILD HALL IS A WORKING BUILDING, and the town pack has the carpentry
+  // for it: 0012-0014 are the paths, 0004/0006 the towers, 0015/0016/0018 the
+  // trees and shrubs. Same contact sheet, same reason for naming them here.
+  'guild-hall': [
+    { pack: 'kenney-tiny-town', tile: 'tile_0004', index: 0, near: [] },
+    { pack: 'kenney-tiny-town', tile: 'tile_0006', index: 1, near: [] },
+    { pack: 'kenney-tiny-town', tile: 'tile_0015', index: 2, near: [] },
+    { pack: 'kenney-tiny-town', tile: 'tile_0016', index: 3, near: [] },
+    { pack: 'kenney-tiny-town', tile: 'tile_0018', index: 4, near: [] },
   ],
 };
 

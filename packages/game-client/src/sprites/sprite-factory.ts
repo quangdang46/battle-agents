@@ -80,6 +80,15 @@ export const REAL_ASSET_SCALE = TILE_WORLD_PX / TILE_SOURCE_PX;
 
 /** The prop keys, index-aligned with `PROP_TILES` in asset-atlas.ts. */
 export const PROP_KEYS: readonly string[] = [
+  'kenney-tiny-dungeon/tile_0007',
+  'kenney-tiny-dungeon/tile_0008',
+  'kenney-tiny-dungeon/tile_0018',
+  'kenney-tiny-dungeon/tile_0019',
+  'kenney-tiny-dungeon/tile_0009',
+  'kenney-tiny-dungeon/tile_0012',
+  'kenney-tiny-dungeon/tile_0013',
+  'kenney-tiny-dungeon/tile_0036',
+  'kenney-tiny-dungeon/tile_0037',
   'kenney-tiny-town/tile_0004',
   'kenney-tiny-town/tile_0006',
   'kenney-tiny-town/tile_0015',
