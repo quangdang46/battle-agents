@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PixiWorldView } from './view.js';
 import { placementFor, ZONE_PLACEMENT } from '../zones.js';
+import { DOORWAY_PLACEMENT } from './doorways.js';
 import type { ZoneId } from '@battle-agents/protocol';
 import { PLACEHOLDER_SCALE, TILE_WORLD_PX } from '../sprites/sprite-factory.js';
 import { WorldStore } from '../state/store.js';
@@ -133,8 +134,19 @@ describe('fitting the city to the viewport', () => {
     const city = aView(CITY);
     const arena = aView(ARENA);
     const guild = aView(GUILD_HALL);
+    // A doorway per OTHER SCENE, not per other-scene ZONE: `DOORWAY_PLACEMENT`
+    // holds one cell per place you can travel to, and a scene with five zones
+    // has one door, not five. Asserting against the zone table is what made this
+    // read 12 when the truth is 2.
+    // A doorway per place you can TRAVEL TO. A scene's own door is skipped --
+    // you are already inside it -- which is why the guild hall has one doorway
+    // and the city has two, and why counting the scene table gave 3 and 12.
     const other = (scene: (typeof SCENES)[number]): number =>
-      zonesIn(scene).length + SCENES.filter((elsewhere) => elsewhere.id !== scene.id).reduce((n, elsewhere) => n + zonesIn(elsewhere).length, 0);
+      zonesIn(scene).length +
+      Object.entries(DOORWAY_PLACEMENT).filter(([zone]) => {
+        const placement = ZONE_PLACEMENT[zone as ZoneId];
+        return placement !== undefined && placement.scene !== scene.id;
+      }).length;
 
     expect(city.zoneLayer.children.length).toBe(other(CITY));
     expect(arena.zoneLayer.children.length).toBe(other(ARENA));
