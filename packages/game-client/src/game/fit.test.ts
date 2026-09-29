@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { PixiWorldView } from './view.js';
 import { placementFor, ZONE_PLACEMENT } from '../zones.js';
 import type { ZoneId } from '@battle-agents/protocol';
-import { TILE_WORLD_PX } from '../sprites/sprite-factory.js';
+import { PLACEHOLDER_SCALE, TILE_WORLD_PX } from '../sprites/sprite-factory.js';
 import { WorldStore } from '../state/store.js';
 import { ARENA, CITY, GUILD_HALL, SCENES, type SceneConfig } from '../scenes/scene-config.js';
 
@@ -117,18 +117,42 @@ describe('fitting the city to the viewport', () => {
     }
   });
 
-  it('draws only its own zones, so the arena is not the city with an extra marker', () => {
-    // The property the two routes actually differ by. Counting children rather
-    // than comparing pictures: the arena has one zone and the city has ten, and
-    // a view that drew the whole table made them identical.
+  it('draws its own zones PLUS a doorway to each other scene', () => {
+    // This asserted the opposite once, and the opposite is what was wrong.
+    //
+    // It used to read "draws only its own zones, so the arena is not the city
+    // with an extra marker" -- a correct rule for a world whose scenes were
+    // switched by pressing a tab, where the city showing the arena's marker was
+    // a leak. It is not a leak any more: the city draws a doorway to the arena
+    // and the guild hall BECAUSE they are buildings you walk to, and a place you
+    // cannot see is not a place you can reach.
+    //
+    // So the property now is: every scene draws its own zones, plus one marker
+    // per zone belonging to another scene, and the counts still differ between
+    // scenes -- the arena is not the city, it is just reachable from it.
     const city = aView(CITY);
     const arena = aView(ARENA);
     const guild = aView(GUILD_HALL);
+    const other = (scene: (typeof SCENES)[number]): number =>
+      zonesIn(scene).length + SCENES.filter((elsewhere) => elsewhere.id !== scene.id).reduce((n, elsewhere) => n + zonesIn(elsewhere).length, 0);
 
-    expect(arena.zoneLayer.children.length).toBe(zonesIn(ARENA).length);
-    expect(arena.zoneLayer.children.length).toBeLessThan(city.zoneLayer.children.length);
-    expect(guild.zoneLayer.children.length).toBe(zonesIn(GUILD_HALL).length);
-    expect(guild.zoneLayer.children.length).toBeLessThan(city.zoneLayer.children.length);
+    expect(city.zoneLayer.children.length).toBe(other(CITY));
+    expect(arena.zoneLayer.children.length).toBe(other(ARENA));
+    expect(guild.zoneLayer.children.length).toBe(other(GUILD_HALL));
+    // The counts are now EQUAL, and that is the point: every scene draws its
+    // own zones plus a doorway to every other scene, so the marker count is the
+    // whole table. What still differs is WHICH are real, and that is the thing
+    // worth asserting -- otherwise this test would pass for three views that
+    // render identically.
+    //
+    // A doorway is drawn at 80% scale. So the guild hall, with one zone of its
+    // own, has exactly one full-size marker, and the city has ten.
+    const fullSize = (view: PixiWorldView): number =>
+      view.zoneLayer.children.filter((child) => Math.abs(child.scale.x - PLACEHOLDER_SCALE) < 0.001).length;
+    expect(fullSize(guild)).toBe(zonesIn(GUILD_HALL).length);
+    expect(fullSize(city)).toBe(zonesIn(CITY).length);
+    expect(fullSize(arena)).toBe(zonesIn(ARENA).length);
+    expect(fullSize(city)).toBeGreaterThan(fullSize(guild));
   });
 
   it('scales uniformly, so a round sprite stays round', () => {

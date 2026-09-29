@@ -256,11 +256,20 @@ describe('zone mapping is config-driven and consumes the one table', () => {
     // used to demand every row of it, which is what pinned the defect: a view
     // that drew the whole table on a 32x32 grid passed this test and rendered
     // the arena's marker on top of the Coding City.
+    // The city's OWN zones, plus a doorway marker for every zone belonging to
+    // another scene. The doorway is the addition since this was last read: the
+    // city draws the arena and the guild hall because they are buildings you
+    // walk to, and a place you cannot see is not a place you can reach. What
+    // this test still guards is unchanged and is the point of it: the count is
+    // FIXED, so a per-delta marker build would still be caught.
     const markers = view.zoneLayer.children.length;
     const cityZones = (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]).filter(
       (zone) => ZONE_PLACEMENT[zone].scene === CITY.id,
     );
-    expect(markers).toBe(cityZones.length);
+    const doorways = (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]).filter(
+      (zone) => ZONE_PLACEMENT[zone].scene !== CITY.id,
+    );
+    expect(markers).toBe(cityZones.length + doorways.length);
 
     for (let i = 0; i < 50; i += 1) {
       store.applyDelta(toolStarted(`s${i}`, 'Read'));
