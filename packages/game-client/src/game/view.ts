@@ -274,11 +274,20 @@ export class PixiWorldView implements WorldViewLike {
    * heads.
    */
   #buildProps(): Sprite[] {
-    const specs = SCENE_PROPS[this.#scene.id];
-    if (specs === undefined) return [];
     const zones = (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[])
       .map((zone) => ZONE_PLACEMENT[zone])
       .filter((placement) => placement.scene === this.#scene.id);
+    // Every zone's own dressing, not one scene's: there is one scene, and the
+    // Arena's stone props sit at the Arena because that is where the Arena is.
+    const specs = zones.flatMap((placement) => {
+      const byZone = SCENE_PROPS[
+        (Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]).find(
+          (zone) => ZONE_PLACEMENT[zone] === placement,
+        ) as string
+      ];
+      return byZone === undefined ? [] : byZone.map((prop) => ({ ...prop, near: [] }));
+    });
+    if (specs.length === 0) return [];
 
     return placeProps(specs, zones).flatMap(({ gx, gy, prop }) => {
       const texture = this.#cache.get(spriteKey('prop', prop.index));

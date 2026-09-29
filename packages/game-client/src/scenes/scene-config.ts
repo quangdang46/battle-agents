@@ -29,7 +29,7 @@ export interface SceneConfig {
   readonly seed: number;
 }
 
-export const CITY: SceneConfig = { id: 'city', label: 'Coding City', w: 32, h: 32, seed: 1 };
+export const CITY: SceneConfig = { id: 'city', label: 'Coding City', w: 48, h: 48, seed: 1 };
 export const ARENA: SceneConfig = { id: 'arena', label: 'Arena', w: 24, h: 24, seed: 2 };
 export const GUILD_HALL: SceneConfig = {
   id: 'guild-hall',

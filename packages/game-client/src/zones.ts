@@ -62,8 +62,11 @@ export const ZONE_PLACEMENT: Readonly<Record<ZoneId, ZonePlacement>> = Object.fr
   spawn: { scene: 'city', gx: 10, gy: 8, label: 'Rally' },
   idle: { scene: 'city', gx: 18, gy: 18, label: 'Plaza' },
   'bounty-board': { scene: 'city', gx: 30, gy: 18, label: 'Bounty Board' },
-  'battle-arena': { scene: 'arena', gx: 12, gy: 12, label: 'Arena' },
-  'guild-hall': { scene: 'guild-hall', gx: 12, gy: 10, label: 'Guild Hall' },
+  // NOT another scene. The Arena is a place at the north end of the one
+  // city, and the Guild Hall a place at the east end -- which is what makes them
+  // walkable rather than switched to.
+  'battle-arena': { scene: 'city', gx: 10, gy: 8, label: 'Arena' },
+  'guild-hall': { scene: 'city', gx: 34, gy: 8, label: 'Guild Hall' },
 });
 
 /**

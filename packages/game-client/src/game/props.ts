@@ -47,6 +47,7 @@ export interface PropSpec {
  * simply is not placed, which is the honest outcome: dressing that walks into a
  * wall looks worse than no dressing.
  */
+/** Keyed by ZONE, not by scene -- there is one scene now. */
 export const SCENE_PROPS: Readonly<Record<string, readonly PropSpec[]>> = {
   'guild-hall': [
     { pack: 'kenney-tiny-town', tile: 'tile_0004', index: 0, near: ['Guild Hall'] },
