@@ -195,8 +195,12 @@ describe('zone mapping is config-driven and consumes the one table', () => {
 
       // Routed, with no file in packages/game-client touched.
       expect(store.get('s1')?.zone).toBe('guild-hall');
-      // And it is placed there.
-      expect(placementFor(store.get('s1')!.zone).scene).toBe('guild-hall');
+      // And it is placed there. The SCENE is 'city' now, and that is the
+      // point of the whole refactor: the Guild Hall is a place you walk to, not
+      // a world you load, so routing an agent there puts it at a CELL in this
+      // city rather than in a different grid.
+      expect(placementFor(store.get('s1')!.zone).scene).toBe('city');
+      expect(placementFor(store.get('s1')!.zone).label).toBe('Guild Hall');
     } finally {
       delete writable[inventedTool];
     }

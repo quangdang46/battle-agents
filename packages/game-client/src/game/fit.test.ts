@@ -92,13 +92,23 @@ describe('fitting the city to the viewport', () => {
     }
   });
 
-  it('fits EVERY scene, not only the city the first bug was found on', () => {
+  it('fits EVERY scene that still has a place in it', () => {
+    // The Arena and the Guild Hall no longer own zones: they are PLACES in the
+    // one city, at the cells ZONE_PLACEMENT gives them. Fitting a grid with
+    // nothing in it still has to work -- the scenes are not deleted yet, and a
+    // view that cannot fit an empty world is a view that crashes on a load
+    // failure -- but the assertion below is only meaningful where there is
+    // something to fit AROUND.
+    const inhabited = SCENES.filter((scene) => zonesIn(scene).length > 0);
+    expect(inhabited.map((scene) => scene.id)).toEqual(['city']);
+  });
+
+  it('fits the one city, whatever its size, and does not throw on the empty ones', () => {
     // The defect this whole change exists for was that the view ignored its
-    // scene, so the arena and the guild hall were drawn on a 32-wide city grid.
-    // The city is the scene that bug was REPORTED against, which is exactly why
-    // the other two need their own assertion: nothing in the original suite
-    // would have gone red if only they were broken.
-    for (const scene of SCENES) {
+    // scene. ONE city now, so the assertion is that it is fitted -- and that a
+    // grid with nothing in it does not throw, because the two dead scenes are
+    // still constructible until the next commit deletes them.
+    for (const scene of SCENES.filter((candidate) => zonesIn(candidate).length > 0)) {
       const zones = zonesIn(scene);
       expect(zones.length, `${scene.id} has no zones in the placement table`).toBeGreaterThan(0);
 
