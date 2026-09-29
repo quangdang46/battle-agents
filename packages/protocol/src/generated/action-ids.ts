@@ -18,128 +18,149 @@
 
 /** agent */
 export type AgentActionId =
-  'agent.describe' | 'agent.read' | 'session.create' | 'session.end' | 'session.heartbeat';
+  | "agent.describe"
+  | "agent.read"
+  | "session.create"
+  | "session.end"
+  | "session.heartbeat";
 
 /** animation */
-export type AnimationActionId = 'animation.pose';
+export type AnimationActionId =
+  | "animation.pose";
 
 /** bounty */
 export type BountyActionId =
-  | 'bounty.create'
-  | 'bounty.list'
-  | 'bounty.claim'
-  | 'bounty.submit'
-  | 'bounty.fund'
-  | 'bounty.expire';
+  | "bounty.create"
+  | "bounty.list"
+  | "bounty.claim"
+  | "bounty.submit"
+  | "bounty.fund"
+  | "bounty.expire";
 
 /** quest */
 export type QuestActionId =
-  'quest.create' | 'quest.list' | 'quest.claim' | 'quest.submit' | 'quest.admin.revoke';
+  | "quest.create"
+  | "quest.list"
+  | "quest.claim"
+  | "quest.submit"
+  | "quest.admin.revoke";
 
 /** progression */
 export type ProgressionActionId =
-  'progression.awards' | 'progression.gate' | 'progression.read' | 'progression.tiers';
+  | "progression.awards"
+  | "progression.gate"
+  | "progression.read"
+  | "progression.tiers";
 
 /** reputation */
-export type ReputationActionId = 'reputation.gate' | 'reputation.read' | 'reputation.tiers';
+export type ReputationActionId =
+  | "reputation.gate"
+  | "reputation.read"
+  | "reputation.tiers";
 
 /** social */
 export type SocialActionId =
-  | 'social.broadcast'
-  | 'social.inbox'
-  | 'social.leaderboard'
-  | 'social.poke'
-  | 'social.profile'
-  | 'social.send';
+  | "social.broadcast"
+  | "social.inbox"
+  | "social.leaderboard"
+  | "social.poke"
+  | "social.profile"
+  | "social.send";
 
 /** battle */
 export type BattleActionId =
-  | 'battle.create'
-  | 'battle.join'
-  | 'battle.finish'
-  | 'battle.weights'
-  | 'battle.read'
-  | 'battle.list'
-  | 'battle.sweep';
+  | "battle.create"
+  | "battle.join"
+  | "battle.finish"
+  | "battle.weights"
+  | "battle.read"
+  | "battle.list"
+  | "battle.sweep";
 
 /** achievements */
 export type AchievementsActionId =
-  'achievements.catalogue' | 'achievements.list' | 'achievements.project';
+  | "achievements.catalogue"
+  | "achievements.list"
+  | "achievements.project";
 
 /** guild */
 export type GuildActionId =
-  | 'guild.create'
-  | 'guild.join'
-  | 'guild.leave'
-  | 'guild.members'
-  | 'guild.roles'
-  | 'guild.contribute'
-  | 'guild.fund'
-  | 'guild.treasury'
-  | 'guild.quest.start'
-  | 'guild.quests'
-  | 'guild.tally';
+  | "guild.create"
+  | "guild.join"
+  | "guild.leave"
+  | "guild.members"
+  | "guild.roles"
+  | "guild.contribute"
+  | "guild.fund"
+  | "guild.treasury"
+  | "guild.quest.start"
+  | "guild.quests"
+  | "guild.tally";
 
 /** world */
-export type WorldActionId = 'world.read' | 'world.buildings' | 'world.unlocks' | 'world.upgrade';
+export type WorldActionId =
+  | "world.read"
+  | "world.buildings"
+  | "world.unlocks"
+  | "world.upgrade";
 
 /** Every action id in this build, sorted. The type `act()` is checked against. */
 export type RegisteredActionId =
-  | 'achievements.catalogue'
-  | 'achievements.list'
-  | 'achievements.project'
-  | 'agent.describe'
-  | 'agent.read'
-  | 'animation.pose'
-  | 'battle.create'
-  | 'battle.finish'
-  | 'battle.join'
-  | 'battle.list'
-  | 'battle.read'
-  | 'battle.sweep'
-  | 'battle.weights'
-  | 'bounty.claim'
-  | 'bounty.create'
-  | 'bounty.expire'
-  | 'bounty.fund'
-  | 'bounty.list'
-  | 'bounty.submit'
-  | 'guild.contribute'
-  | 'guild.create'
-  | 'guild.fund'
-  | 'guild.join'
-  | 'guild.leave'
-  | 'guild.members'
-  | 'guild.quest.start'
-  | 'guild.quests'
-  | 'guild.roles'
-  | 'guild.tally'
-  | 'guild.treasury'
-  | 'progression.awards'
-  | 'progression.gate'
-  | 'progression.read'
-  | 'progression.tiers'
-  | 'quest.admin.revoke'
-  | 'quest.claim'
-  | 'quest.create'
-  | 'quest.list'
-  | 'quest.submit'
-  | 'reputation.gate'
-  | 'reputation.read'
-  | 'reputation.tiers'
-  | 'session.create'
-  | 'session.end'
-  | 'session.heartbeat'
-  | 'social.broadcast'
-  | 'social.inbox'
-  | 'social.leaderboard'
-  | 'social.poke'
-  | 'social.profile'
-  | 'social.send'
-  | 'world.buildings'
-  | 'world.read'
-  | 'world.unlocks'
-  | 'world.upgrade';
+  | "achievements.catalogue"
+  | "achievements.list"
+  | "achievements.project"
+  | "agent.describe"
+  | "agent.read"
+  | "animation.pose"
+  | "battle.create"
+  | "battle.finish"
+  | "battle.join"
+  | "battle.list"
+  | "battle.read"
+  | "battle.sweep"
+  | "battle.weights"
+  | "bounty.claim"
+  | "bounty.create"
+  | "bounty.expire"
+  | "bounty.fund"
+  | "bounty.list"
+  | "bounty.submit"
+  | "guild.contribute"
+  | "guild.create"
+  | "guild.fund"
+  | "guild.join"
+  | "guild.leave"
+  | "guild.members"
+  | "guild.quest.start"
+  | "guild.quests"
+  | "guild.roles"
+  | "guild.tally"
+  | "guild.treasury"
+  | "progression.awards"
+  | "progression.gate"
+  | "progression.read"
+  | "progression.tiers"
+  | "quest.admin.revoke"
+  | "quest.claim"
+  | "quest.create"
+  | "quest.list"
+  | "quest.submit"
+  | "reputation.gate"
+  | "reputation.read"
+  | "reputation.tiers"
+  | "session.create"
+  | "session.end"
+  | "session.heartbeat"
+  | "social.broadcast"
+  | "social.inbox"
+  | "social.leaderboard"
+  | "social.poke"
+  | "social.profile"
+  | "social.send"
+  | "world.buildings"
+  | "world.read"
+  | "world.unlocks"
+  | "world.upgrade";
 
 /**
  * Whether a string names an action this build registers.
@@ -155,59 +176,59 @@ export function isRegisteredActionId(value: string): value is RegisteredActionId
 }
 
 export const REGISTERED_ACTION_IDS: readonly RegisteredActionId[] = [
-  'achievements.catalogue',
-  'achievements.list',
-  'achievements.project',
-  'agent.describe',
-  'agent.read',
-  'animation.pose',
-  'battle.create',
-  'battle.finish',
-  'battle.join',
-  'battle.list',
-  'battle.read',
-  'battle.sweep',
-  'battle.weights',
-  'bounty.claim',
-  'bounty.create',
-  'bounty.expire',
-  'bounty.fund',
-  'bounty.list',
-  'bounty.submit',
-  'guild.contribute',
-  'guild.create',
-  'guild.fund',
-  'guild.join',
-  'guild.leave',
-  'guild.members',
-  'guild.quest.start',
-  'guild.quests',
-  'guild.roles',
-  'guild.tally',
-  'guild.treasury',
-  'progression.awards',
-  'progression.gate',
-  'progression.read',
-  'progression.tiers',
-  'quest.admin.revoke',
-  'quest.claim',
-  'quest.create',
-  'quest.list',
-  'quest.submit',
-  'reputation.gate',
-  'reputation.read',
-  'reputation.tiers',
-  'session.create',
-  'session.end',
-  'session.heartbeat',
-  'social.broadcast',
-  'social.inbox',
-  'social.leaderboard',
-  'social.poke',
-  'social.profile',
-  'social.send',
-  'world.buildings',
-  'world.read',
-  'world.unlocks',
-  'world.upgrade',
+  "achievements.catalogue",
+  "achievements.list",
+  "achievements.project",
+  "agent.describe",
+  "agent.read",
+  "animation.pose",
+  "battle.create",
+  "battle.finish",
+  "battle.join",
+  "battle.list",
+  "battle.read",
+  "battle.sweep",
+  "battle.weights",
+  "bounty.claim",
+  "bounty.create",
+  "bounty.expire",
+  "bounty.fund",
+  "bounty.list",
+  "bounty.submit",
+  "guild.contribute",
+  "guild.create",
+  "guild.fund",
+  "guild.join",
+  "guild.leave",
+  "guild.members",
+  "guild.quest.start",
+  "guild.quests",
+  "guild.roles",
+  "guild.tally",
+  "guild.treasury",
+  "progression.awards",
+  "progression.gate",
+  "progression.read",
+  "progression.tiers",
+  "quest.admin.revoke",
+  "quest.claim",
+  "quest.create",
+  "quest.list",
+  "quest.submit",
+  "reputation.gate",
+  "reputation.read",
+  "reputation.tiers",
+  "session.create",
+  "session.end",
+  "session.heartbeat",
+  "social.broadcast",
+  "social.inbox",
+  "social.leaderboard",
+  "social.poke",
+  "social.profile",
+  "social.send",
+  "world.buildings",
+  "world.read",
+  "world.unlocks",
+  "world.upgrade",
 ];

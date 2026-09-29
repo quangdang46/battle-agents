@@ -6,7 +6,6 @@ import { progressionFeature } from '@battle-agents/progression';
 import { questFeature } from '@battle-agents/quest';
 import { reputationFeature } from '@battle-agents/reputation';
 import { socialFeature } from '@battle-agents/social';
-import { worldFeature } from '@battle-agents/world';
 import { createRuntime } from '@battle-agents/core';
 import type { EventBus, GameEvent, Logger, Runtime, StateStore } from '@battle-agents/core';
 import { HANDLER_FAILED, isolateHandlers } from '@battle-agents/api';
@@ -220,7 +219,6 @@ export function createGameRuntime(dependencies: GameRuntimeDependencies): Runtim
       // One line, because the removal test strips a feature by deleting the line
       // that constructs it. `levelOf` and `gate` are hoisted above for exactly
       // that reason, and for the one above theirs.
-      worldFeature({ repository: dependencies.worldStore, levelOf: async (id: string) => (await dependencies.progressionRepository.find(id))?.level ?? 1, gate: (level: number, required: number): boolean => level >= required }),
     ].map((feature) => isolateHandlers(feature, recordFailure)),
     store: dependencies.store,
     bus: dependencies.bus,
