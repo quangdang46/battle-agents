@@ -404,11 +404,12 @@ export class PixiWorldView implements WorldViewLike {
    * tab: the world is already drawing a marker for every zone in this scene, and
    * all that was missing was a way to ask which one a pixel is in.
    *
-   * The radius is in TILES, not pixels, and it is deliberately generous — a
-   * building sprite is much wider than the one cell its marker is keyed to, and
-   * a hit test that is technically correct and feels broken is worse than one
-   * that is a tile generous. The nearest zone wins, so overlapping buildings at
-   * a junction resolve to the one actually under the cursor.
+   * The reach is in TILES and it is NOT generous. 2.5 looked generous and was
+   * wrong: the city places zones four to eight cells apart, and the isometric
+   * projection puts adjacent cells only `tileW / 2` apart on screen, so a
+   * 2.5-tile box covered three grid cells and a click on the Plaza resolved to
+   * the Workshop beside it. Half a tile of slack is enough to forgive a stray
+   * pixel and not enough to steal a neighbour's building.
    */
   /**
    * The zone a CONTAINER point lands on, undoing this view's own transforms.
@@ -424,7 +425,7 @@ export class PixiWorldView implements WorldViewLike {
   zoneAtScreen(
     containerX: number,
     containerY: number,
-    reachTiles = 2.5,
+    reachTiles = 1.25,
   ): { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId } | undefined {
     const scale = this.worldLayer.scale.x || 1;
     const worldX = (containerX - this.root.position.x - this.worldLayer.position.x) / scale;
@@ -432,7 +433,7 @@ export class PixiWorldView implements WorldViewLike {
     return this.zoneAt(worldX, worldY, reachTiles / scale);
   }
 
-  zoneAt(x: number, y: number, reachTiles = 2.5): { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId } | undefined {
+  zoneAt(x: number, y: number, reachTiles = 1.25): { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId } | undefined {
     let best: { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId; distance: number } | undefined;
     for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
       const placement = ZONE_PLACEMENT[zone];
