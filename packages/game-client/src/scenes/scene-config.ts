@@ -50,3 +50,75 @@ export function sceneById(id: SceneId): SceneConfig {
   if (found === undefined) throw new Error(`No such scene: ${id}`);
   return found;
 }
+
+
+/**
+ * ONE city, three districts. The thing this replaces.
+ *
+ * ## Why
+ *
+ * Three `SceneConfig`s meant three worlds that happened to hold the same
+ * characters, and the operator read all three as the same screen. They were: the
+ * same terrain sampler, the same art, the same 101 agents standing in a ring in
+ * each. Switching between them rebuilt a view to show... another copy of the
+ * city, at a different grid size. That is a tab wearing a world, and "the Arena
+ * looks like the City" was not a bug in a feature, it was a description of the
+ * architecture.
+ *
+ * ## What replaces it
+ *
+ * ONE grid, 48x48, with the three places laid out spatially inside it. Travelling
+ * is a CAMERA MOVE, not a rebuild: the store, the socket, the asset cache and
+ * the agent population are the player's, and moving from the Guild Hall to the
+ * Plaza does not take any of that away. That is what `docs/design/game-first-
+ * doctrine.md` section 2 is for, and the three tabs were reading its letter and
+ * not its point.
+ *
+ * The districts are the three old scenes, translated rather than re-authored:
+ *
+ *      +-----------------------+------------------------+
+ *      |      ARENA (north)    |     GUILD HALL (east)  |
+ *      |  kenney-dungeon props |  arcane's six workers  |
+ *      +-----------------------+------------------------+
+ *      |          CODING CITY, the middle                  |
+ *      |   age-of-agents roads, groves, working buildings  |
+ *      +-----------------------+------------------------+
+ *      |  knights | knights | knights                    |
+ *      +-----------------------+------------------------+
+ *
+ * `DISTRICTS` replaces `SCENES`. The doors in `DOORWAY_PLACEMENT` become
+ * ordinary cells in a city that is large enough to have room for them, so the
+ * "a doorway you cannot reach because a neighbouring zone wins the hit test"
+ * failure cannot recur: there is one coordinate space and one answer, and it is
+ * where the building is.
+ */
+export interface District {
+  readonly id: SceneId;
+  readonly label: string;
+  /** Grid cell this district is entered at. */
+  readonly gx: number;
+  readonly gy: number;
+}
+
+/** The one city. 48x48, because three places need room and one needs a road. */
+export const CITY_GRID = { w: 48, h: 48 } as const;
+
+export const DISTRICTS: readonly District[] = [
+  { id: 'arena', label: 'Arena', gx: 10, gy: 8 },
+  { id: 'guild-hall', label: 'Guild Hall', gx: 34, gy: 8 },
+  { id: 'city', label: 'Coding City', gx: 24, gy: 26 },
+];
+
+/** The district a cell belongs to, by proximity -- nearest, so roads decide. */
+export function districtAt(gx: number, gy: number): District {
+  let best: District = DISTRICTS[2]!;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const district of DISTRICTS) {
+    const distance = Math.hypot(district.gx - gx, district.gy - gy);
+    if (distance < nearest) {
+      nearest = distance;
+      best = district;
+    }
+  }
+  return best;
+}
