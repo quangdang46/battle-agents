@@ -27,6 +27,7 @@ import { skyTint } from './sky.js';
 import { terrainSampler } from './terrain-map.js';
 import { scatterDecorations } from './decorations.js';
 import { pointOnRoad, roadCurves, type RoadNode } from './roads.js';
+import { DOORWAY_PLACEMENT } from './doorways.js';
 import type { SceneId } from '../scenes/scene-config.js';
 import { MESSAGE_ARC_TTL_MS, type MessageArc } from './message-flow.js';
 import { placeProps, SCENE_PROPS } from './props.js';
@@ -435,13 +436,27 @@ export class PixiWorldView implements WorldViewLike {
 
   zoneAt(x: number, y: number, reachTiles = 1.25): { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId } | undefined {
     let best: { zone: keyof typeof ZONE_PLACEMENT; label: string; scene: SceneId; distance: number } | undefined;
-    for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
+    // Every cell this scene can be clicked on: its own zones, plus a doorway per
+    // other scene at that door's OWN cell.
+    //
+    // The doorway is NOT at the zone's own coordinates, and that is the whole
+    // fix. `guild-hall` sits at (12,10) and the city's `messaging` at (10,12) --
+    // two cells apart on a diagonal, which the isometric projection squeezes to
+    // a few pixels -- so the city's own zone always won the hit test and the
+    // doorway was never clickable. A place you cannot reach is a label, and this
+    // was one wearing a building's sprite.
+    type ZoneKey = keyof typeof ZONE_PLACEMENT;
+    type Cell = { gx: number; gy: number };
+    const clickable: [ZoneKey, Cell][] = [
+      ...(Object.keys(ZONE_PLACEMENT) as ZoneKey[])
+        .filter((zone) => ZONE_PLACEMENT[zone].scene === this.#scene.id)
+        .map((zone): [ZoneKey, Cell] => [zone, { gx: ZONE_PLACEMENT[zone].gx, gy: ZONE_PLACEMENT[zone].gy }]),
+      ...(Object.entries(DOORWAY_PLACEMENT) as [ZoneKey, Cell][]),
+    ];
+    for (const [zone, cell] of clickable) {
       const placement = ZONE_PLACEMENT[zone];
-      // NOT filtered by scene. A zone belonging to another scene is a
-      // doorway -- the Guild Hall is a building in the city you walk into, not
-      // a tab you press -- and a doorway you cannot reach is a label. This is
-      // the line the three tabs drew and this does not.
-      const at = this.#projection.toScreen(placement.gx, placement.gy);
+      if (placement === undefined) continue;
+      const at = this.#projection.toScreen(cell.gx, cell.gy);
       // Compared in SCREEN distance, not grid distance: the two scales the
       // projection uses differ by a factor of two, and a grid comparison would
       // make a hit box twice as tall as it is wide.
@@ -1048,10 +1063,10 @@ export class PixiWorldView implements WorldViewLike {
    * zone that happens to be far away.
    */
   #drawDoorways(): void {
-    for (const zone of Object.keys(ZONE_PLACEMENT) as (keyof typeof ZONE_PLACEMENT)[]) {
-      const placement = ZONE_PLACEMENT[zone];
-      if (placement.scene === this.#scene.id) continue;
-      const at = this.#projection.toScreen(placement.gx, placement.gy);
+    for (const [zone, door] of Object.entries(DOORWAY_PLACEMENT)) {
+      const placement = ZONE_PLACEMENT[zone as keyof typeof ZONE_PLACEMENT];
+      if (placement === undefined || placement.scene === this.#scene.id) continue;
+      const at = this.#projection.toScreen(door.gx, door.gy);
       const texture = this.#cache.get(spriteKey('zone-marker', paletteIndexFor(zone), zone));
       if (texture === undefined) continue;
       const marker = new Sprite(texture);
