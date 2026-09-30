@@ -5,16 +5,23 @@
 | # | Tài liệu | Nói gì |
 |---|---|---|
 | 0 | **[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)** | **Còn gì chưa biết, đo bằng cách nào, và phải chọn gì trước khi code.** Bắt đầu ở đây |
+| 0.25 | **[TERMINOLOGY-沙雕.md](TERMINOLOGY-沙雕.md)** | **Chốt thuật ngữ.** 沙雕 là slang "ngớ ngẩn", **KHÔNG phải cát** |
 | 0.5 | **[REFUTATIONS.md](REFUTATIONS.md)** | **Những chỗ nghiên cứu ĐẠO LỘ đã tự đánh lưa mình.** Đọc trước hai tài liệu dưới |
 | 1 | **[GENRE-CANON.md](GENRE-CANON.md)** | **Vực của thể loại.** 12 cụm từ vựng được miễn phí · 41 hệ thống và trạng thái mỗi cái · 15 ràng buộc cứng · 20 cái đừng copy · 9 khoảng trống |
 | 2 | **[RPG-SUBSTRATE.md](RPG-SUBSTRATE.md)** | **Chất nền RPG.** Cây vật phẩm · 16 cách làm tiến trình thành hữu hình · 20 chỉ số và cái nào là scalar trong áo · 25 thứ mọi game đều làm giống nhau |
-| 3 | **[RECONCILIATION.md](RECONCILIATION.md)** | Đóng sáu mâu thuẫn của báo cáo đầu. **Vẫn đọc** — đơn vị lượt ở đây chưa thực sự lan sang `DESIGN-REPORT.md` |
-| 4 | **[DESIGN-REPORT.md](DESIGN-REPORT.md)** | Báo cáo 267k ký tự, 8 section. Phần 0 là phản biện, đọc nó trước phần 1. **Nhiều phần đã bị đợt 1–2 sửa hoặc bác bỏ** |
-| 5 | [.research/full-report-critic.md](.research/full-report-critic.md) | Phản biện nguyên văn đợt 1, không diễn giải |
-| 6 | [AGENT-PLAYER-DESIGN.md](AGENT-PLAYER-DESIGN.md) | Sáu thay đổi khi agent là người chơi |
-| 7 | [DAU-LU-NHAN-VAT-COT-TRUYEN.md](DAU-LU-NHAN-VAT-COT-TRUYEN.md) | Nhân vật và cốt truyện chương 1, viết cho **người** |
-| 8 | [STORY-SAND-NARRATIVE.md](STORY-SAND-NARRATIVE.md) | Cốt truyện tu tiên qua điêu khắc cát. Có nguồn |
-| 9 | [ART-DIRECTION-SAND.md](ART-DIRECTION-SAND.md) | Ngôn ngữ hình ảnh. **CHƯA NGHIÊN CỨU** — và ít nhất 4 phán quyết trong đó đã bị đợt nghiên cứu sau bác bỏ |
+| 3 | **[ART-DIRECTION-SHADIAO.md](ART-DIRECTION-SHADIAO.md)** | **Hướng nghệ thuật — 沙雕修仙动画.** Cơ chế chuyển hình, câu hỏi nghiên cứu, cây breakdown, ba lớp corpus. **CHƯA NGHIÊN CỨU** |
+| 4 | **[RECONCILIATION.md](RECONCILIATION.md)** | Đóng sáu mâu thuẫn của báo cáo đầu. **Vẫn đọc** — đơn vị lượt ở đây chưa thực sự lan sang `DESIGN-REPORT.md` |
+| 5 | **[DESIGN-REPORT.md](DESIGN-REPORT.md)** | Báo cáo 267k ký tự, 8 section. **ĐÃ BỊ THAY THẾ MỘT PHẦN** bởi ba đợt nghiên cứu; phần 0 là phản biện, đọc nó trước phần 1 |
+| 6 | [.research/full-report-critic.md](.research/full-report-critic.md) | Phản biện nguyên văn đợt 1, không diễn giải |
+| 7 | [AGENT-PLAYER-DESIGN.md](AGENT-PLAYER-DESIGN.md) | Sáu thay đổi khi agent là người chơi |
+| 8 | [DAU-LU-NHAN-VAT-COT-TRUYEN.md](DAU-LU-NHAN-VAT-COT-TRUYEN.md) | Nhân vật và cốt truyện chương 1, viết cho **người** |
+
+### Đã xoá
+
+`ART-DIRECTION-SAND.md` và `STORY-SAND-NARRATIVE.md` — nghiên cứu về **沙画** (hội họa trên cát).
+Đã xoá vì đặt nhầm tầng. **Ba thứ trong đó được giữ lại** trong `TERMINOLOGY-沙雕.md` §Nguồn: tiền lệ
+thương mại (game tu tiên 《以仙:name》 dùng 角色群像沙画), nguyên văn về cơ chế dựng→xoá, và
+con số thật của người làm.
 
 ---
 

@@ -75,7 +75,7 @@ AI/automated voice; số khác phức tạp hơn.
 
 | Từ | Nghĩa | Là gì | Tài liệu |
 |---|---|---|---|
-| **沙画** | 沙 + 画 = hội họa trên cát | Nghệ thuật biểu diễn: bảng kính đèn + cát thạch anh + camera + chiếu. Có **nghệ sĩ, tác phẩm, thời lượng thật** | `ART-DIRECTION-SAND.md`, `STORY-SAND-NARRATIVE.md` |
+| **沙画** | 沙 + 画 = hội họa trên cát | Nghệ thuật biểu diễn: bảng kính đèn + cát thạch anh + camera + chiếu. Có **nghệ sĩ, tác phẩm, thời lượng thật** | đã xoá — phần còn dùng ở §Nguồn
 | **沙动画** | 沙动画 = hoạt hình cát | Một thứ thứ ba: **hoạt hình定格** dùng cát. Đưa 方浪浪 lên CCTV Spring Festival Gala 2018 | — |
 | **沙雕动画** | slang: ngớ ngẩn | **Thể loại animation hài/absurd.** Và nó **ngập trong tu tiên** | tài liệu này |
 
@@ -85,13 +85,14 @@ Ba cái này dùng **cùng một âm tiết** và không liên quan gì đến n
 
 ## 5. Điều này thay đổi gì, và điều này không thay đổi gì
 
-**Đổi:** hướng nghệ thuật. `ART-DIRECTION-SAND.md` và `STORY-SAND-NARRATIVE.md` nói về **沙画**,
-và chúng có nguồn thật (方浪浪 的 《鲛人》 và 《红楼梦》 8分57秒; 茗喆S + 方浪浪 的 角色群像沙画
-cho game 《以仙之名》). **Nếu hướng là 沙雕, hai tài liệu đó mô tả một phương tiện khác.**
+**Đổi:** hướng nghệ thuật. Hai tài liệu nghiên cứu **沙画** đã bị **xoá khỏi kho**, vì chúng
+mô tả một phương tiện ta không dựng. Chúng có nguồn thật (方浪浪 的 《鲛人》 và 《红楼梦》
+8分57秒; 茗喆S + 方浪浪 的 角色群像沙画 cho game 《以仙:name》) — **những phần còn dùng được nằm
+ở §Nguồn dưới, và ba phần đó không mất.**
 
-**Không đổi:** cơ chế. Nghiên cứu về 沙画 đã tìm và kiểm chứng được một thứ **đúng bất kể phương
-tiện nào**: hình **được dựng lên rồi xoá đi trước mắt người xem**, và không ai — kể cả agent —
-biết nó từng tồn tại.
+**Không đổi: cơ chế chuyển hình.** Nghiên cứu về 沙画 đã tìm và kiểm chứng được một thứ **đúng
+bất kể phương tiện nào**: dựng lên → **xoá** → **thay bằng trạng thái kế**, và không ai — kể cả
+agent — biết trạng thái trước đã tồn tại.
 
 > 「将画好的画盖掉，是为了**后面更好地呈现**。这在别人看来可能是悲凉的，但在我看来**这才是沙画
 > 生命力所在**。」 — 沙画界「後浪」方浪浪
@@ -100,8 +101,17 @@ Và kỹ thuật lõi nằm **không phải lúc vẽ, mà là lúc xoá**:
 
 > 「沙动画精妙之处在于**擦除沙子时的衔接设计**。」
 
-Cơ chế đó là `扮猪吃虎` **diễn ra thị giác**, và nó đứng độc lập với việc dùng cát hay không
-dùng cát. **Đừng xoá cơ chế vì đổi phương tiện.**
+**Sửa một chỗ tôi đã gộp nhầm.** Đây là **hai khái niệm khác nhau**, và chúng được ghép lại
+sai:
+
+| | Là gì |
+|---|---|
+| **`扮猪吃虎`** | **một trope kể chuyện** — giả yếu để che giấu thực lực |
+| **dựng → xóa → thay trạng thái** | **một cơ chế chuyển hình thị giác** |
+
+Chúng **kết hợp được** và trong game này chúng nên kết hợp — nhưng **không phải cùng một khái
+niệm**, và không nên gọi cái này bằng tên cái kia. `扮猪吃虎` là thứ **agent chơi**, và ở đây nó
+được chơi bằng `Scope` chứ không bằng pixel.
 
 ---
 
@@ -121,3 +131,23 @@ dùng cát. **Đừng xoá cơ chế vì đổi phương tiện.**
 - iQIYI: 沙雕动画《天生无心，逆天成混沌圣体》 — 搞笑 + 修仙热血
 - Wikipedia (EN): Sand animation — **kỹ thuật cát thật trên kính, từng khung hình**, tức
   chính thứ mà ta **không** muốn
+
+### Bằng chứng cần giữ lại từ nhánh 沙画
+
+Hai tài liệu nghiên cứu 沙画 đã bị xoá khỏi kho. Ba thứ trong đó **không mất được**, vì sản
+phẩm vẫn dùng:
+
+1. **Tiền lệ thương mại** — game tu tiên 《以仙:name》 (小牛互娱, 2021) đã dùng **角色群像沙画**
+   do **茗喆S + 方浪浪** vẽ để quảng bá: mở đầu bằng thế giới quan và **仙魔大战**, rồi từng
+   nhân vật hiện ra kèm một câu tự trình. ⇒ **Tu tiên + ngôn ngữ hình ảnh này đã có người mua.**
+   Đây là bằng chứng thương mại mạnh nhất của nhánh 沙画, và nó **không biến mất** vì việc
+   ta không dựng cát.
+
+2. **Cơ chế §5 ở trên** — nguồn nguyên văn của 方浪浪 vẫn được trích đầy đủ.
+
+3. **Nghệ sĩ 沙画 là người thật** — 方浪浪 tự học, lên CCTV Spring Festival Gala 2018, và bài
+   `红楼梦` của ông dài **8 phút 57 giây**, mất **15 ngày**. Cùng nguồn ghi: 「几分钟的一幅画，
+   往往要花费几天的时间去琢磨」 — và ông **không cắt**: 「这8分57秒少一秒就少一分韵味」.
+
+Nhánh 沙画 là **một phương tiện thật, có người thật, có sản phẩm thật, và có khách hàng thật**.
+Việc ta không dựng nó không làm nó sai; và bằng chứng của nó vẫn dùng được cho §5.

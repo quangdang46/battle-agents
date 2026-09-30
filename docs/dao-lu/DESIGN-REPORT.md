@@ -1,3 +1,25 @@
+# ⚠️ TÀI LIỆU LỊCH SỬ — MỘT PHẦN ĐÃ BỊ BÁC BỎ, MỘT PHẦN ĐÃ SAI
+
+> Bản đầy đủ của nó vẫn ở `.research/full-report.md`. Bản này là bản biên tập có phần 0.
+>
+> **Đừng dùng nó làm nguồn chân lý.** Nó đã bị ba đợt nghiên cứu (109 agent, 16,7M subagent
+> token) đọc ngược lại. Cụ thể:
+>
+> · **§4 §3 — "đóng khung theo khu vực, phủ định canvas vô hạn" — SAI.** Nó dựa trên
+>   `ART-DIRECTION-SAND.md`, nghiên cứu về **沙画** (hội họa trên cát). Hướng nghệ thuật thật là
+>   **沙雕修仙动画**, và canvas vô hạn đã có sẵn + có test. **Xem `TERMINOLOGY-沙雕.md`.**
+> · **Các con số trong §11 "Danh sách số phải khớp"** — chính §12 thừa nhận không có nguồn.
+> · **Nhiều claim ở Phần 1–3 đã bị đổi đơn vị** khi `RECONCILIATION.md` chốt lượt là đơn vị
+>   duy nhất. Số của §2.2 chia lại 4 nếu `TURN_WALL_SECONDS` là 30 chứ không phải 120.
+>
+> **Dùng thay bằng**: `GENRE-CANON.md` · `RPG-SUBSTRATE.md` · `OPEN-QUESTIONS.md` ·
+> `REFUTATIONS.md`. Đọc `REFUTATIONS.md` **trước**, vì nó ghi những gì đã bị bác.
+>
+> **`ART-DIRECTION-SAND.md` và `STORY-SAND-NARRATIVE.md` đã bị xoá.** Các trích dẫn tới chúng
+> trong văn bản này là tham chiếu lịch sử, không phải nguồn còn tồn tại.
+
+---
+
 # ĐẠO LỘ: VẠN TIÊN — Báo cáo thiết kế
 
 **8 section, 9 agent, 1,58M subagent token.** Mỗi section 25.000–50.000 ký tự, viết
