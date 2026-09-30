@@ -42,6 +42,7 @@ viết vào đây**, không mở file mới.
 | [13](#13-báo-cáo-gốc--phần-còn-dùng) | Báo cáo gốc — phần còn dùng |
 | [14](#14-chốt-thuật-ngữ--đầy-đủ) | Chốt thuật ngữ |
 | [15](#15-tiền-lệ-đã-ship--4thfevercultivation-world-simulator) | **Tiền lệ đã ship** — một thế giới tu tiên toàn Agent LLM, free trên Epic. Xác nhận cả hai câu hỏi mở của ta |
+| [16](#16-ba-tầng-còn-trống--sự-kiện-nhân-quả-sinh-truyện-ngữ-pháp-hài) | **Ba tầng còn trống** + **mười tám điều phải rút lại**. Kết quả lớn nhất không phải một thiết kế mà là một danh sách rút lại |
 
 ---
 
@@ -3962,3 +3963,191 @@ thiết kế, mà là những test sẽ đỏ nếu ta ship scalar.**
 Critic đã clone về và kiểm **~40 trích dẫn** trên source; số dòng phần lớn đúng tuyệt đối.
 Sáu trong bảy kết luận của bản so sánh cần sửa, và các sửa đổi hướng của cả hai vế trong
 §15.10.
+---
+
+# 16. Ba tầng còn trống — sự kiện nhân quả, sinh truyện, ngữ pháp hài
+
+> **✅ ĐÃ NGHIÊN CỨU. 18 agent, 2,0M subagent token.** 8 cụm × (đọc + skeptic), rồi tổng hợp
+> và critic.
+
+## 16.1 Kết quả thật: hai tầng **không có tiền lệ nào đã ship**, tầng thứ ba chỉ có tra bảng
+
+Và sản lượng lớn nhất của đợt này **không phải một thiết kế — nó là một danh sách rút lại**:
+**mười tám thứ** mà dự án này từng coi là canon thể loại, hoặc là chuẩn do tự ta đặt ra,
+**hóa ra là** thói quen của một studio Bilibili, một đoạn "Interpretation" hậu kỳ của một bài
+báo, một danh sách biệt danh trên wiki fan, một bản scrape của bên thứ ba in lại sáu lần
+**với lỗi chính tả giống hệt**, hoặc một tuyên bố sở hữu **bịa**.
+
+### Mười tám điều phải rút lại
+
+| # | Điều đã từng khẳng định | Thực tế |
+|---|---|---|
+| 1 | *"A running gag works on a lag, not a repeat count"* | Không phải Topolinski. Nghiên cứu đó **phơi trước TỪ** của punchline ở 0/1/15 phút và chấm độ hài của một câu một dòng — **không** so sánh số lần lặp, **không** thử running gag. Thêm nữa kết quả phía setup là **NULL** — *phơi trước đầu joke một phút trước không ảnh hưởng độ hài* — bị biến thành một **lệnh cấm** |
+| 2 | *"Mỗi beat hài phải là MỘT khung tương phản siết chặt; loại đa khung"* | Là **Appendix F.1** của Multi-Agent Comedy Club dưới tiêu đề literal **「Interpretation」** — bác đọc hậu kỳ **một** màn thoại thảo luận. **Số khung chưa bao giờ bị thao túc.** Không có nhánh thử nghiệm đơn-khung-vs-đa-khung. Đây là giả thuyết mà lại là quy tắc thiết kế chịu tải nặng nhất |
+| 3 | *"Một cảnh giới đúng bằng 50 lượt sống sót"* | `attemptBreakthrough` chỉ kiểm `isDead` và cấp tối đa — **không có chốt điểm hành động**. Chốt AP nằm ở đường **UI web** và MCP tool **không bao giờ** gọi tới. Agent phá thông ở lượt 1 với AP 50. Hai luật còn **loại trừ nhau** |
+| 4 | *"Thất bại đột phá cộng +0.05"* | Đó là **chuỗi hiển thị** hardcoded, bị đọc như cơ chế. Đường thật là `成功率变化 ['增加','中等'] → 基础值 [3,3] → 3 × levelDifficulty/100`, tức **0,03 ở 炼气**. **Con số hiển thị sai ở mọi cảnh giới** |
+| 5 | *"Đúng 10 điểm attribute lúc tạo, có thực thi"* | `AttributePointsValidationSchema` **không được tham chiếu ở đâu** — **code chết**. Đường tạo nhân vật thật là ba `\|\| 0` độc lập. MCP tool cho phép **0/0/0** hoặc **10/10/10**. **Đúng cái mẫu "một gate không thể đỏ tệ hơn không có gate" mà chính AGENTS.md của repo đó cấm** |
+| 6 | *"Không gì trong corpus xếp hạng con người bằng một con số"* | **Sai.** 从容原研会 đã đăng ít nhất bốn video 灵血修仙 战力梯度 / 综合实力排名 (12,4万 · 9,7万 · 12,4万 lượt), cộng một bộ 人物志 riêng. Phát biểu trung thực: 沙雕修仙 **không nội tại là** power-scalar, nhưng **fandom và người biên tập phổ biến nhất của nó đều tiêu thụ và sản xuất bảng xếp hạng sức mạnh ở quy mô lớn** |
+| 7 | *"Tiền đề thống trị của thể loại là save/load, chiếm nửa top 60"* | Bị bác **ngay trong bảng 2025 của chính người biên tập đó** — tầng 必看神作 **không có tác phẩm mô phỏng nào**. Đếm danh sách 60 mục nguyên văn: **~8/58 (14%)** |
+| 8 | *"沙雕修仙 hàng đầu là original, 8/9 không có 原著"* | Dựa trên **1 mục truy ngược và 7 mục CHƯA TÌM**, rồi **đánh dấu là phát hiện chứ không phải lỗ hổng**. Bỏ sót cả một tầng 漫改 có chuyên mục; và mục đã truy ngược thì **ngược**: 灵血修仙传 có thật, trên 起点, **9,14万字, đã bị gỡ**, và một người đọc nói biên tập từ chối ký |
+| 9 | *"Thể loại không bắt nguồn từ tu tiên"* | 萌娘百科 có nói, nhưng report **đọc vị trí của `沙雕动画` trong danh sách 俗稱 (tên gọi thông dụng)** cạnh 三年动画 và 伪国产动画 như bằng chứng cho một **nhóm chi phí sản xuất**. **Đó là một danh mục tên gọi.** Đúng trạng thái: **CỘNG ĐỒNG TUYÊN BỐ**, trên một wiki fan không trích nguồn |
+| 10 | *"Người xem cần NHIỀU thông tin hơn người chơi"* | Một trong hai là **chú thích của Hình 7.26** trong luận văn Chalmers — một **mô phỏng Photoshop**. Còn lại là **MỘT BÌNH LUẬN REDD VÔ DANH**. Và chính trong thread đó các tác giả nói: *"This is basically just Photoshop mock ups… we probably won't have time to do it for real."* **Chưa bao giờ xây, chưa bao giờ thử trong game.** Hướng dẫn alpha của chính luận văn nói **ngược lại** |
+| 11 | *"Người xem thấy mối nối thì ngừng tin, ngừng tin thì không cười"* | Dựa trên **một bản scrape bên thứ ba**. Bài đó làm hỏng ít nhất ba mục theo hai kiểu khác nhau (tên trống, mảnh câu, mất ô hiếm), và **SÁU TRANG mang nó nguyên văn với LỖI CHÍNH TẢ GIỐNG HỆT**. Report đọc sự trùng lặp đó là **"đã đối chiếu với hai nguồn độc lập"**. **Đó là một bài, không phải xác nhận chéo** |
+| 12 | *"Người quan sát là một người kể chuyện"* | **Một người** (sapphiRe) trong **một** bài PC Gamer, khái quát hoá ra CS:GO, Dota 2, StarCraft II và Valorant. Một mô tả công việc, trích một lần |
+| 13 | *"Warren & McGraw 2016 VÀ 2021 cho thấy…"* | **Cùng một phòng thí nghiệm, cùng một lý thuyết vi phạm lành tính.** Bài 2021 là **đánh giá tiền nhân theo cấu trúc**. **Một chương trình nghiên cứu, hai ô bằng chứng** |
+| 14 | *"benchmark của chính chúng ta — WSE-bench (2608.15654) và NCP-Bench (2608.08160)"* | **Cả hai là bài arXiv của đội khác.** `grep` toàn `docs/` trả về **ZERO** lần xuất hiện. **Tuyên bố sở hữu bịa** — đúng lỗi tần suất mẫu mà đợt này được lập ra để chặn. **Đây là lần thứ tư trong phiên này tôi tự tạo ra một chi tiết và bị bắt.** |
+| 15 | *"Seam log→prose luôn có"* | **Năm loại artefact trong corpus của chính report, ba loại không có lớp văn xuôi nào** (Agentopia, Generative Agents, 2404.17027). Seam có ở **đúng bốn nguồn được nêu tên** |
+| 16 | *"沙雕 chuẩn ngành = tập Bilibili 5–6 phút, sản xuất 5 năm, tự viết, không nhận tiền"* | **Một nửa đúng, và nửa kia là một ngành khác.** 甜宠沙雕 là một trong **ba 顶流题材** của 微短剧 ở **68% TOP100**, nơi một series là **1–3 phút × ~100 tập và mất 20 NGÀY**. **Ngữ pháp thương mại chi phối của từ 沙雕 không phải cái dự án này đang thiết kế đối diện** |
+| 17 | *"AI漫剧 và 沙雕漫剧 là một pipeline"* | **Thư viện IP chính thức của 抖音** cấp phép 仿真人 / 2D / 3D / 表情包 / **沙雕漫剧**, và **cấm tường minh** 动态漫、静态解说漫 và **AIGC 纯推书视频**. **Nền tảng đang vẽ đường ranh GIỮA các nghĩa của chính từ đó** |
+| 18 | *"红袖读书 và QQ阅读 là hai nền tảng nên năm tiểu thuyết là năm phân tích độc lập"* | **Một công ty**: cả hai là sản phẩm 阅文集团. Lặp lại trong phân loại thể loại nội bộ của **một nhà xuất bản** không phải lặp lại độc lập |
+
+## 16.2 Bảng corpus **không dựng được** — và đó chính là phát hiện
+
+Không phải vì thiếu cố gắng. Ba thất bại độc lập, đã có nguồn:
+
+1. **Thể loại tự viết một nửa ngay từ tài khoản khai sinh.** 萌娘百科, nguyên văn: bùng nổ đến từ
+   「有人将番茄小说网以及起点中文网等小说网站上的小说改编成沙雕动画」, và chủ đề chuyển sang
+   「改编各类…修仙…类网络小说**或是自写此类剧情**」. **Thích nghi và tự viết được nêu là hai
+   nguồn ngang hàng trong câu định nghĩa thể loại.** ⇒ một bảng có cột `原著` **về cấu trúc
+   không có dòng cho một nửa corpus**.
+2. **Chuyển thể là một tầng có chủ đề, có người tuyển, có mục lục — bốn video về nó tồn tại**
+   trong đúng kênh mà đợt này dùng, và **đợt này không báo cáo cái nào**.
+3. Đợt này **sai ở mục duy nhất nó truy ngược được**: xem #8 ở bảng trên.
+
+## 16.3 Quy tắc hài **duy nhất** có vận hành được — và nó không đến từ bài báo
+
+Nó đến từ **cẩm nang viết kịch bản của chính bên cấp vốn**: 红果短剧官方《短剧编剧教程》05.
+
+- 「**前30秒定生死**」 — quy tắc được ngành công nhận
+- tập 1分30秒 chia ba khối 30 giây: **đầu** tạo lý do dừng lại · **giữa** đẩy truyện, châm công
+  chất · **cuối** cắm móc chặn tập sau
+- một arc 80–100 tập: 窗口期 — 发展期 — 收束期, với 第1-10集 là **黄金窗口期**
+- **避坑 rule 04**: 「女主角这集不小心打坏一个古董花瓶，下集又失手弄坏一件名贵首饰，本质都是
+  **'损坏贵重物品'**，这就是重复，观众会腻的」
+
+> **LUẬT: LOẠI BEAT PHẢI ĐỔI; VẬT THỂ BỀ MẶT ĐƯỢC LẶP.**
+
+Cùng quan hệ trên **vật thể mới** là **running gag**; cùng quan hệ trên **cùng vật thể** là
+**repetition**. Trong ví dụ trên, bình trắng rồi trang sức là **lặp**; bình trắng rồi trang sức
+rồi ấm trà là **running gag**.
+
+⇒ **Mã hoá quan hệ, không mã hoá vật thể.** Đó chính là ranh giới mà ta còn thiếu.
+
+**Và vì sao beat nằm ở đó**: 「爽点 = 充值点」. 「那些小说在创作时也会设置'付费点'，就像现在
+短剧的充值点。这是一脉相承的」. **Vị trí của beat hài là một hàm của ví tiền người xem.**
+
+**Hai đơn vị cho cùng một beat**: 薛静 (Thanh Hoa) về hình thức tiểu thuyết —
+「付费网文是连载模式，所以它也要 **3000字一个小高潮，5000字一个大高潮**」. Tính bằng **giây**
+cho short drama, bằng **ký tự** cho tiểu thuyết. **Của ta là LƯỢT. Lần chuyển đổi thứ ba,
+chưa ai làm.**
+
+**Định nghĩa 沙雕 quan trọng nhất** — 新浪 YY: 「无厘头天然呆，**没有自觉的卖蠢**」.
+*Vô đầu điển, bán dốt **mà không tự biết mình đang bán dốt.***
+
+## 16.4 Seam log → prose: có ở **đúng bốn nguồn**, và mỗi cái có tên riêng
+
+| Nguồn | Hình dạng |
+|---|---|
+| **StoryBox** (arXiv 2510.11618, AAAI 2026) | 6 nhân vật, bước 1 giờ, 7 ngày ≈ 4 giờ trên một GTX 3090, GPT-4o mini, sqlite3, FAISS dim 512. Một Storyteller Agent **mỗi persona mỗi ngày**, lên kế hoạch chương từ trên xuống, truy hồi trên log bằng keyword **và** embedding |
+| **Bardic** (AIIDE 2017, trích 27 lần) | Log DOTA 2 → Impulse → lập kế hoạch diễn thoại → SimpleNLG |
+| **The Null Epoch** (Firespawn, ToS 2026-02-18, đang chạy) | Chronicle phía server, 60s tick, *"pulling from their recent event log, faction, class, personality, and backstory"* |
+| **SimToProse** | Engine tất định, LLM **bị rào** chỉ được hành động và viết |
+
+**Không có nó**: Agentopia (state + cây memory + scalar thưởng đời), Generative Agents (không gì
+được viết ra), 2404.17027 (sinh node-graph, và 28 agent của nó là **người chơi người thật**).
+
+⇒ Phát biểu trung thực: **Ở đâu có hệ thống sinh văn xuôi từ hành vi agent, bước log→prose là một
+thành phần được đặt tên riêng.** Không phải "luôn có" — corpus của chính report bác điều đó.
+
+**Và Bardic tự gọi tên chế độ hỏng của nó rồi ship nó**: nó hỗ trợ **đúng bốn cliché viết tay**
+và rơi về *"a story that simply enumerates all actions in a given sequence"*. **Bảng 1 của nó
+CHÍNH LÀ chế độ thất bại, được ship như trường hợp bình thường.**
+
+## 16.5 Cái lấy được: bộ chọn bị ràng buộc
+
+Từ `ocs`, và đây là artefact dùng được nhất của đợt này:
+
+```
+code dựng tập ứng viên  →  LLM chỉ CHỌN  →  code chuyển lựa chọn về một ứng viên thật
+                          →  code SỞ HỮU transition  →  LLM chỉ viết văn xuôi
+```
+
+`buildIntentCandidates` (L2263) lọc theo trạng thái phe · `chooseHeuristicIntent` (L2443) là
+fallback **tất định** · `resolvePlannedIntent` (L2625) ánh xạ kế hoạch về lại tập ứng viên.
+
+Đây là **nửa đúng** của bản sửa phân tầng ta vừa làm. LLM **không có kênh nào** trả về state.
+
+**Và một đường rò đáng giữ như cảnh báo**: một helper sắp xếp trong UI (`ocs factionSystem.ts:1303`)
+lan vào world-gen, phân công nhân vật và **tiến trình của chính người chơi** mà không ai quyết
+định như vậy. `deriveGoalProgress = 55 - rankingIndex*9 + contribution*2 + trust/3`.
+
+## 16.6 Mười rủi ro — và cái số đáng sợ nhất
+
+| # | Rủi ro | Bằng chứng |
+|---|---|---|
+| 1 | **LLM sẽ không hợp tác, và mọi cơ chế ở cả ba tầng đều là cơ chế phối hợp** | **HiddenBench** (arXiv 2505.11556): **30,1%** độ chính xác multi-agent với thông tin phân tán, so **80,7%** single-agent với thông tin đầy đủ. **Ta đang xây đúng cấu hình thông tin phân tán, và thấp hơn 50 điểm.** Xác suất thất bại không phải là thế giới chán — mà là thế giới nơi mỗi agent tối ưu đúng một mình và hành vi nổi lên là nhiễu |
+| 2 | **Tầng truyện cần một sự toàn tri mà ta không thể tạo ra trung thực** | Zhou, Su, Eisape, Kim & Sap, EMNLP 2024 (arXiv 2403.05020): chế độ **SCRIPT toàn tri** báo cáo thành công mục tiêu xã hội **cao hơn hẳn** chế độ **AGENTS bất đối xứng thông tin**. **Ta bắt buộc dùng chế độ điểm thấp hơn.** Không phải bài toán tinh chỉnh. **Đây là quyết định thiết kế trung tâm, không có tiền lệ, và phải làm trước khi viết tầng truyện** |
+| 3 | **Người xem đến không có trí nhớ, và log là tất cả những gì ta có** | Có thể có 10.000 lượt tồn đọng. Gospel của Qud đúng hình dạng, nhưng phụ thuộc hoàn toàn vào **một định dạng event→record ổn định sống được một năm**. Nếu schema trôi, gospel mất khả năng đọc. **Đây là rủi ro di cư dữ liệu mặc áo chi phí UX.** Và là **xung đột giáo lý chưa giải quyết**: màn quan sát thành công nhất đã ship là **một màn hình riêng** — đúng thứ `/ is the game` cấm |
+| 4 | **Sai lầm con rối đôi, đúng hình dạng của ta** | Agent bên ngoài trong `ocs` là **OPERATOR, không phải người chơi**: bảy tool, **một** động từ hướng thế giới, payload `choice: z.string().min(1)`, khớp chuỗi chính xác. Tệ hơn: `preloadNextOptions` chạy **một `pushGame` đầy đủ — một lời gọi LLM, một ghi DB, và một lượt thế giới phe — CHO MỖI LỰA CHỌN, TRƯỚC KHI NGƯỜI CHƠI CHỌN.** **PHÉP THỬ: lựa chọn của agent có phải thứ mà code KHÔNG thể viết ra không? Nếu không, agent chỉ là một con trỏ chuột** |
+| 5 | **Hài sẽ được viết tay, và ta sẽ nhầm là nổi lên** | Trường hợp 社死: nhiệm vụ phi lý **bị ÉP** — 「由【情绪价值系统】**强制发布**社死任务」. Một hệ thống phát nhiệm vụ phi lý; các tu sĩ hiểu lầm. **Đó là hàng đợi nhiệm vụ hài viết tay, và không phân biệt được với nổi lên ở đầu ra.** **CHỐT CẤU TRÚC: mỗi beat hài phải truy được về quyết định của chính agent, không phải hàng đợi của bộ lập lịch** |
+| 6 | **Hài trôi về thù địch khi agent thẩm định lẫn nhau** | Multi-Agent Comedy Club định nghĩa HarmShift: cho agent thảo luận bản nháp **làm hài trôi về hung hăng** (Q9 2,69 vs Q7 2,51). Nếu ta xây bước thảo luận, phải đo delta đó |
+| 7 | **Scalar sẽ rò, và nó rò qua UI** | `ocs` có `deriveGoalProgress` là **hàm tuyến tính của một thứ hạng tĩnh**. Khả năng sụp đổ nhiều nhất không phải tránh scalar, mà là nó **xuất hiện trong một thứ tự sắp xếp và lan ra trước khi ai nhận ra**. Guard rẻ nhất: **một test đỏ ở cái định danh quyền lực đầu tiên bên trong một biểu thức xếp hạng** |
+| 8 | **Chi phí là bài toán mỗi lượt, và chưa ai đo cái của ta** | Agentopia: một lần chạy 10 năm × 100 agent = **13,7 tỷ token**, 567.000 lời gọi. Mọi thế giới trong corpus đều là **batch**. Của ta **theo lượt và có người xem** |
+| 9 | **Đồng hồ thế giới chạy theo người chơi năng động nhất, nên các thế giới ít hoạt động dừng lại** | `ocs`: `WORLD_TURN_INTERVAL = 3`, **đúng một call site**, không cron, không scheduler, và `advanceFactionWorldTurn(worldId)` **không nhận tham số nhân vật** — nó **về cấu trúc không thể** nhìn thấy người chơi. **Với một sản phẩm dành cho người xem, điều này chí mạng** |
+| 10 | **Chưa ai đo xem có vui không, và các gate sẵn có thì yếu** | LLM judge chấm truyện LLM **thú vị hơn truyện người** (2411.02316). Gate duy nhất bảo vệ được là **so mù** với một đoạn 沙雕 do người viết, theo **bốn tiêu chí bất ngờ đã được kiểm chứng** của Bissell, Paulin & Piper (ACL 2025.wnu-1.7) |
+
+## 16.7 Bước thử đầu tiên — và nó **có thể thất bại**, đã cam kết trước
+
+> **Câu hỏi lớn nhất không phải tầng nào, mà là: liệu một không gian hành động có kiểm soát cộng
+> một seam log→prose có tạo ra một câu chuyện mà BOTH vừa đọc được với agent vừa chọn xong,
+> vừa đọc được với người mở thế giới lần đầu?**
+
+**Thứ nhỏ nhất giải quyết nó: chạy seam một mình.** Không world sim, không agent, không state,
+không vòng lượt. Lấy **~120 sự kiện do một sim tu tiên thật phát ra** (ta có ba hình dạng
+cụ thể: CSV sự kiện + pha vòng đời của `4thfever`, luồng sự kiện world-turn của `ocs`, hình
+dạng milestone/crisis của `paracosm`), theo đúng thứ tự xảy ra. Rồi sinh đầu ra **ba cách
+từ CÙNG một log**:
+
+| | Cách | Ai sinh |
+|---|---|---|
+| (a) | **Tự do** — "đây là log, viết chương" | LLM |
+| (b) | **Ràng buộc truy hồi** | Hình dạng StoryBox: truy hồi theo speaker, kế hoạch chương từ trên xuống, rồi văn xuôi |
+| (c) | **Rào chắn** | Hình dạng SimToProse: model **chỉ được chọn** trong một tập beat liệt kê, **không được** phát ra state, id, hay con số nào; văn xuôi ghép từ tập frame mẫu mà **CODE sở hữu** |
+
+**Phép thử:** (c) có cho ra văn bản mà người đọc **không biết cái nào là cái nào** phân biệt
+được với (b) không — **mà không bao giờ phát ra một con số hay một id?** Và riêng: (b) có **rơi**
+vào fallback liệt kê của Bardic không?
+
+**Chi phí: một chuỗi prompt trên một log đã tồn tại.** Vài nghìn token. **Đây là vật thể nhỏ
+nhất trong cả đợt này có thể thất bại.**
+
+**Điều làm nó thất bại — cam kết trước, vì một check không thể đỏ thì tệ hơn không có:**
+
+- Nó thất bại **nếu frame mẫu đóng của (c) đọc ra như Mad Libs**. Đây là rủi ro thật và **không
+  phải chuyện khẩu vị**: nếu cách duy nhất để ngăn model phát state cũng là ngăn nó biến thiên
+  cú pháp, thì seam **là một template engine** và tầng truyện **là đồ trang trí**.
+  **PHIÊN BẢN THẤT BẠI CỦA THÍ NGHIỆM NÀY VẪN DẠY TA RÀNG BUỘC** — vì thế đó là bước đúng.
+- Nó thất bại **nếu (b) KHÔNG** rơi vào liệt kê. Nếu sinh truyện có ràng buộc truy hồi trên một
+  log cố định vẫn không phân biệt được với liệt kê, thì tầng truyện **là tóm tắt** và sơ đồ
+  năm tầng sụp còn bốn.
+- **Không** chấm bằng LLM judge với ngưỡng. Chấm **mù** so với một đoạn 沙雕 do người viết,
+  theo **bốn** tiêu chí đã kiểm chứng; **hai tiêu chí còn lại phải đánh dấu là không chịu tải.**
+- **Không** ghi nhịp beat từ thí nghiệm này. Log là viết tay và đều đặn; nhịp đo trên nó là
+  **thuộc tính của log**.
+
+**Bước nhỏ thứ hai, xếp ngay vì gần như miễn phí:** đánh dấu thủ công ranh giới beat trong
+corpus Bilibili — **2 series, ~10 tập, một người quan sát** — và báo phân phối khoảng cách
+bằng **đúng đơn vị mà cẩm nang của bên cấp vốn đã dùng**. Đó là cách duy nhất để có
+**beats-per-LƯỢT** trước khi có vòng lượt.
+
+## 16.8 Nguồn
+
+`cdotlock/Open-Cultivation-Simulator` (`docs/FACTION_SYSTEM_DESIGN.md`, Project Architecture,
+Game Rules, OpenClaw Integration) · `4thfever/cultivation-world-simulator` §15 · paracosm ·
+StoryBox (arXiv 2510.11618) · Bardic (AIIDE 2017) · SimToProse · CAREB-MAS (ACL 2026 Findings
+1658) · HiddenBench (arXiv 2505.11556) · Zhou et al. EMNLP 2024 (arXiv 2403.05020) · Bissell,
+Paulin & Piper (ACL 2025.wnu-1.7) · Warren & McGraw (Psych Science 2010; JPSP 2016) · 红果短剧官方
+《短剧编剧教程》05 · 萌娘百科 · 灼青影视 盘点系列.
+
+**⚠️ `white-roz3/cultivation-world-simulator` KHÔNG phải nguồn.** Nó là bản sao squash
+**2 commit, 0 star** của `4thfever`. Đếm nó là tiền lệ thứ hai là đếm trùng.
