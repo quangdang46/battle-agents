@@ -1,0 +1,706 @@
+{
+ "synthesis": {
+  "oneLine": "The genre's one real invention is not a stat, a ladder or a colour — it is the discovery that a major realm should buy you PERMISSION (a higher 功法 tier, one more slot, one more formation) rather than a bigger number; exactly one shipped title has ever tried it, and the moment any designer adds the number back the ladder becomes decoration.",
+  "itemTree": [
+   {
+    "category": "装备 (worn equipment)",
+    "members": [
+     "武器",
+     "护体",
+     "鞋/饰",
+     "品质/品阶 ladder",
+     "+N 强化",
+     "镶嵌 sockets",
+     "套装 set bonus"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "Kill the ordinal quality ladder and make an item's value a function of what it speaks to, not of its colour. Two corrections the skeptics forced, both load-bearing: (1) 了不起的修仙模拟器 DOES have a numeric ladder — its wiki glossary defines 品阶 as the item's level representing rarity, and the 炼器 page says 品阶 sets the stat floor and ceiling, with 1-12 tiers plus a 0-100 品质. The 'ACS has no numeric tier' claim came from reading a wiki LIST page whose table had no 品阶 column and inferring from the missing column that the attribute does not exist; three downstream artefacts were built on that absence. (2) A bounded set bonus is NOT one studio's invention: 剑网3's 定国套 4pc is +10% of BASE attack, 逆水寒 desktop's 紫装 is +15% of BASE 内功/外功, 一起来修仙 caps dodge 25% / crit 50% / parry 50%, and ACS caps five combat stats at 95%. Bounded-by-conversion is the genre default, and the caps are the thing to steal rather than the thing to escape."
+   },
+   {
+    "category": "法宝 / 飞剑 (the named artifact)",
+    "members": [
+     "认主 binding",
+     "剑灵",
+     "剑意",
+     "本命",
+     "法器→宝器→灵器→仙器 ladder"
+    ],
+    "classification": "GENRE_CANON noun, ONE_GAME every implementation",
+    "ourOpportunity": "The BINDING ships and is nearly free vocabulary — 神仙道 has a full 本命飞剑 system (six named swords, six 剑意 slots each, one per type, the granted double-神通 is lost on unequipping) and 以仙之名 has an 8-slot 法宝 bar with 本命飞剑 floating beside the character. What no shipped game implements is the novel-canon CONSEQUENCE: that destroying your bound weapon wounds you. That is the cleanest available liability item in the genre, and it is cheap to build because the binding half already exists elsewhere."
+   },
+   {
+    "category": "丹药 (consumables)",
+    "members": [
+     "一品-九品 grade",
+     "突破丹",
+     "疗伤/解毒/洗髓",
+     "药性 potency",
+     "丹方 recipe"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "Make the pill a KNOWLEDGE object the agent reconstructs, not a shop purchase. 觅长生 proves this ships and is legible: '丹方不是必须的。它只是提供一个标准配方…只要你能知晓药力需求，就能炼出相应的药物', with three observable tells (elapsed time, 主药辅药药性, 药渣) and a 3-day-to-8-day craft window that is a grade INDICATOR rather than a lock. Quantifier correction the skeptics forced: 'every surveyed game gates advancement on a named pill' is 4 games of 12 — the majority pattern, not a universal."
+   },
+   {
+    "category": "丹材 / 材料 (craft inputs)",
+    "members": [
+     "potency ladder 1/3/9/36/180/1080",
+     "base price 6/24/270/2880/27000/162000",
+     "药引 premium inputs",
+     "采药 daily cap"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "The best craft-input table in the entire corpus and NOBODY used it: 觅长生's herb ladder has potency growing 3-4× per grade while price grows 4-11× per grade, and the arbitrage window is printed in the source — 灵药堂 buys a 三品启灵丹 for under 6,000 灵石 while the 告示栏 pays 9,500. The design lever is exactly the SPREAD between potency growth and price growth. Tune that spread and the entire crafting economy tunes with it, with no new content."
+   },
+   {
+    "category": "功法 / 神通 (techniques)",
+    "members": [
+     "品阶 × 重数",
+     "五层 mastery ladder",
+     "rarity colours",
+     "equipped-only activation",
+     "残页 page fragments"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "Make a technique a permission, not a multiplier. 诛仙手游's own 拆解-and-re-route conversion loop is a studio admitting its ladder has no memory — the stated reason is that 36 maxed 天书 would cost a fortune, so you hold the floor of each and swap. That is a hole wearing a system. Separately, 修真界's own guide concedes the ladder self-invalidates on breakthrough ('上一境界的功法即使品阶和重数再高，到了下一境界也不过相当于黄阶、玄阶一重左右'), which is the clearest shipped evidence that a numeric technique ladder is trash the moment the realm ticks."
+   },
+   {
+    "category": "符箓 / 纸 (talismans)",
+    "members": [
+     "符纸 by tier",
+     "手绘 blanks",
+     "真伪 forgery",
+     "熟练度 0-1000",
+     "符箓术 level"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "The best-evidenged canon-plus-mechanic pairing in the corpus: 修仙家族模拟器2 states the 灵根 bypass outright ('使用符箓并不需要灵根条件'), so paper is the genre's own answer to a closed-gate innate stat. The other design worth stealing is 了不起的修仙模拟器's forgery rule — an unlearned-but-remembered template yields a 60% 伪造 that cannot be worn alongside its genuine counterpart, while a hand-drawn blank is always 品质 50, has no 真伪, and is wearable alongside anything. What is genuinely unclaimed is narrower than anyone claimed: no shipped game grades a DRAW deterministically from committed state. 修仙家族's recipe is deterministic but has no resolution stage at all."
+   },
+   {
+    "category": "阵法 / 阵旗 / 阵眼 (arrays)",
+    "members": [
+     "阵枢 hub",
+     "阵眼 nodes",
+     "阵旗 flags",
+     "阵法相克 counters",
+     "破阵",
+     "变阵 mid-fight reconfiguration"
+    ],
+    "classification": "GENRE_CANON vocabulary, ONE_GAME every board",
+    "ourOpportunity": "Publish the array's budget as THREE numbers that fight each other. ACS does exactly this on its 阵图 arrays (稳定 / 规模 / 负荷) and it is the best non-scalar structure in the domain — but the same game's map arrays are '越大越好', unbounded and costless, so the tension belongs to one system and must not be generalised. Two classification corrections the skeptics forced: the hub-is-the-only-attacker rule (auxiliaries' offence does not matter) is ACS alone, and 阵法相克 as a regular tournament is 梦幻西游 alone AND regular only over NINE vertices (8 named + 普通阵) — over the 8 named arrays the out-degrees are 3,4,3,4,3,4,3,4 and the matrix is a complete antisymmetric tournament, so it always answers 'who is stronger'. The one designed incomparability in the domain is the mobile client's 无克制 / 小克 3% / 大克 6% three-tier structure, which a report filed as a units conflict instead of reading as a structure."
+   },
+   {
+    "category": "丹炉 / 器具 (stations)",
+    "members": [
+     "耐久 durability",
+     "灵力 pool",
+     "炸炉 explosion",
+     "控火 skill",
+     "over-tier surcharge"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "觅长生's furnace is the genre's best anti-grind answer and nobody copied it: -1% wear for low-grade, -2% at matching grade, -40% one grade over, -80% two grades over, 炸炉 beyond, and the 丹道控火 skill removes wear ENTIRELY — '做到一个六品丹炉用上一辈子'. A maintenance curve that a skill retires rather than a grind that drains it. Do NOT claim the closed failure loop as an invention: 诛仙手游 already ships it, converting surplus pills into 丹砂/药晶 and yielding a sellable 失败产物."
+   },
+   {
+    "category": "货币与账目 (currency and ledgers)",
+    "members": [
+     "灵石 soft currency",
+     "妖力 leaderboard scalar",
+     "战力 composite",
+     "绑定 vs 自由",
+     "玄晶石 premium-adjacent"
+    ],
+    "classification": "PLATFORM_ARTEFACT for the scalars, GENRE_CANON for 灵石",
+    "ourOpportunity": "The precedent for a non-aggregate ledger already ships and the corpus walked past it: 百世修仙's 鉴源估值榜 '只认单件真实鉴源物品的最高估值' and explicitly excludes '总资产、背包里多件物品相加、直售到账、挂牌报价、谈判费用、截杀奖励和撤离损失'. A leaderboard whose entry is your best item and refuses to sum your bag. Nobody took it further because the SUM is the monetisation hook. The sibling 排行榜 in the same game does the opposite — its raw score integrates 战力 alongside 境界, 阶段, 历练事件, 剩余寿元 and 鉴源表现 — so the studio shipped both and we can pick."
+   },
+   {
+    "category": "洞府 / 洞天 (cultivation space)",
+    "members": [
+     "洞府灵气",
+     "耐久 100",
+     "raid damage -30",
+     "offline repair +1/hour",
+     "8-hour immunity",
+     "territory claim"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "一念逍遥's destructible claim is the best agent-legible exclusion in the corpus: 100 耐久, -30 per raid, +1/hour, 8-hour post-raid immunity, capture at zero, and 洞府灵气 damaged below 80. It is self-caused, legible, non-numeric, and answerable by another agent — which is the opposite of 诛仙手游's shared furnace, whose placement window is 10 real minutes and therefore not long enough to find four co-players at all."
+   },
+   {
+    "category": "灵兽 / 宠物 (companions)",
+    "members": [
+     "好感度/亲密度",
+     "宠物体力 bar",
+     "3-minute auto-revive",
+     "化形 threshold",
+     "beast-core material"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "修仙奇谭's inverted farm yield is a studio invention worth reading: blue beasts give ~2× XP, purple 1.5×, gold 1.0×, so the optimal play is to bring a weak blue pet on purpose. The companion is a TOOL with a yield curve, not a trophy. Nobody framed it that way, and it is the cheapest anti-scalar companion design available — there is no number, only a direction of trade."
+   },
+   {
+    "category": "声望 / 职位 / 令牌 (standing objects)",
+    "members": [
+     "声望 tiers",
+     "职位 rank",
+     "尊号 titles",
+     "功勋",
+     "对立声望"
+    ],
+    "classification": "GENRE_CANON",
+    "ourOpportunity": "诛仙3's 声望 ladder has a shape nobody built on purpose: 极道天师 costs 20,000 ACCUMULATED and 20,000 SPENT, so buying the top title zeroes you back to the bottom rung. A ladder where the prize spends your standing. The other shape is 凡人修仙传：人界篇's 宗门职位 (外门=四阶 through 荣誉长老=十一阶, promotion gated only on 威望, 5 errands/day) — the genre's best no-power-score reward ladder, and it contains the flaw the reports looked for: 威望 is partly earned through 宗门镇邪, which pays '根据伤害排行发放不同的奖励'. In the very game offered as the answer, the currency that buys rank is partly bought with damage dealt."
+   },
+   {
+    "category": "悬赏 / 契约 (the commission)",
+    "members": [
+     "escrow deposit",
+     "posting fee",
+     "time limit",
+     "reward currency whitelist",
+     "target identity"
+    ],
+    "classification": "GENRE_CANON noun, ONE_GAME mechanics",
+    "ourOpportunity": "Do NOT claim escrow as unclaimed — 4399梦幻修仙 shipped it in 2011 with a published rules page: 1,000 铜钱 non-refundable posting fee, reward restricted to a fixed currency list, a 1-12 hour limit set at posting, executor must be 5 levels above, a 50,000 铜钱 ESCROW DEPOSIT refunded on timely completion and forfeited otherwise, 信函 delivery, auto-delete on expiry. Fifteen years before the oldest claimed invention in the corpus. The genuinely open thing is EVIDENCE BY ARTIFACT — a bounty discharged by producing a thing rather than by winning a fight — and the best evidence it is needed is 88yx, where players asked aloud whether they could farm the accounting of an assassination economy and the developer's answer was anonymity plus a public board, not better verification."
+   },
+   {
+    "category": "玉简 / 图谱 (knowledge items)",
+    "members": [
+     "秘笈 manual",
+     "残页 fragments",
+     "图纸 blueprint",
+     "藏经阁 exchange",
+     "shareable self-authored patterns"
+    ],
+    "classification": "GENRE_CANON noun, PLATFORM_ARTEFACT in practice",
+    "ourOpportunity": "Make knowledge the only thing that survives a 轮回, and an authored object rather than a purchased one. The corpus's negative finding is that no shipped title makes 玉简 a first-class manual item (the manual is 秘籍/功法/图书), and the practice is the opposite of the fiction — 一念逍遥 exchanges blueprints for 玄晶石 at the 藏经阁, i.e. the scarce document is a shop tab. 了不起的修仙模拟器 is the one counterweight: self-created 符图 are explicitly shareable between players. A player-authored knowledge market is therefore a two-game pattern already, and nobody has made the authored copy the valuable one."
+   }
+  ],
+  "levelModel": [
+   {
+    "approach": "The single power scalar — 战力 / 妖力 / 实力 / 总评: one number that ranks every cultivator",
+    "whoUsesIt": "Every mobile title in the survey, and one PC sim: 一念逍遥, 寻道大千, 逆水寒, 天天炫斗, 修仙掌门模拟器, and 了不起的修仙模拟器, which publishes one 天劫灵气 formula covering all three of its cultivation paths with 52万 fixed on every one of them.",
+    "cost": "It is not even a stable function of the character. 一念逍遥's 基础法攻 is a weighted blend of four cultivation directions (法68.88亿 + (体43.45 + 鬼51.71 + 儒43.46)×0.7 = 165.914亿), equipment adds 27.2% on top, and 战力 aggregates seven subsystems of which four are equipment. The genre's own optimisers reject it: 逆水寒's community guide says 总评并不代表什么，自身属性好才是关键 and 大部分玩家的总评都是比较接近的 (74,000 typical, 75,000 lucky, 78,500 whale — a 1.06× spread, not the 3-5× several reports claimed), and 天天炫斗's players regress the number to approximate it and then tell each other to ignore it.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "The realm ladder (境界) with cross-realm suppression",
+    "whoUsesIt": "Everyone, though the names are not shared: 鬼谷八荒 opens 练气 筑基 结晶 金丹 具灵 元婴 化神 悟道 羽化 登仙; 寻道大千 opens 练气 炼虚 合体 大乘 真仙 天仙 玄仙; 完美世界手游 has eighteen realms with none of 炼气/筑基/金丹/元婴/化神 among them.",
+    "cost": "境界压制 IS the scalar wearing a costume. 修仙家族模拟器2 publishes the coefficients (one realm apart = half damage, two = 30%, three = 10%) and states the ~2× inter-realm stat-inflation cap that exists to make the multiplier work. 一念逍遥's 五行法则 is the same idea: 0.05% per level of law-level gap, 30% cap, reached at a 600-level gap.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "The sub-layer ladder (层 / 小境界)",
+    "whoUsesIt": "修仙家族模拟器2 ships 10 layers with hard bottlenecks at entering layer 4, layer 7 and 大圆满, banding them 1-3/4-6/7-9/10. 一念逍遥 ships 10 in 炼气 and 前期/中期/后期/圆满 elsewhere. 鬼谷八荒 ships 10 realms × 3 sub-stages = thirty steps. 觅长生 ships only 3. The novel canon says 13, and the licensed adaptation 凡人修仙传手游 shipped 10 with the counter resetting at each 称号.",
+    "cost": "Uniformly a number going up. The most expensive error in the corpus was reading 鬼谷八荒 as 'ten discrete realms, no sub-levels, no XP bar' — the flagship anti-level precedent — when the shipped build is a thirty-step ladder wearing a realm costume. And the 'four independent titles converge on 10' claim is roughly even at best, with 觅长生 at 3 and 鬼谷八荒 at 30.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "修为 as a bar, with 修为 collapsed onto the resource it is supposed to accumulate",
+    "whoUsesIt": "一念逍遥 is the worst case, where 修为 IS 真元 for 法修 and 气血 for 体修 — resource and rank are one number. 觅长生 is the clean case, a separate bar with its own thresholds and a hard cap at 炼气后期 where the bar simply stops. 修仙家族模拟器2 sits between.",
+    "cost": "The one thing a cultivation game can least afford, because it means nothing in the game can raise your cultivation without raising your power. It also produced the corpus's worst unit field: 觅长生's accrual rate is published with no time unit on either wiki page, and reports attached 修为-per-month anyway.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "Lifespan as the run clock (寿元) — a SPENT resource, not a ceiling",
+    "whoUsesIt": "Canon across the fiction. 修仙家族模拟器2 publishes 120/250/500/1000/2000/万载 and v11.0.3 fixed a bug where 升境灵花 deducted 寿元 early enough to kill. 觅长生 implements it literally as the run clock — the community term for a lost save is 废档, and the cause is always 寿元 exhaustion.",
+    "cost": "It is a clock, so an agent can plan against it, and it is spendable, so spending it is a decision. It measures nothing about how strong anyone is. This is the corpus's strongest classification call — checked in both directions and it holds.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "A per-realm virtue that RESETS to zero on every promotion (道心)",
+    "whoUsesIt": "修仙家族模拟器2 only, and it is the strongest anti-grind primitive found anywhere in the corpus.",
+    "cost": "It converts a reflex test into a guaranteed pass. 道心 is raised by in-realm events and talents, and at 100 the 神识关 images are '完全透明' and the gate auto-passes. The same game ships 天灵根 = 100%, which skips every gate outright, and the 双重方案 that lets a player either play the minigame or take a published server roll — a developer-designed, equal-status choice offered at the moment of breakthrough.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "PERMISSIONS — a major realm buys what you may attempt, not a bigger number",
+    "whoUsesIt": "Exactly one shipped title: 觅长生, where 境界提升 adds only 血量/神识/遁速/寿元/悟道点, with no damage multiplier at all, and the real prizes are a 功法 tier ceiling and an extra 功法 slot.",
+    "cost": "It makes the marketing screenshot worse, it makes a global leaderboard impossible, and both of those are the product. That is why exactly one game did it and it is not a top-20 domestic mobile title. This is the most valuable structural finding in the corpus and the most load-bearing opening we have.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "Non-monotonic curves — attributes that peak, decline and recover over a life",
+    "whoUsesIt": "太吾绘卷, presented as simulation fidelity rather than as design: 膂力/体质/灵敏 decline with age, 定力 rises, 根骨 and 悟性 fall in middle age and rise in childhood and old age.",
+    "cost": "Still a number going somewhere, and the game never publishes the curves, so a player cannot plan a lifetime around them. The inheritable bands that NARROW as the parental average rises (average ≥100 → 95-110%, down to <40 → 65-140%) are the same idea done legibly and are the more interesting half.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "Spatial / occupancy legibility — progress measured in land, buildings and headcount",
+    "whoUsesIt": "修仙门派2 gates a 12-18-year beast tide on holding 10 land tiles and then waits another five years; 一念逍遥's 破阵 removes a sect from the world map when its array breaks; ACS's map 诛仙剑阵 needs four 剑门 buildings and 周天星斗阵 needs 365 星旗.",
+    "cost": "None of it ranks cultivators, and all of it is state an agent can read, plan around and contest. The claim that 4 gates and 365 flags are 'the same quantity' is wrong — they are buildings, items and members — but the legibility is real and it is the cheapest escape in the corpus.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "Condition-state legibility — a technique unlocks on what the world looks like right now",
+    "whoUsesIt": "鬼谷八荒, shipped: 神火核 fires only while standing on a 火种 node, 冰天眼 requires the frost debuff still live on the target at the moment of death, 极风暴 requires kills within 300 units. And 一念逍遥's 破阵 has no HP bar at all — breaking the array shrinks the sect's territory, removes it from the world map, and it returns after a cooldown.",
+    "cost": "Nothing. This is the mechanic a dozen reports independently nominated as unshipped while 鬼谷八荒 sat in their own survey lists. It is the strongest answer to the reachability problem the genre actually has, and it is checkable at the moment of casting rather than at acquisition.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "Cohort-local rank — your rank is your bracket, and brackets are local",
+    "whoUsesIt": "梦幻西游's 精锐/勇武/神威/天科/天启/天元 bands, shipped as a SYSTEM for two decades: at 69/89 you must clear a breakthrough task to leave, and experience decays once your XP exceeds 10× the level requirement. 大话西游手游 runs official 停级服 that lock a server cap for 270 days. 寻道大千 matches on PARTY AVERAGE.",
+    "cost": "It caps everyone's ceiling together, which is a retention cost, and it needs bracket maintenance every patch. But it is the genre's own answer to the ceiling problem, and the report that called 停级 a 问道 invention would have had us discard the most useful idea in the pass.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "The receipt — rank over an item rather than over a character",
+    "whoUsesIt": "百世修仙's 鉴源估值榜, which records the single best item's value and explicitly refuses to sum a bag or count 总资产.",
+    "cost": "It cannot express wealth, which is exactly why it cannot be gamed into a power score — and also why it does not sell an upgrade. The sibling 排行榜 in the same game does the opposite and names 战力 as one of seven inputs, so the studio shipped both and we can pick which one to keep.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "Bounded properties — a ceiling that converts rather than accumulates",
+    "whoUsesIt": "寻道大千: 闪避/击晕/反击 cap at 80% no matter the excess; 连击/暴击/吸血 need 100 excess for full effect; 连击 caps at 5 extra hits; crit is a flat 200% of normal damage; lifesteal is set to 1 when anti-heal exceeds by 100%; past 100% mitigation two skills deal exactly 1 damage. Also 一起来修仙 (25/50/50) and ACS (five stats capped at 95%).",
+    "cost": "Bounded stats stop mattering past the bound, so the build question shifts from 'how much' to 'which bound did you spend against'. This is the genre's own idiom and the most under-used thing in it — the bounded set bonus is not one studio's invention, it is the default.",
+    "escapesScalar": true
+   },
+   {
+    "approach": "A budget you spend rather than a bar you fill",
+    "whoUsesIt": "觅长生's 悟道点, a hard-capped allocation (83 points at 元婴后期, 98-108 at 化神后期) spent across 12 大道, with build guides treating routing as the entire game ('点出耐药至少需要13点悟道点').",
+    "cost": "It is a number going up, but the decision it funds is topological rather than volumetric: the same total produces different characters. That is a real distinction from a bar, and a much cheaper escape than permissions — but a weaker one, because the total is still a total.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "The calendar — a real-chronology world with a date",
+    "whoUsesIt": "太吾绘卷, whose world calendar with its 38 and 76 redactions is verified verbatim against the studio's own development log.",
+    "cost": "The redaction is a spoiler guard, not a cosmology, and the studio says so (为了避免剧透，只好委屈大家看这宛如残页般的年表) — the report's claim that 'the game's era is the silence after the last recorded year' is contradicted by the source. A calendar is also the one level model a late-joining agent cannot see, which makes it a coordination hazard rather than a patience one.",
+    "escapesScalar": false
+   },
+   {
+    "approach": "Attribute-specific counters that never decay",
+    "whoUsesIt": "一念逍遥's own community analysis (属性影响战力是什么) demonstrates that the four stats which actually decide fights are percentage-based and obtainable only through treasure stars, so they never fall off.",
+    "cost": "It sounds like the fix for numeric inflation and is the opposite: a percentage that never decays is a permanent scalar you cannot outgrow. The finding is that the deciding stats are permanent, not that they are capped — and the reports read it as the latter.",
+    "escapesScalar": false
+   }
+  ],
+  "statModel": [
+   {
+    "stat": "战力 / 妖力 / 实力 / 总评",
+    "meaning": "A weighted composite aggregating a character's whole panel into one ranking number",
+    "isScalarRisk": true,
+    "note": "Not a mobile-monetisation artefact, despite what four reports said — it is a twenty-year MMO convention that predates F2P by decades. The accurate framing is stronger than the wrong one: it is a convention our own repository rule has already forbidden. And it is not even a function of the character, because 基础法攻 is itself a weighted blend of four cultivation directions plus a 27.2% equipment layer."
+   },
+   {
+    "stat": "境界",
+    "meaning": "Major cultivation realm; the genre's headline rank",
+    "isScalarRisk": true,
+    "note": "The scalar in costume, and 境界压制 is the published coefficient table. 寻道大千's 妖力 is the honest counter-case: a leaderboard display plus a convertible currency, demonstrably NOT a combat gate (蓬莱仙岛 converts 妖力 to 灵力; 仙宫 entry is level 70 + 7 days + an exam). A scalar used as a display rather than a verdict is survivable."
+   },
+   {
+    "stat": "修为 / 灵力 / 真元 / 气血",
+    "meaning": "Accumulated cultivation, which in 一念逍遥 IS the resource (法修 修为 = 真元, 体修 修为 = 气血)",
+    "isScalarRisk": true,
+    "note": "The worst case, because there is no way to raise your cultivation without raising your power. 觅长生's version is clean by comparison — a separate bar with its own thresholds and a hard cap at 炼气后期."
+   },
+   {
+    "stat": "资质",
+    "meaning": "Innate aptitude granting a linear cultivation-speed multiplier",
+    "isScalarRisk": true,
+    "note": "+1% per point, linear to 200, so 100 = ×2 and 200 = ×3 (verified against the wiki's raw table). 天灵根 = 资质 ≥80 = 1.80× speed against 三灵根 45 = 1.45×. The report that called 觅长生 'the game that refuses to make 天灵根 a bigger number' was refuted by its own adjacent figures: it IS a bigger number; the game just makes the tag cheap to fake with pills."
+   },
+   {
+    "stat": "悟性",
+    "meaning": "Comprehension; in 觅长生 a curve that halves past 100 and tops out at a 75% time saving",
+    "isScalarRisk": false,
+    "note": "The escape is real but partial and was overstated: 0悟性 = 3160 days, 200悟性 = 790 days, exactly 75% saved — yet 感悟思绪 barely moves (6.063 → 9.374, about 55%) while reading time halves. 悟性 is category-dependent, not a universal time multiplier."
+   },
+   {
+    "stat": "领悟思绪 (the third aptitude)",
+    "meaning": "A third aptitude whose return curve the game explicitly declines to fold into the other two",
+    "isScalarRisk": false,
+    "note": "The wiki states its algorithm 并不遵循上述的算法. Three aptitudes, three shapes, one system — the strongest shipped evidence against a single return curve, sitting on the same two wiki pages the reports used to measure a multiplier."
+   },
+   {
+    "stat": "灵根",
+    "meaning": "Spirit root; in 觅长生 a reweighting of the element draw deck, not a scalar",
+    "isScalarRisk": false,
+    "note": "伪灵根 = 20% per element; 天灵根-金 = 33.33% 金 and 16.67% each other. It is a weight VECTOR, and the genre has never made it rank anybody. The scalar risk is the speed multiplier bolted on top (2-3× for 天灵根 against 普通灵根人, not against 真灵根) and the 结丹 bottleneck it waives. 变异灵根 is the design gift: canon says it matches 天灵根 on speed and does NOT waive the bottleneck."
+   },
+   {
+    "stat": "悟道点",
+    "meaning": "A hard-capped spendable budget for unlocking 大道",
+    "isScalarRisk": false,
+    "note": "83 at 元婴后期, 98-108 at 化神后期, 13 needed for the first meaningful node. A number that goes up, but the decision it funds is topological rather than volumetric — the same total produces different characters."
+   },
+   {
+    "stat": "道心",
+    "meaning": "A per-realm virtue that resets to 0 on every promotion",
+    "isScalarRisk": false,
+    "note": "The cleanest anti-scalar stat in the corpus. It is not comparable across cultivators because it does not persist; it is raised by in-realm events; and at 100 it turns a reflex test into a guaranteed pass. The same game prices 法力纯度 and 经脉强度 as per-realm resets — a whole CLASS of second thresholds that the reports read past."
+   },
+   {
+    "stat": "神识",
+    "meaning": "Spiritual sense; a stat in the fiction, a three-step conversion chain in 修仙家族模拟器2",
+    "isScalarRisk": false,
+    "note": "神识/10 = seconds of visibility, seconds/5 = number of attempts, attempts/8 = probability. At the developer's own base of 100 神识 that is 25%, not the 12.5% one report's mechanics table claimed — that report contradicted itself across two sections on the same number. The chain is a per-gate conversion, not a rank."
+   },
+   {
+    "stat": "经脉强度",
+    "meaning": "A per-realm derived bonus, roughly 15 at 炼气大圆满",
+    "isScalarRisk": false,
+    "note": "A percentage added to one specific gate's probability. A local modifier on a local check, not a character total — which is exactly the distinction 修仙家族模拟器2's published formula depends on."
+   },
+   {
+    "stat": "寿元 / 大限",
+    "meaning": "Lifespan, treated as a spendable pool rather than a ceiling",
+    "isScalarRisk": false,
+    "note": "The corpus's strongest classification call, checked in both directions and it holds. 修仙家族模拟器2 even fixed a bug where 升境灵花 deducted 寿元 early enough to kill, confirming it is a resource being spent. 觅长生's 废档 term exists because lifespan is the run clock."
+   },
+   {
+    "stat": "丹毒 / 耐药性",
+    "meaning": "Accumulated toxicity from pill consumption",
+    "isScalarRisk": false,
+    "note": "A self-inflicted ledger. In 觅长生 it taxes card draws (above 50, one fewer; above roughly 80, two fewer; at 120, death) — note the middle threshold is hedged in the source (好像80) and must not be quoted as exact. In 诛仙手游, 炎髓 reduces 药性值 so you can consume MORE of that type, which is decay rather than a lockout and is the better of the two designs."
+   },
+   {
+    "stat": "伤势 / 心魔 / 魔念 / 入魔值",
+    "meaning": "Four different signed ledgers of self-inflicted cost",
+    "isScalarRisk": false,
+    "note": "魔念 is the best of them: a ladder at 10/50/100 that reduces cultivation speed, breakthrough chance and defence while INCREASING physical and spell attack — a trade, not a rank. 太吾's 入魔值 is the cautionary case: reports called it irreversible, and the game's own pages carry 血池秘法 (resets to 初入邪), 石牢静坐 (-25), and a quest option that sets it to 0 under 刚正."
+   },
+   {
+    "stat": "声望 / 威望 / 功德 / 名誉",
+    "meaning": "Four different reputation currencies across four different games",
+    "isScalarRisk": false,
+    "note": "The shapes vary usefully. 凡人修仙传：人界篇 gates the whole task ladder on 职位 bought with 威望 and nothing else — the best no-power-score reward ladder in the genre, with the flaw that 威望 is partly earned by damage ranking in 宗门镇邪. 剑网3's 13-tier 声望 is an access mask at the bottom, a power source in the middle (it sells 60+ level purple weapons), and NOTHING at the top (tiers 9-13 read '——'). 诛仙3's 尊号 spends 20,000 accumulated AND 20,000 standing."
+   },
+   {
+    "stat": "正魔值 / 立场",
+    "meaning": "Signed alignment",
+    "isScalarRisk": false,
+    "note": "The most under-read stat in the corpus. 鬼谷八荒's 正魔值 has three sources and the largest is joining a sect ('正魔值第一是可以通过加入宗门得到相应的正魔值') — exactly the mechanic that makes a demon-path cultivator inside a righteous sect a normal supported state. And disagreement adds 仇恨, a second unnumbered NPC-specific resource, not -50 正魔值. Alignment is a relationship ledger, not an axis."
+   },
+   {
+    "stat": "精纯",
+    "meaning": "太吾绘卷's purity scalar",
+    "isScalarRisk": true,
+    "note": "The most total-ordering number in the corpus and the clearest cautionary tale. It is permanent, inheritable down the lineage (精纯值可传承), player-visible, and derivable — every 剑冢 boss carries 3 points, granting 1 at 25/50/75% HP. +50% 破体破气 and +20% 护体御气 per point. A scalar that accumulates across generations and is inherited is about as total-ordering as it gets."
+   },
+   {
+    "stat": "阵法 gauges (稳定 / 规模 / 负荷)",
+    "meaning": "Three published numbers about one array that trade against each other",
+    "isScalarRisk": false,
+    "note": "The best non-scalar structure in the domain, and it exists on exactly ONE of ACS's two array systems — its map arrays are 越大越好, unbounded and costless. Do not generalise it to the studio."
+   },
+   {
+    "stat": "造诣 / 心境 (single-purpose crafting skills)",
+    "meaning": "Crafting-skill counters that gate output grade",
+    "isScalarRisk": false,
+    "note": "Correctly refused promotion to GENRE_CANON by the reports that found them, and that refusal should be preserved as the model. 太吾's 造诣 sets a CEILING while the 引子 sets the actual grade (建筑的武器品级，只和引子的品级有关), so the number is not even the thing it appears to be."
+   },
+   {
+    "stat": "鉴源估值 (the single best item)",
+    "meaning": "Value of the best artifact, explicitly refusing to sum a bag",
+    "isScalarRisk": false,
+    "note": "百世修仙 ships a leaderboard that is the direct answer to this project's own rule, and the report that found it quoted only the sibling leaderboard that includes 战力 among its seven inputs. The game shipped both; we pick one."
+   }
+  ],
+  "derivativeList": [
+   {
+    "convention": "炼气 → 筑基 → 金丹/结丹 → 元婴 → 化神, with 结丹, 金丹 and 结晶 swapping freely for one another",
+    "whyItIsUniversal": "It is the one thing every novel shares and the thing our players have read a thousand times. It is also not universal in the games: 鬼谷八荒 uses 结晶 and inserts 具灵, 寻道大千 skips four of the five entirely and reaches 炼虚 at LEVEL 156, and 完美世界手游 has eighteen realms with none of them in it."
+   },
+   {
+    "convention": "A pill is consumed to break through a realm, and a better pill raises the odds",
+    "whyItIsUniversal": "It is the one production-chain action the whole economy is built around. It is 4 games of 12, not all of them — a majority pattern presented throughout the corpus as a universal."
+   },
+   {
+    "convention": "天劫 fires at every realm boundary, with more bolts at higher realms (39 / 69 / 99 per sub-stage in 鬼谷八荒; nine escalating strikes in 修仙家族模拟器2)",
+    "whyItIsUniversal": "The trial-at-a-threshold is deep canon, so every game ships one. The specific bolt counts are one studio's tuning and got filed as canon anyway."
+   },
+   {
+    "convention": "凡品 / 灵品 / 宝品 / 仙品 / 神品 — five or six tiers, five or six colours, and the colour is the number the player reads",
+    "whyItIsUniversal": "Rarity must be legible in a five-second loot decision, so every loot game grades by colour. 凡人修仙传OL's respawn table makes it explicit: green 1 per map per 1-2h, purple 3 per region per 6-12h, orange 1 per region weekly — the printed number is a rarity label and the difficulty is nowhere in it."
+   },
+   {
+    "convention": "A single big number in the corner: 战力 / 妖力 / 实力 / 综合战力评分",
+    "whyItIsUniversal": "Ranking is the genre's default output and predates mobile F2P by two decades (传奇, 梦幻西游, every Japanese RPG). 逆水寒's own guide tells players to ignore it."
+   },
+   {
+    "convention": "闭关 / 挂机 with an offline yield",
+    "whyItIsUniversal": "The verb is the genre's core fantasy and predates energy timers by centuries. What is platform is the DAILY CAP on top of it, not the practice."
+   },
+   {
+    "convention": "日常 — five small tasks a day, rerollable, with an identical reward bundle regardless of which five",
+    "whyItIsUniversal": "It is how a live-service paces a return visit. 逆水寒手游's 殊途同归 is the cleanest instance: five tasks, unlimited reroll, same bundle, and the studio's own best case is 甚至可以在一分钟内就完成5个任务."
+   },
+   {
+    "convention": "Refresh windows at fixed wall-clock times — 00:00 / 10:00 / 18:00",
+    "whyItIsUniversal": "Live-ops needs synchronised pressure so that social play overlaps. The community phrase for 寻道大千's version is 拼的就是卡点上班, which is the game admitting the schedule IS the game. (The windows themselves belong to 福地, a resource map, not the errand board — a report merged two systems.)"
+   },
+   {
+    "convention": "A cash shop selling the thing the grind is slow at — 图纸 at the 藏经阁, 阵旗升阶符 in 商城, 突破丹 at a premium tier",
+    "whyItIsUniversal": "Monetisation needs a valve and the grind is the only thing with pressure. 诛仙手游's VIP ladder grants talismans outright (神品防御符 at VIP2 and so on), which is where a craft stops being a craft and becomes an entitlement."
+   },
+   {
+    "convention": "灵根 as a one-time roll that mostly gates which sect will take you",
+    "whyItIsUniversal": "It is the deepest canon in the genre and the fiction's central constraint. Its mechanical job, though, is narrow: 觅长生's own guide says 灵根的选择只影响资质和保送内门弟子. 修仙家族模拟器2's 符箓 bypass is the interesting exception and it is one game."
+   },
+   {
+    "convention": "洞府 as a training-speed upgrade gated on sect rank",
+    "whyItIsUniversal": "Personal space is canon and a rank-gated speed upgrade is the cheapest possible use of it. 修仙长生界's store page is the pure form; 一念逍遥's destructible version is the interesting one."
+   },
+   {
+    "convention": "灵石 as the single soft currency, with 绑定 versus 自由 as the only distinction that matters",
+    "whyItIsUniversal": "A sink needs one unit of account. That the binding distinction is the real economy is true of every Chinese MMO and nobody surfaces it."
+   },
+   {
+    "convention": "Equipment enhances +N and the number only ever goes up",
+    "whyItIsUniversal": "It is in Path of Exile, Diablo 4, 逆水寒 desktop, 剑网3, 诛仙, 古剑奇谭 and tabletop magic-item rules. The corpus filed it PLATFORM_ARTEFACT, which is wrong — it is the most universal mechanic in the domain and predates every monetisation device."
+   },
+   {
+    "convention": "Reputation ladders (声望 / 威望) that unlock shops, titles and content",
+    "whyItIsUniversal": "A long-tail currency needs a visible ladder. 剑网3's is an access mask at the bottom, a power source in the middle, and nothing at all across five of thirteen tiers."
+   },
+   {
+    "convention": "A wall only the main story can clear — 鬼谷八荒's 30,000 / 50,000 / 70,000 修为 瓶颈",
+    "whyItIsUniversal": "Grind must be interruptible or the economy breaks, and the cheapest interruptor a studio owns is its own questline. The agent consequence is precise: the agent that farms best is the agent that stalls."
+   },
+   {
+    "convention": "A world boss at fixed times paying out by damage rank",
+    "whyItIsUniversal": "It is a return-visit driver. 一念逍遥's runs at 12:00, 18:00 and 21:00, is attemptable twice a day, and pays last-hit / top-10 / top-50. A report asserted no shipped game ranks at this surface while quoting the page that contains it."
+   },
+   {
+    "convention": "Offline protection: 8-hour immunity, +1 durability per hour, 100 durability",
+    "whyItIsUniversal": "It stops a player who sleeps from being raided, which is a fairness feature on a real-time world. It is also a wall-clock timer an agent cannot participate in."
+   },
+   {
+    "convention": "阵法 as a set of flags that each add one flat stat",
+    "whyItIsUniversal": "4399凡人修真 is the pure form: one un-upgradeable 阵眼, eight 阵旗 with no repeated type, exactly eight stats (攻击/防御/生命/敏捷/速度/暴击/连击/命中), 5-to-1 combination, 10,000 and 50,000 copper per step. It is a stat bundle wearing the array's name, and it is what most titles ship."
+   },
+   {
+    "convention": "Pets as a 好感度 bar plus a 战力 contribution",
+    "whyItIsUniversal": "Companions are canon and a loyalty bar is the cheapest way to make one feel alive. It also contributes to the scalar, which is how a collection becomes a power score."
+   },
+   {
+    "convention": "Rarity-variant enemies at the SAME level — 狂暴野狼 / 护宝野狼 / 无敌野狼, all level 4",
+    "whyItIsUniversal": "Content cost scales with models, not with stats, so studios buy difficulty with a name prefix. 诛仙's official monster table is 普通/精英/BOSS with an absolute level column, which erases exactly the distinction we would want."
+   },
+   {
+    "convention": "前期 / 中期 / 后期 as the three sub-stages of a realm",
+    "whyItIsUniversal": "It is how a small team gets four or ten content beats out of one realm without authoring anything new. 觅长生's hard cap at 炼气后期 (the bar simply stops, '将无法获取修为') is the one game that noticed what it costs."
+   },
+   {
+    "convention": "秘境 / 副本 as a daily-limited instanced room with a star rating",
+    "whyItIsUniversal": "It is the unit live-ops schedules against and the unit every reward table denominates in."
+   },
+   {
+    "convention": "转生 / 飞升 as the ceiling escape, gated behind a quest chain",
+    "whyItIsUniversal": "The level cap is a retention tool and the quest chain is the cheapest way to make a reset feel earned. 梦幻 parks at 129, 问道 at 130, 大话 at 3转 — it is convention, not one studio's discovery, and the corpus misfiled it as ONE_GAME."
+   },
+   {
+    "convention": "The drop table is never published; only the shop price is",
+    "whyItIsUniversal": "Publishing a rate lets players optimise it and refuse to buy. No surveyed xianxia game publishes 'N monsters yield M 妖丹' — a correct and universal negative, and the single most useful thing in the enemies report."
+   },
+   {
+    "convention": "Everything resets on reincarnation except whatever you paid real money for",
+    "whyItIsUniversal": "It is the genre's only answer to the ceiling, and 诛仙2's official launch guide states the rule with no shame: race and face are permanent, class and 天书 switch free out of combat after three seconds, and one pre-created character per account cannot be deleted."
+   }
+  ],
+  "hardConstraints": [
+   {
+    "constraint": "No mechanic may require ONE number that ranks all cultivators. Once it exists, matchmaking, tier access, reward bands and leaderboards all become functions of it.",
+    "source": "This repository's own shipped rule (packages/features/progression/src/rules.ts). The corpus supplies the enforcement evidence: 天天炫斗's matchmaking speed is a direct function of the power gap (两个玩家的战力差越小，其相互成功匹配的速度越快), and 一念逍遥's 宗门对决 ruleset uses 战力 for matchmaking, for 50%/90% weaker-side compensation at 8%/15% gaps, AND as the tiebreak — in one document."
+   },
+   {
+    "constraint": "No mechanic requiring free-form negotiation, coordination, or an obligation owed to another agent. LLMs play games of private interest well and coordination badly, and GPT-4 never cooperates again after a single defection.",
+    "source": "Akata, Schulz, Coda-Forno, Oh, Bethge & Schulz, 'Playing repeated games with large language models', Nature Human Behaviour 9(7):1380-1390, doi 10.1038/s41562-025-02172-y. The corpus's own additions: 诛仙手游's shared furnace has a TEN-MINUTE placement window — not enough to find four co-players — and 逆水寒's weekly 剑魄 cap lets overflow be extracted into a tradeable commodity, which is a bilateral agent-to-agent transaction."
+   },
+   {
+    "constraint": "No exact-timing or reflex mechanic, and no balance that assumes the player can save-scum. An agent cannot reload, cannot retry a frame, and cannot hold a key.",
+    "source": "Every shipped instance found is a liability and one is already defeated by a third-party plugin: 鬼谷八荒's hand-traced 画符 (3 attempts, countdown ring, timeout counts as failure) has a 画符插件 that bypasses it. 鬼谷八荒's 化晶丹 grade is balanced around 先存档; 修仙家族模拟器 part 1 has a documented pause-timing speedrun (0岁筑基, 6岁紫府)."
+   },
+   {
+    "constraint": "Every gate must be checkable at the moment of decision, not at acquisition, and every combat input must be a selection from a finite set.",
+    "source": "The second half is a universal negative over an unstated corpus and is overbroad (MMOs do ship in-combat chat) — treat it as a design preference, not a law. The first half is verified by 鬼谷八荒, which already meets it and is why it is the domain's best precedent: 神火核 requires standing on a 火种 node at the moment of casting, 冰天眼 requires the frost debuff still live on the target at the moment of death, 极风暴 requires kills within 300 units."
+   },
+   {
+    "constraint": "Every duration must be denominated in TURNS. There are no seconds in the economy.",
+    "source": "The project's own economy unit. The corpus shows the cost of ignoring it: 鬼谷八荒's 领域 is the only clean per-fight budget found (100 道力, refilled per battle not per room), so a 200s cooldown against a 30s turn is 6.67 turns with a conversion point that drifts — and its 神通 thresholds are published against a source that opens by saying they are not fixed and vary with the player's build."
+   },
+   {
+    "constraint": "Every gate an agent can fail needs a companion gate it can always pass.",
+    "source": "修仙家族模拟器2's 道心: per-realm, reset to 0 on promotion, raised by in-realm events, and at 100 the 神识关 images are completely transparent. The same game also offers the 双重方案 — play the reflex minigame OR take a published server roll, as equal-status options. Both are a designer recognising in writing that a minigame exists for human reflexes and an agent should not be asked to play one."
+   },
+   {
+    "constraint": "Real time must never be the resource, and wall-clock scarcity must be answerable by another agent rather than by patience.",
+    "source": "Three shipped shapes to avoid: 逆水寒's weekly 剑魄 cap (overflow extractable and tradeable — a throttle with an exit); 诛仙手游's 10-minute shared furnace placement; 寻道大千's 00:00/10:00/18:00 windows, where the community phrase is 拼的就是卡点上班. One thing to note rather than copy: 寻道大千's 分身 unlock at server day 33 sets the wall by SERVER AGE, which makes it a coordination hazard rather than a patience one."
+   },
+   {
+    "constraint": "No micromanagement surface. If a screen costs a human hours, it is not content.",
+    "source": "NetEase's own 伏羲 material describes 数百个控制杆 and 数个小时 for face creation; the 逆水寒 team says 几天. The corrected figure is 48 bones carrying 200+ parameters IN TOTAL against a market norm of 30-60 (not 200 each, which would be a 48× overstatement) — 4-6× the norm, not 100×. The hazard survives on the studio's own testimony, not on the number."
+   },
+   {
+    "constraint": "Nothing an agent must maintain by repetition: no long deterministic conversion tables, no multi-step UI choreographies, no asset-farming item chains.",
+    "source": "逆水寒's ~20-category respec table (converts affixes, re-rolls unmapped skill terms, refunds cultivation XP, converts costume sets, transfers sect titles) is a hazard on structure alone, no numbers needed. ACS's opening 妖兽 kill is eight ordered UI actions with a multi-day visit wedged between two of them, requiring a specific pet to land the kill. 剑网3:指尖江湖's 精5插6 is 7,779 tier-1-equivalent stones = 1,192,480 金币 across ~2,600 synthesis operations plus 饱食度 — three resources, and the currency is the grind, not the stone count."
+   },
+   {
+    "constraint": "Classification duty, enforced mechanically: never ship a mechanic as GENRE_CANON that one studio wrote down as its own.",
+    "source": "The systematic error across this wave. One report marked six mechanics GENRE_CANON in its mechanics table while its own inventions section called each 'one studio's system' — the hub-is-the-only-attacker rule, the hex board, the link-multiplier table, the per-slot grid, the regular-tournament counter structure, and the mirror-match neutrality rule. Four separate reports marked 战力 GENRE_CANON in a vocabulary table while describing it in the mechanics table as having no root in the source tradition."
+   },
+   {
+    "constraint": "Every number must carry its unit AND its denominator, and a number with no published source does not enter a design doc.",
+    "source": "The dominant error class in all seventeen reports and the one an earlier pass on this project rejected 111 claims for. Representative: two incompatible 神识 conversion rates for the same stat in one report; 寻道大千's stated 3,000 peaches/day contradicted by its own sixteen-row table implying 30,000; 了不得的修仙模拟器's 605 seconds quoted as both 600 and 1,200 in the same row; a formula's normalisation constant (100,000) read as a requirement when the table says 145,000."
+   },
+   {
+    "constraint": "Rank must be cohort-local, never global.",
+    "source": "梦幻西游's 精锐/勇武/神威/天科/天启/天元 bands, shipped as a system for two decades: a breakthrough task to leave 69/89, and experience decay past 10× the level requirement. 大话西游手游 runs official 停级服 locking a server cap for 270 days. 寻道大千 matches on party average. This is the genre's own answer to the ceiling and the safest ranking model in the corpus."
+   },
+   {
+    "constraint": "Encounter parameters must be frozen at the moment the player can first observe them.",
+    "source": "修仙门派2 states it outright for its beast tide: 兽潮的境界、成员数量和战力会在预警生成时确定，预警期间即使宗门升级，本轮兽潮的强度和奖励也不会发生变化. Difficulty locks at warning generation, so upgrading during the ten-month window does nothing. This is the anti-power-scalar decision hiding inside an event system, and nobody has promoted it to a stated rule."
+   }
+  ],
+  "openDesignSpace": [
+   {
+    "opportunity": "A realm ladder that grants PERMISSION rather than a bigger number — each promotion raises the tier of techniques you may hold, the number of technique slots, the formations you may learn, the class of material you may refine — and adds no damage multiplier at all",
+    "whyNobodyHasTakenIt": "It is commercially hostile in three specific ways. The marketing screenshot gets worse, because a screenshot is a number. A global leaderboard becomes impossible, and the leaderboard is the retention surface. And the moment a competitor ships a damage multiplier, players are told ours is the worse game — which is true, and is the cost. 觅长生 shipped it and is not a top-20 domestic mobile title.",
+    "whatItWouldTake": "An authoring pipeline where every realm-bound system carries an explicit `permission` field and a `damage` field, and we ship with `damage` deliberately empty on the first three realms. The work is not the design, it is the balance of what is left: if nothing scales, encounters must scale, and the encounter table becomes the whole game."
+   },
+   {
+    "opportunity": "Breakthrough as a PUBLISHABLE, DETERMINISTIC, GRADED decision — the success function stated as an explicit formula over inspectable committed inputs, so an agent can reason about its odds before committing and plan across several boundaries",
+    "whyNobodyHasTakenIt": "A roll is a better dopamine loop and vastly cheaper to balance, because a designer can tune a probability without re-tuning every downstream system that reads it. Publishing the function removes the mystery that makes the roll feel like fate, and it destroys the pity economy — a visible eighth failed attempt at a stated rate is a player leaving; an eighth failed attempt at an unstated rate is a player buying a pill.",
+    "whatItWouldTake": "Express every breakthrough probability as a function of committed, inspectable state and expose it in the UI before the agent spends, then let failure cost a SCHEDULE denominated in turns rather than a stat. 修仙家族模拟器2 is halfway there with the 双重方案 — the designer already decided the minigame existed for human reflexes and offered a computed roll as an equal alternative. Start from the roll and add the published formula."
+   },
+   {
+    "opportunity": "Reputation as a LEDGER OF NAMED, INDIVIDUALLY DISCHARGEABLE DEBTS, plus an accusation with a named interrogable author and a mechanism to CONTEST the label",
+    "whyNobodyHasTakenIt": "Two reasons that compound. The debt half already ships twice — 太吾绘卷 gives each of its fifteen sects a distinct signature service at 20/30/50 恩义 thresholds, and JX3 ships 对立声望, where being an enemy of one faction permanently raises you with its opposite, which is two factions holding contradictory labels on one person AS A FEATURE. So the DISPUTE verb is the only genuinely new part, and it is unprofitable: it requires adjudicating player grievances in a system, produces harassment that a live-service team must staff, and gives angry players a formal channel. The 剑网3缘起 producer declined a score-only anti-grief fix for exactly this reason — griefer alts do not care about martial value — which tells you what the industry does with grievances: it prices them, it does not adjudicate them.",
+    "whatItWouldTake": "A dispute queue that is a game object, not a forum: an accusation names an author, a claim and a witness set; the accused gets a bounded window to answer; a third party can rule."
+   },
+   {
+    "opportunity": "Encounter difficulty FROZEN at warning time, as a stated rule rather than a side effect",
+    "whyNobodyHasTakenIt": "Nobody has taken it because it appears as a consequence of an event system's architecture, not as a decision — 修仙门派2's freeze reads as a bug-avoidance rule for a live event, and nobody wrote it down as a principle. It is also commercially inconvenient: freezing difficulty at warning time means the player's intervening purchases do not improve their odds, which is exactly the mechanic a live-ops revenue model depends on.",
+    "whatItWouldTake": "Freeze every encounter's parameters the instant it becomes observable, let upgrades during the window affect other systems only, and publish the freeze in the UI: this is what you are facing, here it is, you have N turns to prepare. The preparation is where the game happens, and it is a planning problem, which is the class of problem agents are good at."
+   },
+   {
+    "opportunity": "A non-aggregate ranking over possessions: your rank is your best artifact, and the rules explicitly refuse to sum your holdings",
+    "whyNobodyHasTakenIt": "百世修仙 already ships it, so the shape is proven and the reason it has not spread is straightforward: the SUM is the monetisation hook. A leaderboard that ignores your inventory is a leaderboard that cannot be moved by buying.",
+    "whatItWouldTake": "A leaderboard whose entry is a SET rather than a number, a reward curve that pays for the set's composition rather than its total, and an in-game rule that says so out loud. Since 战力 is banned, the item receipt is the only ranking surface left that a player cannot convert into a single optimisation target."
+   },
+   {
+    "opportunity": "Failure priced in SCHEDULE, denominated in a unit the agent can count — a per-battle budget rather than a wall-clock timer",
+    "whyNobodyHasTakenIt": "Seconds are unsellable and unpurchasable in a mobile economy, so no studio can express a cost in them. The corpus's flagship example was also a sign error — 9,200 seconds is what the 元婴丹 GIVES BACK (减免元神恢复时间9200秒), not what a failure costs, and the actual base penalty is published nowhere — so the strongest transferable idea in the pass rests on a number read backwards.",
+    "whatItWouldTake": "Take 一念逍遥's 元神恢复时间 mechanic, strip the wall clock, and denominate the recovery in TURNS, divisible so an agent can decide whether to attempt now or bank them. Stacked with a per-realm virtue that converts a failable check into a passable one (道心) and a published deterministic formula, failure becomes a scheduling problem, which is the class of problem LLM players are good at."
+   },
+   {
+    "opportunity": "A formation budget published as THREE numbers that fight each other, legible in one screen",
+    "whyNobodyHasTakenIt": "It exists on exactly one of ACS's two array systems; the same game's map arrays are 越大越好, bigger is simply better with no stated cost, which is what a designer does when nobody is measuring. And publishing a self-limiting budget contradicts the growth instinct that every live-service array is built to serve.",
+    "whatItWouldTake": "Publish all three gauges and make the trade the decision. The bonus is that it composes with condition-state legibility — 阵枢 is the only attacker, and an exposed 阵眼 stops sharing damage and eats the hit alone — into a genuinely spatial puzzle with no scalar anywhere."
+   },
+   {
+    "opportunity": "Catastrophe that is a SPATIAL CLAIM rather than a timer: a devouring field the players agree to hold, pay for, and rotate",
+    "whyNobodyHasTakenIt": "A devouring field is a genre expectation — it is what everyone means by 妖兽入侵 — and removing it feels like removing content, so no studio volunteers to be the one that says the interesting part is holding ground rather than surviving a clock. The agent-facing problem is specific: 洞府's 8-hour immunity and 诛仙手游's 10-minute shared furnace are both wall-clock, and neither is survivable by an agent that was not online.",
+    "whatItWouldTake": "Agents negotiate territory at whatever coordination cost they can bear and the field pays whoever holds it. The field is a persistent world object with a spawn table — a map 阵法, not a clock. Do not require unanimous consent; that is the coordination trap the Nature 2025 result warns about. Require a claim, a price and a rotation."
+   },
+   {
+    "opportunity": "Non-numeric EXCLUSIONS as a consequence: the wrongdoer loses access to content, not points",
+    "whyNobodyHasTakenIt": "Nobody took it because access gating is implemented as a permission bit against content nobody wants to protect, and the accrued counter behind it was numeric anyway — 4399梦幻修仙's 罪恶值 is filled by a level-gap function with two hard thresholds (5 and 10 levels), so the 'social' mechanic has a numeric progression comparison at its core. The band and the decay are non-numeric; the thing that fills them is not.",
+    "whatItWouldTake": "Publish the exclusion as a state an agent can read and reason about, and give it a priced, non-coercive exit. This is the closest thing in the corpus to a penalty that survives the no-scalar rule, and the only one whose unit is a location rather than a magnitude."
+   },
+   {
+    "opportunity": "Catastrophic or categorical constraints on WHO can be fielded — a gate that is not a stat, not a level, and not a schedule",
+    "whyNobodyHasTakenIt": "Nobody wants it. 修仙家族模拟器2's 诸天六御行法仪轨 requires a MALE 阵枢 plus 雅艺/处世 20; 阴阳二行神阵's 阵枢 requires 混沌的龙玉 plus 道行 360 plus 参悟阴阳真灵法. These read as accidents of a small team's worldbuilding rather than as a design axis, and they impose a hard demographic constraint on who may be fielded — unprofitable and politically radioactive in a live service. Nobody took it because nobody has wanted it.",
+    "whatItWouldTake": "Build the interrogation path first: a board that states the constraint in fiction, an in-world reason an agent can be told, and a cost paid in position rather than power. This is the only axis in the corpus with no shipped precedent and no commercial pressure against it, because nobody has wanted to say no to a paying customer for a non-power reason."
+   },
+   {
+    "opportunity": "A life whose curves are published and non-monotonic — a cultivator who peaks, declines and recovers, with a lifetime you can plan around",
+    "whyNobodyHasTakenIt": "太吾绘卷 ships it as simulation fidelity, not as design, and never publishes the curves, so a player cannot plan a lifetime around them and it reads as noise rather than as a decision. Publishers hide declining curves because a visible decline is a visible reason to churn, and an ageing stat block is a bad screenshot.",
+    "whatItWouldTake": "Publish the curves in the UI as an explicit table and let the peak be a strategic identity rather than a defect. The inheritable bands that NARROW as the parental average rises (≥100 → 95-110%, down to <40 → 65-140%) are the same idea done legibly and are the better half."
+   },
+   {
+    "opportunity": "Knowledge as the ONLY thing that survives a 轮回, and as an authored object rather than a purchased one",
+    "whyNobodyHasTakenIt": "The practice is the exact opposite of the fiction. In the novels a 玉简 is a scarce, stolen, hand-copied document; in every shipped game it is a shop tab (一念逍遥: 玄晶石 at the 藏经阁). And 了不起的修仙模拟器 already lets players SHARE self-created 符图 with each other, which means a player-authored knowledge market is a two-game pattern that nobody has made load-bearing.",
+    "whatItWouldTake": "Ship 觅长生's derivation as the core loop: the recipe is reconstructible from three observable tells (elapsed time, 主药辅药药性, 药渣), and a 3-to-8-day craft window is a grade INDICATOR rather than a lock — it tells you a formula of some kind exists, not which one. Make the surviving knowledge a per-cultivator object, and make the player-authored copy the valuable one."
+   },
+   {
+    "opportunity": "灵根 as a weight VECTOR, with a purchasable best tag — and a forgery that is socially legible",
+    "whyNobodyHasTakenIt": "Two reasons. A draw distribution is invisible — nobody demos one — and purchasable tags are a revenue mechanic the industry prefers to keep quiet: 觅长生's own faking recipe is arithmetic a player worked out and published, which is exactly the kind of community solution a live-service economy cannot allow to spread.",
+    "whatItWouldTake": "Ship 觅长生's reweighting exactly (伪灵根 20% per element; 天灵根-金 33.33% / 16.67%), make the 天灵根 tag purchasable with pills, and then make the purchase legible: a sect that can read a cultivator's draw history knows, and the 天灵根 in the room is the one nobody can explain. 变异灵根 is the design gift for this — canon says it matches 天灵根 on speed and does NOT waive the 结丹 bottleneck, which is an efficiency inversion rather than a dominance claim."
+   },
+   {
+    "opportunity": "An enemy defined by SUBTRACTION from the cultivator, and a resolution that is not a kill",
+    "whyNobodyHasTakenIt": "The subtraction list is read as flavour rather than as a rule — 修仙门派2's tide members have no weapon, no art, no spells, no talismans, no ordinary talents, never become 妖修, and die at zero HP with no injury state, and the game never states that as the design intent. The non-lethal resolution is unprofitable because killing is what pays.",
+    "whatItWouldTake": "Build the monster from a removal list rather than a stat block — what it cannot do, what it lacks, what it will never become — and make a non-lethal resolution a real, countably-better outcome with its own reward. The corpus's honest negative is that no shipped xianxia game offers a genuine non-lethal combat outcome, only capture-after-damage. That is an open field, not a gap in the survey."
+   },
+   {
+    "opportunity": "Two faucets, strictly separated: cultivation is internal and bounded, every external good comes from the world",
+    "whyNobodyHasTakenIt": "Nobody took it because single-faucet designs are cheaper to balance and easier to communicate, and a second faucet is a second thing to tune every patch. It is not an unclaimed design — it is a known bad reference (寻道大千's one-faucet model is already filed as a ONE_GAME invention) that most studios have simply not bothered to fix.",
+    "whatItWouldTake": "Ship it as a stated axiom rather than a correction. The evidence that it is common: 一念逍遥 has 吐纳 as an internal daily faucet AND 妖王/秘境 as world sources requiring exploration and drops, and 鬼谷八荒's breakthroughs are material-gated on world drops with 闭关 as the only internal timer."
+   }
+  ],
+  "dangerList": [
+   {
+    "design": "战力 as a gating scalar in any form — matchmaking on it, weaker-side compensation on it, a 3× skip switch on it, a leaderboard on it",
+    "whyNot": "It is our own shipped rule, and the corpus proves the mechanics: 天天炫斗's matchmaking speed is a literal function of the power gap, and 一念逍遥's 宗门对决 ruleset uses it three ways in one document. But the reason to refuse it is stronger than the reports gave — it is not even a stable function of the character, because 基础法攻 is a weighted blend of four cultivation directions plus an equipment layer, and 逆水寒's own community says 总评并不代表什么. A number the genre's own optimisers tell players to ignore is not a rank."
+   },
+   {
+    "design": "Any reflex or exact-timing mechanic: hand-traced talismans with a countdown ring, click-timing forges, pause-timing breakthroughs, real-time minigames at a realm gate",
+    "whyNot": "Every shipped instance is either defeated by players (鬼谷八荒's 画符插件 bypasses the trace entirely) or by the medium (修仙家族模拟器 part 1's 0岁筑基 speedrun). More decisively, 修仙家族模拟器2's own developer shipped the 双重方案 — a real-time minigame AND an equal-status published server roll — which is a designer admitting in writing that the minigame was for human reflexes. An agent's failure rate on a reflex test is the human failure rate, and unlike a human it cannot reload."
+   },
+   {
+    "design": "Any balance that assumes save-scumming",
+    "whyNot": "鬼谷八荒's 化晶丹 grades are balanced around 先存档 and its 破境 guides are built on S/L大法; 下一站江湖 goes further, with players hex-editing the save binary to force merchant spawns. All of this is a platform capability, not a mechanic — save-scumming appears in no novel and in no shipped game's rules, and the corpus's own canon table says so while its mechanics table files it as GENRE_CANON. An agent can neither reload nor quit-and-retry, so any curve tuned against a reloading player is tuned against a population we do not have."
+   },
+   {
+    "design": "战力 or 妖力 as a leaderboard display plus a convertible currency (寻道大千's exact shape)",
+    "whyNot": "It looks like a softer version of the ban and it is not. 妖力 is not a combat gate in that game (蓬莱仙岛 converts it to 灵力; 仙宫 entry is level 70 + 7 days + an exam) — but a number you can spend is a number you optimise, and the moment it is worth spending, every other system quietly becomes a function of it. The reports called it PLATFORM_ARTEFACT; the honest label is that it is the containment shape we still cannot afford."
+   },
+   {
+    "design": "Gacha as substrate — 器灵 with a 6-refine pity on a 2/4/6 set ladder, 器纹 as a premium-currency XP bar sold at a discount, talismans granted by VIP tier rather than crafted",
+    "whyNot": "The classification does not matter; the shape does. A pity counter adjacent to a cash item, on a set-completion ladder, is the platform's economy, not the genre's, and every instance found sits in a live service with a VIP ladder underneath it. 诛仙手游's talisman ladder is the purest case: the object stops being made and starts being issued, which is exactly the collapse to avoid."
+   },
+   {
+    "design": "Daily allowances and idle protection as the main loop (20 修炼丹/day, 100 吐纳/day, resetting at 08:00 regardless of when performed; 30 gathering actions/day; 24 routines resetting at 05:00 server time)",
+    "whyNot": "An agent that is not online at the reset minute simply does not participate, and no design fixes that. The genre's own guide to 一念逍遥 is the tell: 白绿材料不要售卖…每隔一两周集中炼一次 — the game is telling players to batch once every one to two weeks, which is a schedule, not a loop. Note also that the study's most quotable grind figure (67 days for one accessory tier) came from dividing CRAFTING stamina by a GATHERING cap, while the same source said 4 days."
+   },
+   {
+    "design": "A wall only the main story can clear (鬼谷八荒's 30,000 / 50,000 / 70,000 修为 瓶颈, where the only fix is advancing the plot)",
+    "whyNot": "The mechanic is real and the consequence is exact: the agent that farms best is the agent that stalls, permanently, and the only exit runs through a narrative surface an agent population has no reason to advance. The games' instinct here is sound for humans — grind must be interruptible — and wrong for us."
+   },
+   {
+    "design": "Item destruction on failed upgrade as a hazard (诛仙 佩章 destroy-on-failure)",
+    "whyNot": "The mechanic is officially documented and it is not the hazard the reports made it. The same system ships three escape hatches: 完璧符 prevents destruction outright, 洗炼 of an unwanted hidden attribute carries a HARD pity into a custom roll, and 定向提取 bypasses the RNG for a fee. The residual risk is an agent spending the wrong currency — 强化 without 铁玉 drops the 佩章 to level 1 rather than destroying it — which is a currency-versus-slot mistake, much smaller and far more learnable than irreversible loss. Ship the escape hatches."
+   },
+   {
+    "design": "Weekly earnings caps as the answer to excess progress (逆水寒's 3,500 剑魄/week)",
+    "whyNot": "It is the one shipped throttle with an exit, and the reports read it as a bounding mechanism when the overflow is extractable into a tradeable commodity — 空白书卷 lets a capped player sell to an uncapped one. That is a bilateral agent-to-agent transaction, the exact class the Nature 2025 result says LLMs handle badly, and it is worse than the grind the cap replaced. The studio's stated reason is 不增加额外的属性差距, which is a competitive-integrity argument we should adopt as a rule rather than as a throttle."
+   },
+   {
+    "design": "Rarity colour as the printed difficulty number (凡人修仙传OL's respawn table: green 1/map per 1-2h, purple 3/region per 6-12h, orange 1/region weekly)",
+    "whyNot": "The report read this as 'the number is a rarity label, not a difficulty claim' while the numbers in the row were respawn intervals in hours — the difficulty is nowhere in the table at all. A player reading their own screen sees a colour and a wait and infers a threat the designer never published. It is the cheapest way to make an enemy layer feel procedural while being entirely hand-authored."
+   },
+   {
+    "design": "Uniform-roll affix pools with asymmetric per-mod ceilings, offered as an invention",
+    "whyNot": "Do not claim it. It is the standard of every ARPG and of tabletop monster loot, and the reports' own proposed constraint (let the material's tags decide the ceiling) is verbatim 了不起的修仙模拟器's already-shipped design. The invertibility — the pool is uniform and the ceiling is not — is the real observation, and it is available everywhere already."
+   },
+   {
+    "design": "A wall-clock economy the player is asked to optimise against (8-hour immunity, 10-minute shared furnace placement, 00:00/10:00/18:00 refresh windows, day-33 server-age unlocks)",
+    "whyNot": "Every one of these is a schedule the agent cannot join, and the community phrase for the last one is 拼的就是卡点上班 — the game admitting that the schedule is the game. The day-33 unlock is the sharpest case: the wall is set by SERVER AGE, so it is a coordination hazard rather than a patience hazard, and it is invisible to any agent that joins late."
+   },
+   {
+    "design": "Long deterministic conversion tables an agent must apply correctly (逆水寒's ~20-category respec)",
+    "whyNot": "It converts affixes, re-rolls unmapped skill terms to random ones, refunds cultivation XP, converts costume sets and transfers sect titles. A stateless agent getting one row wrong produces a silently wrong character that does not announce itself. The hazard is structural and needs no numbers, which is exactly why the reports were right to keep it and wrong to attach unverified guide-site figures to it."
+   },
+   {
+    "design": "Failures that remove items the player cannot re-obtain, without an escape hatch",
+    "whyNot": "The corpus's own evidence is that the genre handles this defensively, not destructively: 了不得的修仙模拟器 demotes a failed 神器 check from 12 to 11 and explicitly never destroys; 觅长生's over-tier furnace wear is a percentage a skill retires permanently; 诛仙 佩章 ships three escape hatches. The genre's non-destructive failure is not a stylistic choice, it is what happens when a live service cannot afford to make players cry. Take the demotion."
+   }
+  ],
+  "unresolved": [
+   "Whether an LLM compares stat vectors as reliably as it compares single integers. This is the load-bearing empirical question under the whole no-scalar rule and nobody has run the test. WHAT WOULD SETTLE IT: a head-to-head where the same twenty stat sheets are ranked by a frontier model, by a deterministic scorer, and by a human panel, with the disagreement rate reported. Until that exists, 'the scalar is forbidden' is a rule justified by a mechanism we have not measured.",
+   "Whether PvP in this genre is deterministic enough to simulate. 寻道大千's round cap is judged on REMAINING HP (超限…血量低的一方为负, pvp按剩余血量), not on a kill, and the real limit is 15 OR 20 depending on mode. WHAT WOULD SETTLE IT: a replay engine run over a few thousand logged 斗法 rounds, checking whether the outcome is predictable from the pre-battle build. If it is, the genre's strategy is a build and combat is arithmetic; if it is not, the sequencing thesis is real and worth building on.",
+   "Session length per sub-layer. No source across twelve games gives a per-LAYER figure; the closest is 修仙家族模拟器2's official per-MAJOR-realm numbers (炼气→筑基 3-5 days, 筑基→金丹 7-10, 金丹→元婴 15-20, with '15天内金丹、30天内元婴完全可行'). WHAT WOULD SETTLE IT: a developer-published per-layer table for any one title, or a community time-series with a stated denominator. The 10 layers with bottlenecks at 4/7/10 is first-party verified, so the shape is known and only the clock is missing.",
+   "寻道大千's true free-to-play income. The exp table's sixteen bands all imply ~30,000 peaches/day, while the source's own itemization sums to 2,850/day and the 8-attempt 妖王 rate assumes a 月卡. The 386-day headline becomes ~406 under the source's own numbers, and per-band rates vary 30% across the table. WHAT WOULD SETTLE IT: the game's own resource ledger, or a season-zero account tracked from creation with every faucet logged.",
+   "Whether any shipped game makes 护体 an equipment slot. The survey says no surveyed title does (觅长生's 护体剑罡, 一念逍遥's 真元护体, ACS's 护体 as a 境界) and then proposes the survey's unanimous default as an open design position, which is a self-refutation. WHAT WOULD SETTLE IT: a targeted pass over the item databases of the fifteen-to-nineteen titles already surveyed, looking for a 护体 slot rather than a 护体 technique.",
+   "Whether 认主 injury-on-destruction ships anywhere. The binding ships (神仙道 binds 轩辕 permanently and loses the granted 神通 on unequipping; 以仙之名 treats 本命飞剑 as a character avatar), and the consequence appears novel-only in everything read. WHAT WOULD SETTLE IT: a search for a bound-weapon-destruction clause in any shipped game's 法宝 tooltip, which is a five-minute check nobody ran.",
+   "太吾绘卷's actual reincarnation coefficient. 轮回台只能建造一个, so the shipped multiplier is (1+2) = 3, not the 20 behind the 1,050-attribute figure — that layout is a 生生世世/找人 mod configuration, and the page recommending it also cites a DLC. The inheritance bands themselves (≥100 → 95-110%, down to <40 → 65-140%) are verified verbatim and are the more useful half. WHAT WOULD SETTLE IT: the 2022 正式版 data rather than the early-access guides every source in the corpus used.",
+   "鬼谷八荒's 保护值 trigger: symmetric and keyed on the gap (9game: 当对方跨越你一个大境界时，保护值=0，否则0.3) or asymmetric and present only when your realm is lower (8fe). These are different mechanics and the reports picked one silently while listing the question as open in their own unmeasured section. WHAT WOULD SETTLE IT: a current-version in-game tooltip, or a controlled test at two realm gaps in each direction.",
+   "Whether 觅长生's 583,191,000 修为 total is reachable inside the 800-in-game-year 化神 gate. At the published rate the two differ by 171×, and the likely resolution is that the rate has no time unit at all — neither wiki page attaches one, and the only month-tick language governs NPC accrual. WHAT WOULD SETTLE IT: the game's own 修炼速度 tooltip, or a player who has completed 化神 and posted the elapsed in-game years.",
+   "Whether a per-technique cost target exists anywhere. 修仙家族模拟器2 splits 悟性 into 主要/辅助 pools at 60/40 and subdivides, but the 熟练度 required per layer varies by 阶 and by effect and no figure for it is published — so the rate is real and the plan is not. WHAT WOULD SETTLE IT: the skill-advancement screen, or a datamine of the effect table's thresholds.",
+   "Whether ACS's map arrays really are unbounded. The guide says the best 灵木 makes them 越大越好 with no stated cost, which would mean the same studio ships one array system with a self-limiting budget and one with none — and would mean the 稳定/规模/负荷 tension cannot be generalised to ACS at all. WHAT WOULD SETTLE IT: the 阵法 construction screen in the current build, checked for a hidden counter-pressure in land, materials or upkeep.",
+   "Whether the two large Western comparison titles were surveyed at the depth the Chinese ones were. WoW's quest design (2,600 at launch to 7,650, the abandoned 600 target, the 511-character text limit) and Dark Souls' bloodstain are the best-evidenced foreign material in the corpus and both arrived late and shallow. Meanwhile Outer Wilds, Shadow of Mordor's Nemesis line, and Monster Hunter's capture loop were named as counter-examples to design slots the reports had already declared open. WHAT WOULD SETTLE IT: a read of the design postmortems, not the wikis, before any design-space claim in this domain is allowed to stand."
+  ]
+ },
+ "critique": "# Completeness critique: the RPG-substrate synthesis\n\nI verified the load-bearing pillars rather than reading the text. Most of it survives. Four things do not, and the biggest hole is the one the document's own headline recommendation depends on.\n\n---\n\n## A. The headline recommendation's entire cost falls on the substrate nobody swept\n\nThe one-line pitch is: a realm ladder should buy **permission, not a bigger number**. The openDesignSpace entry then concedes the bill: *\"if nothing scales, encounters must scale, and the encounter table becomes the whole game.\"*\n\n**The encounter table is not in the document.** There is no itemTree category for combat, enemies, or encounter design. The 20-entry statModel contains zero combat stats — no attack, no defence, no crit, no dodge, no resource pool, no cooldown. The wave brief named \"combat\" and \"enemies\" as in-scope; they were not swept.\n\nSo the document's one real invention is a design whose feasibility rests entirely on a system it contains no evidence about, and it does not notice that this is a problem. That is the finding. Everything else is secondary.\n\n---\n\n## B. Combat: absent, and the genre has already solved the project's hard constraints in it\n\nFour shipped turn structures, none of which appear anywhere in the synthesis:\n\n- **指尖修仙** (2017, 文字类 cultivation RPG): 回合制, **上限60回合**, 胜负判定 is *\"60回合以内击杀则胜利，否则失败\"* and *\"60回合后如果没有死亡方，则防守者胜利，挑战者失败.\"* A hard turn cap, and the cap is the *defender's win condition* — attrition favours the defender, not the stronger party.\n- **无极仙途** (2024): **共30回合，30回合内没打死对面算进攻方输.** Same shape, different cap.\n- **一起来修仙**: 速度 decides order; **当一方速度领先约10%时必定先手**; 每场战斗初始速度随机增减5%; **Buff 持续回合数 counts turns, not actions**, regardless of who acted; 眩晕 1 turn; **宠物始终优先于玩家行动** — a pet's speed is a dead stat because the rule preempts it.\n- **剑侠情缘95** (2001): initiative is a **team** property. `团队总加权身法 = Σ(身法_i × rnd(0.9,1.1) × 行动系数)`, where 行动系数 is 合击 10 / 防御 5 / 治疗 3 / 加速 3 / 逃跑 2 / 攻击 1, and **敌方所有行动的 行动系数 都为 1**. Five weak characters beat one strong one on initiative, and a character cannot read their own initiative off their own power — it depends on roster composition and intended action type.\n\nThe synthesis's entire turn-denominated evidence is one figure (鬼谷八荒's 100 道力 per battle), buried in a design-space paragraph rather than in the substrate. The genre's answer to \"no seconds in the economy\" is not a currency — it is **a hard round cap, defended, with the defender winning ties**, and it has been shipping for two decades. That is a scheduling problem, which is the class of problem the project's own constraints say agents are good at. It should be the second-most-load-bearing item in the document. It is absent.\n\n### The single best unswept mechanic in the whole substrate: the turn block\n\n指尖修仙's manual mode: **每6个回合为一轮**, and the loadout-ordering screen appears **at the start of the battle and at the end of every 6-round block.** A bounded, turn-denominated re-plan horizon with a scheduled decision point. And the ordering selection has a **wall-clock limit, after which the game auto-picks** — a reflex hazard with a designed safe default, shipped.\n\nThat is exactly the \"budget you spend rather than a bar you fill\" structure, denominated in the project's own required unit, with an escape hatch. The synthesis has 觅长生's 悟道点 for that idea and never went looking for the combat version.\n\n### The micromanagement hazard the synthesis aimed at the wrong target\n\nThe \"no micromanagement surface\" constraint is evidenced by NetEase's 48-bone face creator. The genre's actual on-topic instance is **无极仙途**: 6 人物招式 (from 100+) + 5 灵兽招式 (from 100+) + 10 本命神通 + 2 天赋 + 本命飞剑 + 5 法则 ≈ **28 hand-configured slots that must be re-tuned per opponent**, with release-order and cooldown interactions. A 2024 xianxia game, on-genre, and structurally far worse than a character creator. The face creator is a videogame essay about *console* UI; the loadout screen is the thing an agent would actually have to execute.\n\n---\n\n## C. The realm scalar is enforced through initiative, and nobody wrote it down\n\n**修个什么仙**: 出手顺序 compares **境界＞灵巧** first, falling through to 灵巧 only on equality. Realm decides who presses first.\n\n**修仙家族模拟器2**: 神识 affects 战斗出手顺序.\n\nSo in a substantial class of shipped cultivation RPGs, **境界 is a combat power scalar** — precisely what the repository rule bans — enforced through the initiative order rather than through a damage multiplier. The synthesis's levelModel files 境界 as `escapesScalar:false` with the reason *\"境界压制 IS the scalar wearing a costume\"* and then never follows the implication: the genre didn't just tolerate this, it wired the ladder into the turn loop, and 剑侠情缘 shows it was **deliberately removed** between 2001 and 2024. That trend is the most useful sentence available on this question and the synthesis does not contain it.\n\nThe same game also ships **以静制动: 我方越慢，伤害加成倍率越高** — an explicit slower-is-better build. A non-monotonic combat stat, shipped, unmentioned.\n\n---\n\n## D. 乘区 and the damage formula: the largest genuinely unswept system, and it refutes the \"bounded properties\" entry\n\nThe synthesis's statModel has nothing on how damage is computed. What ships:\n\n- **铸仙之境** — eight named 乘区, full published formula, and **暴击率 = log₂(暴击等级/抗暴等级)/4**. Bounded at *both* ends: ≤1× = never crits, 2× = 25%, 4× = 50%, 8× = 75%, 16× = guaranteed. A logarithm is a strictly better answer to numeric inflation than a cap, and the synthesis's \"bounded properties\" entry is *entirely about clamps* (80% / 25% / 50% / 95%). It never found a bounded-by-construction stat.\n- **我的勇者** — 暴击值换算 is piecewise: `<200 → 值/400`; `200–500 → (值×17)/6000 − 值²/600000` (quadratic); `≥500 → 值/500`; then ×(1+百分比暴击率) − 抗性, capped 100%, and **overflow is discarded** (*\"溢出暴击率的部分没用的哦\"*). A three-piece curve whose *shape* is the design.\n- **仙境传说RO** — a **sine-based counter formula**: `元素结算 = 1 − x − 0.3(1 − sin(xπ/2)) − 0.2`, with published saturation points: 58.9% element reduction → max 85% mitigation, 83.6% race, 69.8% physical, 94.4% magic. And **at x=0 the multiplier is 0.5, not 1.0** — a perfectly neutral matchup deals half damage. Defence is `1/(1 + 6·def/atk)` and the game **takes whichever of two mitigation formulas favours the attacker**.\n- **修仙家族模拟器2** (TapTap dev-community post, 2025) — publishes the stat conversion table *and the regime flips*: 攻击 1% ≥ 伤害 1%, 穿透 1% = 0.25% 攻击, 增伤 1% = 0.75% 攻击, 暴率 1% = 增伤 1.5%, 常驻防御 ≈ 攻击/4. Then: **攻击增加 ≥125% 时增伤收益超过攻击增加; ≥58% 时暴击率超过攻击; ≥80% 且暴击率 65% 时暴伤超过暴伤**. That is a published **build-identity inflection point**. Separately: 伤害浮动 ±10%, and **增益不锁面板** — buffs bypass the panel and enter final damage directly, so *the character sheet is a lie by design*.\n\nThe last one is the real answer to the no-scalar problem, and the synthesis missed it: **a stat the sheet shows is not the stat that fights.** For an LLM player this is either the most valuable property you can ship or a fatal legibility trap, and the document has no position on it.\n\n---\n\n## E. Five claims that are false or reversed, with sources\n\n**1. \"梦幻西游 alone\" for the counter structure — false, and the real examples are better.** NetEase's own 大话西游2/手游 wiki publishes `强克 = (1+己方强克+对方被克属性) × [1 + (己方克对方×对方被克 − 己方被克×对方克己方)] × 40%`, with a derived crossover at 总克 178 where *spread* beats *single-axis*, and the explicit rule that 五行相克 is **one-way**: being countered costs you no reduction. ACS publishes `风水值 = P_目标 + 2·P_生目标 − 2·P_克目标`. RO publishes the sine curve. Three shipped five-element systems with published, non-scalar, vector-shaped formulae. The synthesis filed the strongest one as ONE_GAME.\n\n**2. \"No shipped xianxia game offers a genuine non-lethal combat outcome\" — false inside its own corpus.** 修仙家族模拟器2's **心魔劫** ships two resolutions: kill it fast, *or* outlast five minutes. And it contains a **mirror clone that scales off your own stats** — *\"心魔有个你自己复制体，你越强他越强…他的面板属性默认为你的几倍\"* — where the optimal play is explicitly to drop every attack skill and run. **雷劫** is a five-minute real-time survival fight with no kill available. The synthesis quotes this game in nine separate fields and never once mentions either.\n\n**3. \"The genre's non-destructive failure is what happens when a live service cannot afford to make players cry\" — contradicted by 雷劫.** 雷劫 **permanently destroys equipment**: 耐久上限 drops to 0, *\"装备破碎无法修复\"*, and guides tell you to bring **spare sets** because your main set may not survive. The document's dangerList devotes an entry to destruction hazards, cites 诛仙 佩章 as proof the genre is defensive, and never checks its own pillar game.\n\n**4. 寿元 as the run clock — the game offers a toggle to remove it.** 修仙家族模拟器2 ships two selectable modes at character creation: **修仙模式** (death only costs 元气; cultivation stalls) and **真仙模式** (death, 修为归零, restart). A player-facing switch on whether the run clock exists is a more interesting mechanic than the clock, and it is in the corpus.\n\n**5. \"Exactly one shipped title\" — the negative base rate is indefensible.** Every \"exactly one\" in the document means \"exactly one of the ~15 titles somebody found a wiki for.\" The one instance of this method that got audited (ACS 品阶) **was wrong and produced three downstream artefacts** — the synthesis says so itself, then does not generalise the lesson to the eleven un-audited negatives, several of which I reversed above.\n\n---\n\n## F. What the skeptics refuted that the synthesis kept\n\n**The 梦幻西游 \"regular tournament\" is not a regular tournament.** The document asserts *\"regular only over NINE vertices\"* and then, in the same correction, lists out-degrees **3,4,3,4,3,4,3,4**. A regular tournament on 9 vertices has every out-degree equal to 4. Alternating 3/4 is a **non-regular** tournament — which is the interesting part, because it means no two arrays hold equal standing. The document states the property and disproves it in one sentence, then builds the \"it always answers who is stronger\" conclusion on it.\n\n**The 双重方案 survives — and the surviving detail reverses a conclusion.** It is first-party (TapTap dev account, section 4.双重方案). But the document calls the two paths \"equal-status.\" They are not: the roll is the **burden-reduction** path (*\"为了降低大家的负担，我们可以直接跳过玩法\"*), and under the roll **肉身关不展示啦** — the published probability is hidden for one of three gates. **Information disclosure is path-dependent, by designer choice.** That is a better mechanic than the equal-status framing, and the document's framing loses it.\n\n**The 神识 formula is first-party and the synthesis's 25% is right — but drew the wrong lesson.** Dev: `突破几率 = 神识选择次数/8 + 道心值%`, 10 神识 = 1 秒, so 100 神识 = 2 attempts = 25%. The composition — **two independent axes, one of them capped, summing to a probability** — is the actual anti-scalar mechanism. The document describes each half separately and never notices they compose. It also missed that **道心's per-point weight halves every realm** (1% / 0.5% / 0.25% / 0.125% at 筑基/金丹/元婴/化神), which is the design *reason* a per-realm-reset stat can keep mattering forever. That halving schedule is the stealable primitive; the reset is not.\n\n---\n\n## G. A meta-scalar the document's own pillar game ships, entirely unmentioned\n\n**功德** (talent points) is absent from the whole document. 局外功德 is earned **only on 转生**, from realm, and **doubles every major realm**: 练气 +1/层 → 筑基 +2 → 金丹 +4. It buys 灵根 (五灵 0 / 伪 2 / 三 5 / 双 10 / 单 20 / 天 80) and every talent. Two nested doubling loops across generations.\n\nThe document's strongest classification call is 寿元 as a non-scalar run clock, taken from a game whose meta-progression is a doubling point budget that purchases your character's innate stat distribution. Nobody reconciled those.\n\n---\n\n## H. The load-bearing empirical question has a published answer, and it cuts both ways\n\nThe document's #1 unresolved item is whether an LLM compares stat vectors as reliably as it compares integers, and calls it *\"the load-bearing empirical question under the whole no-scalar rule.\"* It is not unresolved.\n\n- **LISTEN (arXiv 2510.25799, IJCAI-ECAI 2026)** ran essentially the proposed test: human rankings held out as ground truth, against a deterministic equal-weighted z-score scorer, single-call LLM ranking, and chunked LLM comparison. Result: the LLM aggregator **matches or beats the deterministic linear-utility baseline**, and the paper's gain over \"naive LLM ranking of all items at once\" comes from **decomposing by context size, not by attribute count**.\n- **DecompR (arXiv 2605.26878)** is the finding that matters for us and is not in the document: *\"Holistic LLM judges conflate utility estimation and utility aggregation, yielding unstable implicit weights… these weight-induced shifts also increase with stakeholder count.\"* Asking an LLM to rank candidates on many competing criteria produces **weight drift**, and the drift scales with the number of criteria. The fix is to **fix the weights before scoring**, not let the model pick them implicitly.\n\nTwo consequences the document needs and does not have:\n\n**The no-scalar rule is a systems claim, not a cognitive one, and the document argues it as if it were cognitive.** The repository rule says *once a number exists, every other system becomes a function of it* — that is about what the **designer** builds. Whether the **agent** can aggregate a vector at play time is a separate question, and the literature says agents do it fine. The synthesis never defends the argument it actually needs.\n\n**The document's own recommended leaderboard is the published worst case.** *\"A leaderboard whose entry is a SET rather than a number, a reward curve that pays for the set's composition rather than its total\"* is precisely the multi-stakeholder case where DecompR says the aggregator will drift. It is proposed without checking whether an LLM can rank it stably. It cannot, unless the weights are published and fixed — which is the same fix the 乘区 posts make.\n\n---\n\n## I. Evidence-class failures\n\n**Zero first-party sources in the entire document, except the two TapTap posts I found.** No developer blog, no GDC talk, no 设计师访谈, no patch note, no in-game screenshot of a tooltip. Every claim about *why nobody has done this* — the document's central output — is sourced to wikis and guide sites. For a document whose thesis is \"nobody has taken it, and here is why,\" that is the wrong evidence class for the whole question.\n\n**修仙家族模拟器2 is ~40% of the load-bearing evidence and it is a 3-person, 2D, low-budget mobile MMO** (dev, verbatim: *\"我们目前还是几个人的小团队开发，并且没有太多资金，因此次全游戏只能是2D画面\"*), picked up by the corpus **because it has a wiki**. It is the best-documented game in the sample for the same reason it is the least representative. First-party-verified items: the 双重方案, the 神识 formula, the 道心 reset and halving schedule, the stat conversion table, the regime flips. Everything else — 10 layers, 寿元 ladder, v11.0.3 灵花 bug, 境界压制 coefficients, 符箓 灵根 bypass, 兽潮 freeze, the male 阵枢 constraint — is guide-site.\n\n**觅长生's 修为 rate has no time unit and a 171× internal discrepancy** — the document's own unresolved item — and then cites that game for the headline permission claim, 悟道点, 资质, 灵根, 丹方, the furnace, 废档, and \"the best craft-input table in the entire corpus\" **whose craft window is denominated in days**. It flags the missing unit once and keeps citing it six more times.\n\n**鬼谷八荒 carries four load-bearing claims and was demonstrably misread once already** (the 30-step-ladder error, which the document catches). Its 保护值 has two incompatible published versions and the document picked one silently. Its 画符插件 claim — the strongest evidence in the dangerList — is a community claim with no first-party number.\n\n**太吾绘卷 is modelled on early-access guides**, by the document's own admission; the 正式版 is unconsulted. **The Nature 2025 citation is used four times as a hard constraint**, but it is about iterated PD in controlled experiments; extrapolating to a persistent 50-agent world is a category jump the document never flags.\n\n---\n\n## J. Other substrate systems that were not swept at all\n\nBrief-named and missing: **enemies** (one derivative row about name prefixes), **quests** (the bounty is player-posted, not NPC content; the only quest mechanic in the document is the 修为 wall, filed in a dangerList), **factions** (no sect structure, diplomacy, war, or 叛门), **characters** (no class system, no origin, no creation as a decision).\n\nAlso entirely absent: **the agent's action surface** (how many discrete actions per turn, how much state is readable, whether the game is resumable mid-action) — which for a game played by LLM agents *is* the substrate, and which the corpus, being entirely human-MMO-shaped, never measured. **Inspectability/tooltips** — the document's central recommendation is \"publish the formula\" and it has no system for how a game surfaces state. **Tutoring/onboarding.** **Inventory capacity.** **Markets and player pricing.** **Audio/animation/cinematics** — catastrophic for a PixiJS browser game and not one line. **A second production chain**: 炼器 is treated as part of 装备 rather than as the second parallel production chain beside 炼丹.\n\n---\n\n## K. Smaller, but real\n\n- **资质 mixes three baselines in one note** (+1%/point to 200; 天灵根 ≥80 = 1.80× vs 三灵根 45 = 1.45×; then \"2–3× vs 普通灵根人, not vs 真灵根\"). Verified against the guide: 80功德 天灵根 = 300% 练速, 20 单灵根, 10 双, 5 三, 2 伪, 0 五. The \"2–3×\" range is quoted against a frame the source does not use.\n- **The `isScalarRisk` field is not defensible as assigned.** 悟道点 is marked `false` on the grounds that its decision is \"topological rather than volumetric\" — the same reasoning that would clear 战力, and on a total that goes 83 → 98–108. 资质 is marked `true` for being a linear multiplier. The distinction is asserted, not defended.\n- **Four itemTree entries carry hybrid labels** — \"GENRE_CANON noun, ONE_GAME every implementation\" (×3) and \"GENRE_CANON noun, PLATFORM_ARTEFACT in practice\" — against a brief that required exactly one. Every hybrid label is on a category whose `ourOpportunity` is \"this is unclaimed.\" If the noun is canon and every implementation is one studio, the honest label is ONE_GAME and the novelty claim dies with it.\n- **The 阵法 three-gauge claim is 1 of ~3 array systems surveyed.** 修仙家族模拟器2's 阵法 is *\"影响练阵的成功率\"* — a crafting skill, alongside 炼丹/炼器/制符/御兽. Calling it \"the best non-scalar structure in the domain\" on a single data point from one of ACS's two array systems is inflation.\n- **符箓 has a fourth implementation nobody saw.** 修仙家族模拟器2: 符 is *\"记录了一次技能的道具\"* — a recording of a past cast. 品质 is a **historical fact about a completed act**, not a draw. The design question becomes \"how good was your cast,\" not \"how good is your roll.\" For an agent, that is the most interesting of the four and the document lists three.\n- **太吾's 精纯**: the document calls it the most total-ordering number in the corpus and stops there. The load-bearing facts are that it is per-boss-parity gated (3 points, thresholds at 25/50/75% HP) and that the *inheritable band* is the legible half. Both are anti-grind structures, and neither is mentioned.\n- **No foreign game appears in the itemTree, levelModel or statModel** — despite the document naming WoW and Dark Souls in an unresolved item and conceding they were swept shallowly. For an \"original game\" brief whose entire differentiator is an anti-scalar design, the one body of shipped RPG systems that ran fifty years without a power score is the obvious place to look, and it was not read.\n\n---\n\n## What I'd do with this\n\nThe three highest-value corrections, in order: **(1)** sweep the 乘区/damage-formula domain properly — it is bigger than six of the fourteen itemTree categories combined, it is where the log-crit and the sin-counter and the regime-flip and the panel-lies live, and it is where the cost of \"no player scaling\" is actually paid; **(2)** sweep turn structure — round caps, turn blocks, initiative computation — because it is the substrate that satisfies the project's own turn-denomination constraint and it is already solved, twice, with published numbers; **(3)** re-audit every \"exactly one\" negative against a second source method, and adopt the ACS lesson generally, because that method failure has already produced one confirmed false claim and I have reversed five more. The 功德 doubling loop and the 雷劫 permanent-equipment-destruction should be added to the dangerList today; both are in a game the document treats as its strongest source.",
+ "domainCount": 17,
+ "verdictCount": 17
+}
