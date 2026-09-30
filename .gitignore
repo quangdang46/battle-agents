@@ -56,3 +56,7 @@ coverage/
 # record of what it was for.
 tmp-*
 *.bak
+
+# Bing search-result dumps left in the working tree by research agents.
+# Not ours, not licensable for redistribution, and the results are garbage.
+rss.xml
