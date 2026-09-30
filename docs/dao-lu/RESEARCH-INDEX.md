@@ -4,9 +4,10 @@
 
 | # | Tài liệu | Nói gì |
 |---|---|---|
-| 0 | **[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)** | **Còn gì chưa biết, đo bằng cách nào, và phải chọn gì trước khi code.** Bắt đầu ở đây |
-| 0.25 | **[TERMINOLOGY-沙雕.md](TERMINOLOGY-沙雕.md)** | **Chốt thuật ngữ.** 沙雕 là slang "ngớ ngẩn", **KHÔNG phải cát** |
-| 0.5 | **[REFUTATIONS.md](REFUTATIONS.md)** | **Những chỗ nghiên cứu ĐẠO LỘ đã tự đánh lưa mình.** Đọc trước hai tài liệu dưới |
+| **0** | **[RESEARCH.md](RESEARCH.md)** | **NGUỒN CHÂN LÝ DUY NHẤT.** Terminology gate ở đầu · 16 mục, mỗi mục ghi rõ đã hay chưa nghiên cứu · open questions · bằng chứng đã bị bác |
+| 0.5 | **[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)** | **Còn gì chưa biết, đo bằng cách nào, và phải chọn gì trước khi code.** |
+| 0.75 | **[TERMINOLOGY-沙雕.md](TERMINOLOGY-沙雕.md)** | **Chốt thuật ngữ.** 沙雕 là slang "ngớ ngẩn", **KHÔNG phải cát** |
+| 0.9 | **[REFUTATIONS.md](REFUTATIONS.md)** | **Những chỗ nghiên cứu ĐẠO LỘ đã tự đánh lưa mình.** Đọc trước khi tin bất kỳ mục nào |
 | 1 | **[GENRE-CANON.md](GENRE-CANON.md)** | **Vực của thể loại.** 12 cụm từ vựng được miễn phí · 41 hệ thống và trạng thái mỗi cái · 15 ràng buộc cứng · 20 cái đừng copy · 9 khoảng trống |
 | 2 | **[RPG-SUBSTRATE.md](RPG-SUBSTRATE.md)** | **Chất nền RPG.** Cây vật phẩm · 16 cách làm tiến trình thành hữu hình · 20 chỉ số và cái nào là scalar trong áo · 25 thứ mọi game đều làm giống nhau |
 | 3 | **[ART-DIRECTION-SHADIAO.md](ART-DIRECTION-SHADIAO.md)** | **Hướng nghệ thuật — 沙雕修仙动画.** Cơ chế chuyển hình, câu hỏi nghiên cứu, cây breakdown, ba lớp corpus. **CHƯA NGHIÊN CỨU** |
