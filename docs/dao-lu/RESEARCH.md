@@ -41,6 +41,7 @@ viết vào đây**, không mở file mới.
 | [12](#12-phản-biện-đợt-0) | Phản biện đợt 0 — bài học về phương pháp |
 | [13](#13-báo-cáo-gốc--phần-còn-dùng) | Báo cáo gốc — phần còn dùng |
 | [14](#14-chốt-thuật-ngữ--đầy-đủ) | Chốt thuật ngữ |
+| [15](#15-tiền-lệ-đã-ship--4thfevercultivation-world-simulator) | **Tiền lệ đã ship** — một thế giới tu tiên toàn Agent LLM, free trên Epic. Xác nhận cả hai câu hỏi mở của ta |
 
 ---
 
@@ -3774,3 +3775,190 @@ phẩm vẫn dùng:
 
 Nhánh 沙画 là **một phương tiện thật, có người thật, có sản phẩm thật, và có khách hàng thật**.
 Việc ta không dựng nó không làm nó sai; và bằng chứng của nó vẫn dùng được cho §5.
+---
+
+# 15. Tiền lệ đã ship — `4thfever/cultivation-world-simulator`
+
+> **✅ ĐÃ NGHIÊN CỨU. 24 agent, 2,1M subagent token.** Đọc source thật, không đọc README.
+> Ba tầng tách riêng: **IMPLEMENTED / DESIGNED / ANNOUNCED_ONLY** — và tầng ba xuất hiện
+> nhiều bất ngờ hơn hai tầng kia.
+
+## 15.1 Nó là gì
+
+`github.com/4thfever/cultivation-world-simulator`, **đã ship miễn phí trên Epic Games
+Store** — xác nhận độc lập, không chỉ qua README của chính nó. 2,1k star, 3.618 file,
+Python + FastAPI + TypeScript.
+
+Đây là **tiền lệ đúng cho tiền đề của ta**: mỗi tu sĩ là một Agent độc lập; người chơi đóng
+vai **天道** quan sát và can thiệp; và câu trả lời khi so sánh nó với game viết sẵn cũng là câu
+trả lời của ta — 「涌现式剧情：**开发者也不知道下一秒会发生什么**。没有预设剧本」.
+
+Nó **không** giải một trong hai câu hỏi mở của ta. Nó **xác nhận cả hai, từ code đã ship.**
+
+## 15.2 Câu hỏi 1 — scalar. CÓ, và đúng cái luật ta cấm
+
+**`战斗力` trong `src/systems/battle.py`**, cộng từ một bảng cảnh giới cứng, chạy vào **cả lần
+quay xác định thắng lẫn lần quay sát thương**, in thẳng vào prompt agent đọc, và dùng để xếp
+ba bảng xếp hạng.
+
+| Nơi | Cơ chế |
+|---|---|
+| `get_base_strength()` | một số thực quyết định thắng **và** bất đối xứng sát thương `exp(0.04×|diff|)×1.1` |
+| `ranking.py:53` | `"power": int(get_base_strength(avatar))` |
+| `tournament.py:67-69` | **seed bracket** |
+| `sect_manager.py:83-86` | **bán kính ảnh hưởng lãnh thổ** — `influence_radius = int(total_battle_strength) // divisor + bias` |
+| `info_presenter.py:251` | hiện cho **người chơi** như một ô bảng chỉ số |
+| `attack.py:70-73` | viết vào **prompt của chính agent** |
+| `breakthrough.py:49-59` | **boss 天劫** → tra bảng bốn mục rồi tung đồng xu |
+
+Và chi tiết đáng giá nhất: **cùng một thứ tự bốn cảnh giới bị viết lại nhiều lần**, mà
+`cultivation.py:126-127` mang chú thích 「统一的境界顺序与排名，避免重复定义」 — *"một thứ tự
+thống nhất để tránh định nghĩa trùng"* — **ngay trên bảng đó.**
+
+⚠️ **Nhưng critic sửa lại**: phần lớn những chỗ "trùng" kia **đang `import`** từ bảng chuẩn.
+Chỉ **hai** bản sao thật (`take_treasure.py:22`, `dig_grave.py:20`) là *string-keyed*, vì chúng
+đọc payload đã serialize — **trùng lặp ở ranh giới kiểu, không phải cẩu thả**. Và
+`docs/specs/treasure-poi-system.md:328` **đã ra lệnh sửa**:
+「实现时将 `DigGrave` 内部的境界 rank 映射提取为共享 helper，避免两份硬编码」 —
+spec nói trước, việc chưa làm. Bản so sánh tìm thấy *chú thích* khoe đã hợp nhất và bỏ qua
+*spec* ra lệnh hợp nhất.
+
+## 15.3 Câu hỏi 2 — loot. KHÔNG scalar-free, và bằng chứng mạnh hơn ta tưởng
+
+**Độ hiếm là một thứ tự — và ở đây nó là MỘT, không phải một.**
+
+`src/classes/rarity.py` là một thang **N / R / SR / SSR** trọng số `10.0 / 5.0 / 3.0 / 1.0` —
+**một trật tự bốc bước thứ hai, độc lập với cảnh giới**. Và `get_rarity_from_str` **ép mọi thứ
+không nhận ra về N (普通)** — đúng cái mẫu "mặc định về bậc yếu nhất" mà ta vừa phê phán ở
+trục cảnh giới, mà bản so sánh bỏ qua.
+
+Về *đồ rơi của kẻ bị giết* — đường gần nhất với loot của boss — là
+`src/classes/kill_and_grab.py:41-44`:
+
+```python
+loot_candidates.sort(key=lambda x: x[1].realm, reverse=True)
+best_realm = loot_candidates[0][1].realm
+best_candidates = [c for c in loot_candidates if c[1].realm == best_realm]
+```
+
+`realm` là một enum sắp bằng `@total_ordering`. Nó **sắp đồ rơi theo cảnh giới rồi chỉ rút
+từ bậc cao nhất**. Hai xác nhận độc lập, không phải một.
+
+## 15.4 Điều không ai nói và bản so sánh bỏ: log-sum-exp
+
+`sect_manager.py:70-81` tổng hợp quyền lực nhóm bằng **log-sum-exp có hiệu ứng lợi suất giảm
+dần**:
+
+```python
+max_str = max(strengths)
+sum_exp = sum(math.exp(max(-500.0, min(s - max_str, 500.0))) for s in strengths)
+total   = max_str + math.log(sum_exp)
+```
+
+Nó **không** phải scalar-free, nhưng nó là **câu trả lời duy nhất đã ship cho câu hỏi "so
+sánh hai nhóm thế nào"**, và nó bị bỏ qua. Tệ hơn: **có hai công thức "quyền lực tông môn" khác
+nhau**. `ranking.py:69,108` dùng tổng thuần. Một giáo 100 đệ tử ở 炼气 đọc **~14,6** trên bản
+đồ và **~1000** trên bảng xếp hạng. **Cùng một cái tên, hai đại lượng.**
+
+Và một hệ thống **cố ý chặn trục quyền lực ở 30%** — `sect_member_status.py:25-31`:
+
+```python
+return (contribution / max_contribution) * 70.0 + (strength / max_battle_strength) * 30.0
+```
+
+Không phản bác luật ta (30% vẫn là hàm của nó) — nhưng đó là **một lần từ chối có chủ đ**, và
+bản so sánh đếm "mười một chỗ" mà bỏ sót nó.
+
+## 15.5 Claim của ta được **củng cố**, không bị lấn át
+
+Bản so sánh nói *"kho này không có boss nào"* và dùng đó để **làm yếu** claim boss của ta.
+**Sai.** `src/systems/tribulation.py` định nghĩa **mười loại 天劫**, `breakthrough.py:129` gọi
+nó, và nó phân xử bằng `breakthrough_success_rate_by_realm` —
+`{炼气: 0.8, 筑基: 0.6, 结丹: 0.4, 元婴: 0.2}` — tra bảng rồi tung đồng xu.
+
+⇒ **天劫 chính là boss canon của thể loại, nó ship, và nó được phân xử bằng một scalar bốn
+mục.** Claim của ta **mạnh hơn**, không yếu đi.
+
+## 15.6 Bảy thứ đáng mượn — và **không cái nào** liên quan tới thứ ta đang thiết kế
+
+| | Vì sao |
+|---|---|
+| **Một mutation lock + bộ đếm `world_revision` đơn điệu** | Seam đồng thời cho "nhiều agent LLM ghi một thế giới" — nguyên tắc ta viết nhưng **chưa cài**. `AGENTS.md` của họ nêu nó bằng văn xuôi trước khi viết code |
+| **Registry fail-closed cho task LLM** | `raise TestModeUnsupportedLLMTask(...)` + chặn cứng ở entrypoint thô. **Default-deny** — đúng cực, tốn đúng một dòng `raise` |
+| **Chuẩn hoá-thành-None rồi để tầng domain chọn từ danh sách của chính nó** | Năm bước trong `normalize_choice_key`; không khớp ⇒ sentinel ⇒ `choose_fallback_key` chọn từ **option list do request mang**, không bao giờ từ text trong prompt |
+| **Chiếu thế giới xuống trước khi model thấy, và tính sẵn phép so sánh thành boolean** | 8 bystander còn id/name/realm/sect, 4+4 sự kiện, `should_prioritize_safety` **đã tính sẵn**. Đừng bắt model tự tính để quyết định có sợ không |
+| **Biên là cấu trúc, không phải văn bản** | `EntityRewrite` chỉ mang id/name/desc — **LLM không có kênh nào để trả về một scalar**. Luật "văn xuôi không được viết state" của ta là một comment; của họ là một **kiểu** |
+| **Lọc từ vựng hành động theo từng agent lúc build** | `get_action_infos()` khởi tạo từng lớp hành động, gọi `can_possibly_start()` để lọc. Prompt liệt kê tập đóng bằng văn xuôi |
+| **Tháng = lượt, mọi thời lượng là số nguyên tháng, không đồng hồ chuẩn ở đâu trong kinh tế** | Xác nhận hard fact #3 **từ phía ngược về cấu trúc, không phải quy ước** |
+
+⚠️ **Caveat phải gắn liền mục đầu tiên**: `GameLoopRunner` mang **cả hai** `game_instance`
+và `runtime`, và poll dict thô **ngoài lock**. Một seam có đường vòng ngay bên cạnh thì
+**không phải seam.**
+
+**Và đây là điều chính critic nói thay**: bảy mục trên, **không mục nào** nằm về thứ ta đang
+thiết kế — trận đấu, loot, đồng hồ, multi-agent, khán giả đến muộn. Đó là điểm mù thật của cuộc
+so sánh, và bản so sánh không bao giờ gọi tên nó.
+
+## 15.7 Tám thứ đừng mượn
+
+| | Vì sao |
+|---|---|
+| **API sửa thế giới không xác thực, không giới hạn tần suất** | `POST /api/v1/command/system/shutdown` giết tiến trình; `delete-save` xoá file theo `filename: str` trần. CORS `allow_origins=["*"]` + `allow_credentials=True`, sáu gói runtime, **không gói nào là auth**. Và đây là **lỗi thiết kế, không phải sơ suất** — `external-control-api.md` liệt kê 鉴权与权限分级 trong §5.3 暂缓 |
+| **Ép enum không parse được về bậc yếu nhất** | `cultivation.py:28` — `mapping.get(s, "QI_REFINEMENT")`. Nguyên văn §4.2 của họ cấm đúng cái đầu vào mà `command.py:59-62` vẫn nhận — `realm: Optional[str]` |
+| **Lock tuần tự hoá nhưng không throttle** | Hàng đợi mutation không chặn, không backpressure. **Tuần tự bảo đảm thứ tự, không bảo đảm sức chứa** — và sức chứa mới là thứ API cho agent cần |
+| **Docstring sai hằng số của chính nó** | `battle.py:118` viết `[0.1, 0.9]`; `:38-39` code `[0.01, 0.99]`. Sai một bậc độ ở cả hai đầu, và **nghiêng về hướng quan trọng**: chênh lãnh thổ **không bao giờ chắc chắn**, nên dân gian "cảnh giới cao luôn thắng" **sai trong hiện thực này** |
+| **Prompt builder tiêu RNG của thế giới** | `retreat.py:42` là **constructor duy nhất** trong 48 file hành động rút ngẫu nhiên. Dựng prompt ⇒ tiêu stream ⇒ **kết quả rút lui tương lai đổi**. Test seed toàn cục, production **không** seed (`grep .seed(` trong `src/` = 0) |
+| **Bảng rank viết nhiều lần** | Đã nêu ở §15.2 — nhẹ hơn bản so sánh nói, nhưng vẫn đúng phần lõi |
+| **Test dựng dataclass chứ không dựng object đọc nó** | `test_avatar_metrics.py` không bao giờ tạo `Avatar`, nên `record_metrics` — đọc `self.hp.value`, `self.hp.max_value`, `cultivation_progress.progress` — **không tồn tại** — ship trong repo 2,1k star. Nặng hơn: cờ đó **được persist**, nên một save tạo khi bật lên **crash mọi lần load sau** |
+| **`eval()` biểu thức do CSV viết, chạy trên object sống** | `mixin.py:58-65`; `technique.csv` là bề mặt thực thi mã. Nếu eval ném, **chuỗi thô sống sót** vào `float(extra_raw or 0.0)` |
+
+## 15.8 Bốn câu hỏi vẫn của ta — và chúng **đã đóng thêm**
+
+| Câu hỏi | Họ làm gì |
+|---|---|
+| **Trận không scalar?** | Chưa tới và không thử. Toàn bộ phân xử là `p = 1/(1+exp(-0.15×diff))` rồi `random.random() < p` |
+| **Loot không scalar?** | **Xác nhận**, và ở dạng trực tiếp nhất |
+| **`TURN_WALL_SECONDS = 30`?** | **Đóng đóng góp âm**: lượt do `while True: await self.sleep(1.0)` sở hữu, nên **không bước được**. `pause` / `pause-and-drain` / `resume` đều có; **step một tháng theo yêu cầu thì không có**. Một giây thật = một tháng thế giới, **~3600× nén** |
+| **Đỉnh thang là quyết định?** | Không có gì. `飞升上界` là một mục roadmap **chưa tick**. Và bug tiềm ẩn đáng học: `Realm.from_id` **bác** giá trị ngoài khoảng; chỗ *bão hòa* là `get_realm(level)` — **đúng chỗ cần bão hòa**. Bản so sánh nói ngược và đã bị critic bác |
+
+Và câu hỏi **multi-agent**: `README.md:398` có một mục **chưa tick** —
+`- [ ] Integrate your own Claw into the cultivation world`. **Vắng code nhưng có ý định đã ghi
+là một phát hiện về câu hỏi**, không phải một khoảng trống.
+
+## 15.9 Bài học phương pháp — và nó quay ngược lại ta
+
+> **Một con số quyết định kết quả không phải là tuyên bố thiết kế cho tới khi có test ghim nó.**
+
+Repo này chứng minh quy tắc đó **theo cả hai chiều**:
+
+- `take_treasure.py` — công thức **đúng**, test **đúng**, còn bảng trong
+  `treasure-poi-system.md` §5.2 **sai**. Test là thẩm quyền; văn bản là bug.
+- `battle.py` — docstring **sai**, hằng số **đúng**, test ghim `rate > 0.98`. **Lại test đúng,
+  comment là thứ cũ.**
+
+⇒ **Khi tài liệu và test bất đồng, test là thẩm quyền. Khi comment và test bất đồng, thế nào.
+Khi comment và test ĐỒNG Ý, bạn vẫn chưa biết hành vi có đúng không — bạn chỉ biết chưa ai làm
+vỡ nó.**
+
+**Hệ quả khó chịu nhất, và nó nhắm vào chính file này.** Mọi quy tắc trong `RESEARCH.md` mà ta
+định ràng buộc — không power score, lượt là đơn vị duy nhất, field vắng thì vắng chứ không
+phải `null` — **hiện chỉ là comment trong một file Markdown**. Theo đúng luật nhà của ta,
+**chưa cái nào còn đúng.** Việc đầu tiên nghiên cứu này nên sinh ra **không phải một tài liệu
+thiết kế, mà là những test sẽ đỏ nếu ta ship scalar.**
+
+## 15.10 Sửa những câu trong tài liệu này
+
+| Câu cũ | Sửa thành |
+|---|---|
+| *Thể loại **chưa từng ship một trận boss không scalar**, ở bất kỳ game nào, ở cả 31 domain đã quét.* | Đây là domain thứ 32, và nó **củng cố** claim: 天劫 chính là boss canon, nó ship, và nó được phân xử bằng tra bảng bốn mục rồi tung đồng xu. Viết lại phạm vi cho khớp bằng chứng |
+| **Một trận đấu có thể không scalar. Phần thưởng thì không — vì độ hiếm là một thứ tự.** | Vế sau **đã được xác nhận bằng code đã ship** và nên trích dẫn. Vế trước là claim mở sắc nhất trong file và **phải bỏ câu** *"đây là phát hiện của ta, nghiên cứu có thể lật"* |
+| *Đó là khoảng mở lớn nhất mà ba đợt nghiên cứu tìm ra.* | Vẫn đúng, nhưng phải nói **đây là dạng khoảng mở nào**: sweep 31 domain **cộng** một game đã ship, độc lập xác nhận, **đều dính cùng một bức tường**. Đó không phải lỗi tìm kiếm — **đó là phát hiện** |
+| **Bảo vệ của thể loại: `品阶` nằm trên vật, `境界` nằm trên người.** | **Bị bác bằng code.** `weapon.py` parse cột `grade` thẳng vào enum Realm và phát cùng giá trị dưới cả hai khoá; cột `effects` của `technique.csv` mang `{"extra_battle_strength_points": 3}` trên hàng **phẩm trung bình**, đúng khoá đó được đọc ở `battle.py:62`. **Phẩm cấp của vật thể viết thẳng vào con số sức mạnh của người.** Tách scalar ra hai không phải phòng thủ — **nó là đường vận chuyển** |
+| **Cảnh giới mua quyền, không mua số lớn hơn** | Vẫn đúng, và **mạnh hơn**: đợt 3 đã công bố hai điều chưa ai đăng, và repo này là minh hoạ cả hai chiều — nó **thành công** ở chiến đấu (`觅长生` không có nhân theo cảnh giới) và **thất bại** ở boss (tử thôn tra bảng bốn mục). Cùng một nguyên tắc, hai kết cục |
+
+## 15.11 Nguồn
+
+`github.com/4thfever/cultivation-world-simulator` @ `471fe745` (v4.2.1), Epic Games Store.
+Critic đã clone về và kiểm **~40 trích dẫn** trên source; số dòng phần lớn đúng tuyệt đối.
+Sáu trong bảy kết luận của bản so sánh cần sửa, và các sửa đổi hướng của cả hai vế trong
+§15.10.
