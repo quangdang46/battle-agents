@@ -4,6 +4,7 @@
 
 | # | Tài liệu | Nói gì |
 |---|---|---|
+| 0 | **[RECONCILIATION.md](RECONCILIATION.md)** | **Đóng 6 mâu thuẫn của report. Đọc cái này trước report** |
 | 1 | **[DESIGN-REPORT.md](DESIGN-REPORT.md)** | **Báo cáo chính. 267k ký tự, 8 section.** Phần 0 là phản biện, đọc nó trước phần 1 |
 | 2 | [.research/full-report-critic.md](.research/full-report-critic.md) | Phản biện nguyên văn, không diễn giải |
 | 3 | [STORY-SAND-NARRATIVE.md](STORY-SAND-NARRATIVE.md) | Cốt truyện tu tiên qua điêu khắc cát. Có nguồn |
@@ -39,9 +40,14 @@
    nhãn 8.000+ bước bởi sáu chuyên gia và **không nêu tỉ lệ nền**. Nó là *chưa biết*,
    không phải ước lượng. Thí nghiệm: 30 lời gọi LLM, hash chênh lệch trạng thái, 5 phút.
 
-## Bốn quyết định chặn việc viết code
+## Bốn quyết định chặn việc viết code — đã đóng
 
-1. **Độ dài lượt** — 12s, 25s, 120s, 600s đang cùng tồn tại
-2. **Default của visibility** — deny hay allow
-3. **Retry** — giữ transcript hay cắt
-4. **隐忍** — giữ lượt trống hay bỏ
+| | Trước | Sau |
+|---|---|---|
+| Độ dài lượt | 12s, 25s, 120s, 600s | **Đơn vị duy nhất là lượt. Giây chỉ tồn tại khi render** |
+| Default visibility | hai mục đối nghịch | **default-deny**, từ lập luận "quên chú thích phải fail an toàn" |
+| Retry | giữ hay cắt, không thể cùng đúng | **giữ + cờ `retried`** — replay vẫn là hàm thuần của log bền |
+| 隐忍 | bắt buộc là lượt trống | **bỏ.** Lượt trống là *lựa chọn* của agent, không phải kịch bản |
+
+Còn lại: ba câu **cần đo** (tỉ lệ bước no-op, D_productive, chi phí token thật) và
+hai câu **cần bạn chốt** (`award` là tự trao hay hành động; `TURN_WALL_SECONDS = 30`).
