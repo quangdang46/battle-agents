@@ -14,52 +14,10 @@
       "path": "packages/db"
     },
     {
-      "path": "packages/game-client"
-    },
-    {
       "path": "packages/mcp-server"
     },
     {
       "path": "packages/protocol"
-    },
-    {
-      "path": "packages/features/activity"
-    },
-    {
-      "path": "packages/features/agent"
-    },
-    {
-      "path": "packages/features/animation"
-    },
-    {
-      "path": "packages/features/achievements"
-    },
-    {
-      "path": "packages/features/battle"
-    },
-    {
-      "path": "packages/features/bounty"
-    },
-    {
-      "path": "packages/features/guild"
-    },
-    {
-      "path": "packages/features/inventory"
-    },
-    {
-      "path": "packages/features/progression"
-    },
-    {
-      "path": "packages/features/quest"
-    },
-    {
-      "path": "packages/features/reputation"
-    },
-    {
-      "path": "packages/features/social"
-    },
-    {
-      "path": "packages/features/world"
     },
     {
       "path": "packages/adapters/_template"

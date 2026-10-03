@@ -5,7 +5,6 @@ import {
   AGENT_EVENT_TYPES,
   agentEventSchemas,
   DEFAULT_BATCH_LIMITS,
-  DEFAULT_SESSION_RESUME_GRACE_MS,
   PROTOCOL_VERSION,
   REGISTERED_ACTION_IDS,
 } from '@battle-agents/protocol';
@@ -169,14 +168,14 @@ function splitFields(shape: Record<string, unknown>): { required: string[]; opti
 }
 
 describe('the published documents exist, and are documents', () => {
-  it('publishes all four plus the manifest', () => {
+  it('publishes both documents plus the manifest', () => {
     for (const name of [...PUBLISHED_DOCS, SKILL_MANIFEST]) {
       expect(publishedDocExists(name), `${name} is not in apps/web/public`).toBe(true);
     }
   });
 
   it('gives each document enough substance to be read', () => {
-    // The floor is what stops four empty files satisfying "published". A
+    // The floor is what stops two empty files satisfying "published". A
     // reviewer reading a 60-line document can tell whether it answers the
     // question; a machine cannot, so the machine is given a floor and the
     // reviewer is given the rest.
@@ -188,8 +187,8 @@ describe('the published documents exist, and are documents', () => {
     }
   });
 
-  it('cross-links the three documents a reader needs from skill.md', () => {
-    for (const other of ['heartbeat.md', 'messaging.md', 'events.md']) {
+  it('cross-links the document a reader needs from skill.md', () => {
+    for (const other of ['events.md']) {
       expect(doc('skill.md'), `skill.md does not link to ${other}`).toContain(`./${other}`);
     }
     for (const name of ALL_DOCUMENTS) {
@@ -213,12 +212,11 @@ describe('the version pin, which is the half that rots', () => {
   });
 
   it('says the pin is enforced server-side and not by a client check', () => {
-    // The Moltbook shape carries a version pin that is a client-side string
-    // compare against a moving branch, so CONFIRMED-as-a-compatibility-
-    // mechanism is UNVERIFIED (docs/research/moltbook.md, C11). Shipping a pin
-    // that looks load-bearing and is not is the failure this asserts against:
-    // a client that trusts it will not notice a protocol change until it fails
-    // in a confusing way.
+    // A client-side version pin is a string compare against a moving branch,
+    // which is a compatibility mechanism in appearance only. Shipping a pin that
+    // looks load-bearing and is not is the failure this asserts against: a
+    // client that trusts it will not notice a protocol change until it fails in
+    // a confusing way.
     const protocol = manifest()['protocol'] as Record<string, unknown>;
     expect(protocol['enforcedBy']).toBe('server');
     expect(String(protocol['note'])).toMatch(/nothing reads this file for you/i);
@@ -238,7 +236,13 @@ describe('every action id the documents name is one this build registers', () =>
     const actions = block('skill.md', 'actions')['actions'] as ReadonlyArray<
       Record<string, unknown>
     >;
-    expect(actions.length).toBeGreaterThan(10);
+    // No floor here, deliberately: this build registers no actions, so the only
+    // honest floor is zero and the loop below is what makes the assertion mean
+    // something. It goes red the moment a document names an id the registry
+    // does not have, which is the failure this whole file is about — a check
+    // pinned to "more than ten" would instead demand that a deleted game be
+    // described to keep passing.
+    expect(actions).toEqual([]);
     for (const action of actions) {
       const id = action['id'] as string;
       expect(REGISTERED_ACTION_IDS, `skill.md names ${id}, which is not registered`).toContain(id);
@@ -256,21 +260,6 @@ describe('every action id the documents name is one this build registers', () =>
     }
   });
 
-  it('holds for the vocabulary messaging.md publishes', () => {
-    for (const action of block('messaging.md', 'messaging')['actions'] as ReadonlyArray<
-      Record<string, unknown>
-    >) {
-      const id = action['id'] as string;
-      expect(REGISTERED_ACTION_IDS, `messaging.md names ${id}, which is not registered`).toContain(
-        id,
-      );
-    }
-  });
-
-  it('holds for the one action heartbeat.md names', () => {
-    const action = block('heartbeat.md', 'heartbeat')['action'] as Record<string, unknown>;
-    expect(REGISTERED_ACTION_IDS).toContain(action['id'] as string);
-  });
 });
 
 describe('events.md describes the frozen union and nothing else', () => {
@@ -341,62 +330,16 @@ describe('events.md describes the frozen union and nothing else', () => {
   });
 });
 
-describe('heartbeat.md states the numbers the sweeper uses', () => {
-  it('states the resume grace this build shares with the battle feature', () => {
-    // DEFAULT_SESSION_RESUME_GRACE_MS lives in the protocol package because
-    // two removable features need it; the composition root writes the same
-    // figure out by hand so a stripped feature does not orphan an import. The
-    // number an agent reads has to be that one.
-    const minutes = block('heartbeat.md', 'heartbeat')['resumeGraceMinutes'] as number;
-    expect(minutes * 60_000).toBe(DEFAULT_SESSION_RESUME_GRACE_MS);
-  });
-
-  it('calls a heartbeat voluntary rather than required', () => {
-    // "Required" is the word that would change the architecture. A heartbeat is
-    // a courtesy that keeps a run resumable; the grace window is what gives it
-    // meaning. A document calling it required describes a held-open socket.
-    expect(block('heartbeat.md', 'heartbeat')['heartbeatRequired']).toBe(false);
-    expect(prose('heartbeat.md')).toMatch(/voluntary return cadence/i);
-  });
-
-  it('says the sweep is not scheduled in a live deployment', () => {
-    // The route that would trigger the sweep exists and is tested; nothing
-    // mounts it. A document that implied a server-side timer is enforcing the
-    // 5-minute threshold would send an agent to debug a deadline nobody has.
-    expect(prose('heartbeat.md')).toMatch(
-      /does not currently run\s+one against a live deployment/i,
-    );
-  });
-});
-
-describe('messaging.md describes the degradation rather than the aspiration', () => {
-  it('marks the writing actions refused and the reading ones available', () => {
-    const actions = block('messaging.md', 'messaging')['actions'] as ReadonlyArray<
-      Record<string, unknown>
-    >;
-    const byId = new Map(actions.map((action) => [action['id'] as string, action['status']]));
-    for (const id of ['social.send', 'social.broadcast']) {
-      expect(byId.get(id), `${id} is not marked refused`).toBe('refused');
-    }
-    for (const id of ['social.inbox', 'social.profile', 'social.leaderboard', 'social.poke']) {
-      expect(byId.get(id), `${id} is not marked available`).toBe('available');
-    }
-  });
-
-  it('names the capability that is missing and says it has no provider', () => {
-    expect(block('messaging.md', 'messaging')['requiredCapability']).toBe(
-      'guild.messaging.authorize',
-    );
-    expect(block('messaging.md', 'messaging')['capabilityProvided']).toBe(false);
-    expect(prose('messaging.md')).toMatch(/no feature provides/i);
-  });
-
-  it('keeps the AgentEvent message pair separate from social messaging', () => {
+describe('events.md keeps the two things called "message" apart', () => {
+  it('says the AgentEvent pair is not social messaging', () => {
     // Two things called "message" in one protocol, and an agent that conflates
     // them will wait forever for a reply to something that was never sent.
-    expect(prose('messaging.md')).toMatch(/are not the social messaging/i);
-    // events.md, not skill.md: that is where the `message.sent` row of the
-    // union is listed, so that is where the reader meets it and needs telling.
+    //
+    // Half of the original assertion: it checked that messaging.md made the
+    // distinction from its own side and events.md from this one. messaging.md is
+    // gone with the social feature, so only the surviving half is left — and it
+    // is the half that keeps catching a future document reintroducing the
+    // confusion.
     expect(prose('events.md')).toMatch(/not\s+the social messaging/i);
   });
 });

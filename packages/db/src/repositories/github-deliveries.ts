@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
-import { githubDeliveryClaims } from '../schema/features/github.js';
+import { githubDeliveryClaims } from '../schema/github.js';
 
 /**
  * The delivery ledger against a real database.

@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -69,10 +69,6 @@ function sourcesUnder(directory: string): readonly string[] {
 
 const SOURCES = sourcesUnder(PACKAGE_ROOT);
 
-function read(relativePath: string): string {
-  return readFileSync(join(PACKAGE_ROOT, relativePath), 'utf8');
-}
-
 describe('the harness list has one copy in this package', () => {
   it('narrows every known harness and sends everything else to other', () => {
     for (const harness of HARNESSES) {
@@ -91,73 +87,18 @@ describe('the harness list has one copy in this package', () => {
     expect(naming.map((path) => path.replace(PACKAGE_ROOT, ''))).toEqual(['harness.ts']);
   });
 
-  it('is imported rather than redeclared by both repositories', () => {
-    for (const repository of ['repositories/agents.ts', 'repositories/social.ts']) {
-      const source = read(repository);
-      expect(source).toMatch(/import \{ toHarness \} from '\.\.\/harness\.js';/);
+  it('is imported rather than redeclared by any repository', () => {
+    // The two files that used to carry their own list are gone. The property
+    // this asserts is still the one that matters, and it is now stated over
+    // whatever repositories remain: none of them may declare the mapping, and
+    // every one that narrows a harness must import `toHarness` to do it.
+    const repositories = SOURCES.filter((path) => path.includes(`${sep}repositories${sep}`));
+    expect(repositories.length).toBeGreaterThan(0);
+
+    for (const repository of repositories) {
+      const source = readFileSync(repository, 'utf8');
       expect(source).not.toMatch(/const HARNESSES\b/);
       expect(source).not.toMatch(/function toHarness\b/);
-    }
-  });
-});
-
-describe('the build list is written down once', () => {
-  it('derives BuildName from BUILD_NAMES rather than restating it', () => {
-    // The two idioms used to sit either side of each other holding the same
-    // eight names: a union, and a `Set` for `isBuildName` to consult. Adding a
-    // build meant editing both. Editing only the union compiles cleanly and
-    // narrows nothing at all, because the guard kept reading the old Set.
-    const source = read('repositories/progression.ts');
-    expect(source).toContain('type BuildName = (typeof BUILD_NAMES)[number];');
-    // A union member is a line starting with `|` and a quoted build name. There
-    // must be none: the only build names allowed to appear are inside the
-    // BUILD_NAMES array literal.
-    expect(source).not.toMatch(/^\s*\|\s*'generalist'/m);
-    expect(source).not.toMatch(/type BuildName\s*=\s*\|/);
-  });
-
-  it('spells the build list out in exactly one place', () => {
-    // The derivation check above does NOT catch the reverse mistake, and the
-    // first version of this file proved it: re-adding the redundant `Set` while
-    // leaving the derived union in place passed every assertion here, because
-    // the union was still derived and still correct. The two facts that drift
-    // are "the list is written once" and "the union is derived", and only the
-    // first one notices a second copy appearing.
-    //
-    // `Exclude<BuildName, 'generalist'>` in StoredSignal is a legitimate second
-    // mention of a build name and is deliberately not a list, which is why this
-    // counts bracketed literals rather than occurrences of the word.
-    const literals = [...read('repositories/progression.ts').matchAll(/\[([^\][]*)\]/g)]
-      .map((match) => match[1] ?? '')
-      .filter((body) => body.includes("'generalist'"));
-    expect(literals).toHaveLength(1);
-  });
-
-  it('keeps the same idiom for the skills it already used', () => {
-    // The skills were already `as const` array with a derived union, and that is
-    // the shape the builds were being brought to. Asserting both means a future
-    // edit cannot introduce a third idiom for the same job.
-    const source = read('repositories/progression.ts');
-    expect(source).toMatch(/const SKILL_NAMES = \[/);
-    expect(source).toContain('type SkillName = (typeof SKILL_NAMES)[number];');
-  });
-});
-
-describe('the payout upsert narrows once', () => {
-  it('builds the row it inserts and the row it updates from one expression', () => {
-    // The insert and the conflict update each called `toIntentState`,
-    // `toIntentMode` and `new Date(...)` separately. Two independent branches
-    // that must be edited together: a fourth state narrowed on the way in and
-    // left un-narrowed on the way through the conflict, which is a write that
-    // only happens on the retry path — the one path nobody exercises by hand.
-    const source = read('repositories/bounties.ts');
-    const record = source.slice(
-      source.indexOf('async record(intent:'),
-      source.indexOf('async currentFor('),
-    );
-    expect(record).toMatch(/const row = \{/);
-    for (const call of ['toIntentState(', 'toIntentMode(', 'new Date(intent.recordedAt)']) {
-      expect(record.split(call)).toHaveLength(2);
     }
   });
 });

@@ -1,59 +1,79 @@
 /**
- * The action-id union, checked at compile time.
+ * The action-id inventory, checked at compile time.
  *
- * This is the criterion ba-capability-registry-klw was reopened for: a bogus
- * action id must be a COMPILE error, not a runtime surprise. The ids are
- * generated from each feature's manifest by scripts/generate-action-ids.ts,
- * because the registered set is decided at runtime by independently built
- * packages and a hand-written union is correct only on the day it was written.
+ * ## What this file stopped asserting, and why
  *
- * `@ts-expect-error` fails in both directions, which is what keeps this honest:
- * if the error ever stops happening, the unused directive becomes an error
- * itself. So the day the union stops being enforced, the build says so.
+ * It used to prove that a misspelled action id is a COMPILE error, by pinning
+ * `ApplicationApi.act` to the generated union and pairing each bogus id with a
+ * `@ts-expect-error`.
+ *
+ * That guarantee depended on the union being complete for every action any
+ * caller could reach. It was not, and could not be: `act` is also reachable with
+ * an id composed at runtime by a host, and `extension-contract.ts` exists
+ * precisely to let an out-of-tree extension install one. An extension that
+ * cannot appear in a union generated from this repository's manifests cannot be
+ * dispatched through a signature keyed on that union.
+ *
+ * So the compile-time check was a gate rather than a narrowing device, and it was
+ * enforced in three places — the Application API, the MCP `act` tool and the CLI.
+ * All three refused a correctly installed action the moment the union stopped
+ * covering it. `act` now takes `string`, and the check is the one that cannot be
+ * wrong about runtime state: `UnknownActionError` from the registry, which each
+ * surface translates into its own wording.
+ *
+ * What remains here is the inventory, which is still generated and still worth
+ * asserting: it is what `discover()` is checked against, and a generator that
+ * quietly stopped reading a manifest would make it drift.
  */
 import type { ApplicationApi } from '@battle-agents/api';
-import type { RegisteredActionId } from '@battle-agents/protocol';
+import { REGISTERED_ACTION_IDS } from '@battle-agents/protocol';
 
 declare const api: ApplicationApi;
 
-/** An id this build registers. */
-export const registered: RegisteredActionId = 'quest.claim';
-
 /**
- * A misspelled id, and the same misspelling a caller would actually type.
- * This compiled clean before the union existed, which is the whole point: the
- * error was always possible, it just was not being reported.
+ * The inventory is empty while nothing is registered, and an empty array is the
+ * honest statement of that — the generator ran, read zero manifests and wrote
+ * zero ids.
  */
-export const misspelled = async (): Promise<void> => {
-  // @ts-expect-error 'quest.cliam' is not registered; 'quest.claim' is
-  await api.act('quest.cliam', { id: 'q1' });
+export const inventoryIsEmpty = (): readonly string[] => {
+  const ids: readonly string[] = REGISTERED_ACTION_IDS;
+  return ids;
 };
 
 /**
- * An id from a feature whose PACKAGE exists but which is not installed in this
- * build, so its ids are not in the generated union.
- *
- * This example was `guild.join` and it stopped being true: guild shipped, the
- * generator picked its manifest up, and the `@ts-expect-error` became unused —
- * which TypeScript reports as an error, so the type suite caught its own
- * premise expiring rather than letting it rot silently. `inventory` is the
- * standing example: the package is on disk, it is not mounted, and it declares
- * no manifest.
+ * A misspelled id is refused at runtime, not at compile time. The value of this
+ * case is the MESSAGE: an agent driving the CLI reads it, so the wording is part
+ * of the surface rather than an implementation detail.
  */
-export const notInstalled = async (): Promise<void> => {
-  // @ts-expect-error no such domain is built into this union
-  await api.act('inventory.open', { id: 'i1' });
+export const misspelledIsRefused = async (): Promise<void> => {
+  await expectUnknown(api, 'quest.cliam');
 };
 
-/** A command reached through dispatch, which act() must not accept. */
-export const commandNotAction = async (): Promise<void> => {
-  // @ts-expect-error agent.register is dispatched, not acted on
-  await api.act('agent.register', { name: 'x' });
+/** An id from an extension that is not mounted here, refused the same way. */
+export const notInstalledIsRefused = async (): Promise<void> => {
+  await expectUnknown(api, 'inventory.open');
 };
 
-/** The valid case still compiles, or the guards above prove nothing. */
-export const valid = async (): Promise<void> => {
-  await api.act('quest.claim', { id: 'q1' });
-  await api.act('session.heartbeat', { sessionId: 's1' });
-  await api.act('reputation.read', { ownerId: 'u1' });
+/** A dispatched command is not an action, and is refused as one. */
+export const commandNotActionIsRefused = async (): Promise<void> => {
+  await expectUnknown(api, 'agent.register');
 };
+
+/**
+ * A registered id IS dispatchable. With no extension mounted there is no such
+ * id, which is why this asserts the negative shape — the guard rejects every
+ * input rather than accepting one and rejecting the rest.
+ */
+export const nothingIsDispatchable = async (): Promise<void> => {
+  await expectUnknown(api, REGISTERED_ACTION_IDS[0] ?? 'anything');
+};
+
+async function expectUnknown(target: ApplicationApi, action: string): Promise<void> {
+  try {
+    await target.act(action, {});
+  } catch (error) {
+    if ((error as { code?: string }).code === 'unknown-action') return;
+    throw error;
+  }
+  throw new Error(`act(${action}) resolved; this build registers nothing`);
+}

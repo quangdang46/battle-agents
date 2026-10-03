@@ -182,6 +182,23 @@ function defaultSleep(ms: number): Promise<void> {
  * not let a client name a session; recording which of the HARNESS's runs this is
  * is what lets `POST /api/events` — addressed by the id in a filename — find the
  * row again. See `CreateSessionInput.harnessSessionRef`.
+ *
+ * ## The route is not mounted in this build
+ *
+ * The Next.js adapter for this call belonged to the agent feature, which was
+ * removed along with every other feature package, so a live server answers 404
+ * here today. The client half stayed because it is core: `packages/protocol` is
+ * frozen, and deleting a client so that it stops asking a question nobody is
+ * answering would be the architecture failure the layering rules exist to
+ * prevent.
+ *
+ * What this means for a caller is stated rather than left to be discovered: an
+ * adapter using `createSessionOpeningSender` will be refused at the handshake on
+ * every run, and it is refused LOUDLY — `HelloRefusedError` names the status and
+ * the server's own words — because a swallowed refusal is an adapter running
+ * happily into a server that refuses every batch, which is the failure this
+ * function was written to end. Restoring the route is an extension's job, not
+ * this package's.
  */
 export interface HelloOptions {
   readonly baseUrl: string;

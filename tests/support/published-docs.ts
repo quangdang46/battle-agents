@@ -31,8 +31,17 @@ export const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const PUBLIC_DIR = join(REPO_ROOT, 'apps', 'web', 'public');
 export const APP_DIR = join(REPO_ROOT, 'apps', 'web', 'app');
 
-/** The five files the bead publishes, by the name the documents use. */
-export const PUBLISHED_DOCS = ['skill.md', 'heartbeat.md', 'messaging.md', 'events.md'] as const;
+/**
+ * The two files the bead publishes, by the name the documents use.
+ *
+ * It was four. `heartbeat.md` documented the stale-session cadence and
+ * `messaging.md` the social actions, and both describe features rather than
+ * platform: the cadence belonged to an action id no build registers, and every
+ * action the second named was deleted with its feature. Keeping a document that
+ * only describes absent behaviour is the failure `protocol-docs.test.ts` exists
+ * to prevent, run against itself.
+ */
+export const PUBLISHED_DOCS = ['skill.md', 'events.md'] as const;
 export type PublishedDoc = (typeof PUBLISHED_DOCS)[number];
 
 export const SKILL_MANIFEST = 'skill.json';

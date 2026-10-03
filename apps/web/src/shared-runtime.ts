@@ -4,17 +4,6 @@ import {
   closeDatabasePool,
   createDatabase,
   createDatabasePool,
-  DrizzleAgentRepository,
-  DrizzleBattleRepository,
-  DrizzleAchievementsRepository,
-  DrizzleBountyRepository,
-  DrizzlePayoutIntentStore,
-  DrizzleWorldRepository,
-  DrizzleProgressionRepository,
-  DrizzleQuestRepository,
-  DrizzleReputationRepository,
-  DrizzleSessionRepository,
-  DrizzleSocialRepository,
   DrizzleStateStore,
 } from '@battle-agents/db';
 import type { Database } from '@battle-agents/db';
@@ -119,32 +108,13 @@ async function buildSharedRuntime(): Promise<SharedRuntime> {
   const pool = createDatabasePool();
   const database = createDatabase(pool);
   const bus = createInMemoryEventBus();
-  const sessionRepository = new DrizzleSessionRepository(database);
 
   const store = new DrizzleStateStore(database);
   // Awaited, never fired and forgotten. StateStore.load is synchronous in the
-  // frozen contract, so the cache can only be filled where awaiting is allowed,
-  // and a prime that races the first request answers `undefined` for a feature
-  // with durable state. For battle that is not a degraded read: the arena gate
-  // stops gating and no win since the restart emits a reward, because the agent
-  // a session belongs to is looked up rather than trusted from a caller.
+  // frozen contract, so the cache can only be filled where awaiting is allowed.
   await store.prime();
 
-  const runtime = createGameRuntime({
-    store,
-    bus,
-    agentRepository: new DrizzleAgentRepository(database),
-    questRepository: new DrizzleQuestRepository(database),
-    sessionRepository,
-    progressionRepository: new DrizzleProgressionRepository(database),
-    reputationRepository: new DrizzleReputationRepository(database),
-    socialRepository: new DrizzleSocialRepository(database),
-    bountyRepository: new DrizzleBountyRepository(database),
-    payoutIntentStore: new DrizzlePayoutIntentStore(database),
-    worldStore: new DrizzleWorldRepository(database),
-    battleStore: new DrizzleBattleRepository(database),
-    achievementsRepository: new DrizzleAchievementsRepository(database),
-  });
+  const runtime = createGameRuntime({ store, bus });
 
   holder.close = () => closeDatabasePool(pool);
   return { database, runtime, bus };

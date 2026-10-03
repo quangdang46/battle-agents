@@ -1,6 +1,4 @@
 import { defineAction } from '@battle-agents/core';
-import { isRegisteredActionId } from '@battle-agents/protocol';
-import type { RegisteredActionId } from '@battle-agents/protocol';
 import type { ActionSummary, Capability, EventBus, GameEvent, Runtime } from '@battle-agents/core';
 
 /**
@@ -85,19 +83,15 @@ export interface ApplicationApi {
   /**
    * Run a registered action.
    *
-   * The id is the generated union rather than `string`, so a misspelled one is
-   * a compile error instead of a runtime surprise. A caller holding a string
-   * that is only known at runtime narrows it FIRST with `isRegisteredActionId`
-   * from the protocol package and calls this like any other — which is why
-   * there is no second, string-taking overload. One accepting `string` would
-   * resolve every bogus-id call through it, and the guarantee would stop
-   * existing with nothing failing to build.
+   * `string` rather than the generated union: only the registry knows what a
+   * host has installed, and an extension composed at runtime cannot appear in a
+   * union generated from this repository's manifests. See the implementation for
+   * what that cost and why the check is now `UnknownActionError`.
    *
-   * The payload is still `unknown` in both directions: each feature has to
-   * declare its own input and output shapes before those can be checked too,
-   * and pretending otherwise would be a guarantee the code does not give.
+   * The payload is `unknown` in both directions: each extension has to declare
+   * its own input and output shapes before those can be checked too.
    */
-  act<I>(action: RegisteredActionId, input: I): Promise<unknown>;
+  act<I>(action: string, input: I): Promise<unknown>;
   /**
    * The one method that is not async, and deliberately so.
    *
@@ -259,11 +253,13 @@ export function createApplicationApi(runtime: Runtime, bus?: EventBus): Applicat
     },
 
     async act<I>(action: string, input: I): Promise<unknown> {
-      // The registry, not the generated list, is the authority: the generated
-      // union describes the BUILD, and a host can compose a different set of
-      // features at runtime. Checking both would reject an action that is
-      // genuinely installed.
-      if (!isRegisteredActionId(action) || !runtime.actions().includes(action)) {
+      // The registry is the authority and the generated union is not consulted. The
+      // union describes this repository's build; an extension composed at runtime
+      // cannot appear in a union generated from in-tree manifests, so gating on
+      // it made every such action undispatchable. That gate was here and the
+      // sentence above it already said it should not be — the two agreed only
+      // while the generator emitted every in-tree id.
+      if (!runtime.actions().includes(action)) {
         throw new UnknownActionError(action, runtime.domains());
       }
       // Every registered action in this build takes an object, and `I` is

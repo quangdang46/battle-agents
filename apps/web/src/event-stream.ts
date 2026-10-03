@@ -195,11 +195,11 @@ function unidentified(sessionId: string, zone?: string): LiveAgent {
  * read it. That is the whole reason the opening frame and the first delta agree
  * about where a character is: there is one table, not two.
  *
- * The client's `ZONE_FOR_EVENT` — which maps a game event like `bounty.claimed`
- * to a place — is deliberately NOT used here. It lives in `game-client` because
- * a game event meaning a new place is the client's business, and a transport
- * reaching into the presentation package to read it would invert the layering
- * this repository is built to keep. An agent that claims a bounty therefore
+ * A client's map from game event to place on screen is deliberately NOT used
+ * here. It belongs to the presentation package, because a game event meaning a
+ * new place is the client's business, and a transport reaching into the
+ * presentation package to read it would invert the layering this repository is
+ * built to keep. A client therefore
  * stays where it was standing until a tool moves it, which is the conservative
  * answer rather than a wrong one.
  */

@@ -11,17 +11,17 @@ import type { DeliveryFact } from './delivery.js';
  *
  * The two names that are NOT used, and why.
  *
- *   `bounty.completed` — a game fact, and this package knows nothing about
- *     bounties. Emitting it here would put the game vocabulary at the
- *     integration edge, which is exactly the layering the plan forbids.
+ *   A domain event such as a bounty completing — a game fact, and this package
+ *     knows nothing about bounties. Emitting one here would put game vocabulary
+ *     at the integration edge, which is exactly the layering the rules forbid.
  *
- *   `pr.merged` — subtler, and the reason is a live defect rather than a taste.
- *     progression registers a handler for it and pays 500 XP
- *     (packages/features/progression/src/rules.ts). When the bounty feature
- *     lands and translates this same merge into `bounty.completed`, which pays
- *     1000, one merged pull request pays 1500 and writes two history rows. The
- *     double-pay is armed today and only this event name pulls the trigger, so
- *     the integration edge takes a name nothing is subscribed to.
+ *   `pr.merged` — subtler, and the reason is historical rather than a taste.
+ *     Two extensions once paid for the same merge: one registered a handler for
+ *     a merge event and paid for it directly, and another translated that merge
+ *     into its own completion event and paid again. One merged pull request paid
+ *     twice and wrote two history rows. Only the event name pulled the trigger,
+ *     so the integration edge takes a name no extension can subscribe to by
+ *     accident. No extension exists today; the constraint outlives them.
  *
  * The name is therefore namespaced under the integration that observed it, which
  * is also what makes it obvious in a log whose line came from here.

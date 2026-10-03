@@ -2,6 +2,11 @@
  * Ownership manifests decide which boundary may migrate which table. A platform
  * table added later must not require editing a feature migration, and vice
  * versa, so the split is data the verification step asserts rather than a note.
+ *
+ * Every feature package was removed from this repository, so FEATURE_TABLES is
+ * empty. The boundary is kept: an extension package that is added back
+ * registers its own tables here, and the verifier refuses a table that is in
+ * neither list, which is the failure that makes a table nobody may migrate.
  */
 
 // Better Auth owns these and nothing else may migrate them (plan section 38): the
@@ -24,64 +29,23 @@ export const PLATFORM_TABLES = [
   'feature_state',
   'installations',
   'projects',
-  // The GitHub delivery ledger, added by ba-github-infrastructure-56v. It sits
-  // on the platform side because neither list is really about ownership in the
-  // abstract: FEATURE_TABLES is "a feature may migrate this", and this table
-  // belongs to no feature — it records what an integration observed, and the
-  // bounty feature reads the published facts rather than owning them. Leaving
-  // it out of both lists is not a neutral choice: the verifier reports a table
-  // in neither as belonging to no boundary, and nothing may then migrate it.
+  // The GitHub delivery ledger. It sits on the platform side because it belongs
+  // to no feature — it records what an integration observed. Leaving it out of
+  // both lists is not a neutral choice: the verifier reports a table in neither
+  // as belonging to no boundary, and nothing may then migrate it.
   'github_delivery_claims',
 ] as const;
 
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
-export const FEATURE_TABLES = [
-  'quests',
-  'bounties',
-  'bounty_funds',
-  // Added by ba-feature-bounty-xhk. It is a feature table rather than a
-  // platform one for the same reason bounty_funds is: the bounty feature is the
-  // only thing that reads or writes it, and "belongs to no boundary" is what
-  // the verifier reports for a table missing from both lists — which is how a
-  // table ends up that nothing may migrate.
-  'payout_intents',
-  'battles',
-  'battle_participants',
-  'agent_stats',
-  // The reputation feature added this table in ba-feature-reputation-nnj and the
-  // verifier caught it on the next schema-drift stage: a table that is not in
-  // either list belongs to no boundary, so nothing may migrate it and nothing
-  // asserts its invariants. That is the split doing its job — the failure was
-  // the manifest being one commit behind the schema, not the check.
-  'agent_reputation',
-  // M5's base. A feature table for the reason agent_reputation is: the world
-  // feature is the only thing that reads or writes it, and a table missing from
-  // BOTH lists belongs to no boundary — the verifier reports it, and then
-  // nothing may migrate it. That is exactly what `pnpm db:seed` said when this
-  // table landed without an entry here.
-  'agent_bases',
-  // The other half of ba-feature-reputation-nnj, and a feature table for the
-  // reason agent_reputation is: the reputation feature is the only thing that
-  // reads or writes it. It holds one row per outcome that has been counted, so
-  // a delivery arriving twice is recognisable as the same outcome rather than
-  // the second one. Left out, the verifier reports it as belonging to no
-  // boundary and nothing may migrate it.
-  'reputation_outcomes',
-  'achievements',
-  'messages',
-  // ba-feature-guild-5g6. Six tables, and the split is doing its job in the
-  // direction that has bitten before: a table in neither list belongs to no
-  // boundary, so nothing may migrate it and nothing asserts its invariants —
-  // and `checkNoCachedTotals`, which is the invariant the whole money design
-  // rests on, reads a table the verifier would otherwise not know about.
-  'guilds',
-  'guild_members',
-  'guild_work_log',
-  'guild_treasury_entries',
-  'guild_quests',
-  'guild_role_signals',
-] as const;
+/**
+ * Tables an extension package may migrate.
+ *
+ * Empty. A table that an extension adds belongs here, and until one does the
+ * verifier's "in neither list" failure is what stops a table escaping both
+ * boundaries.
+ */
+export const FEATURE_TABLES = [] as const;
 
 export type FeatureTable = (typeof FEATURE_TABLES)[number];
 
@@ -92,7 +56,7 @@ export const OWNED_TABLES = [...PLATFORM_TABLES, ...FEATURE_TABLES] as const;
  * each. A column here is a claim about ownership, which is why the verifier
  * treats one appearing anywhere else as a failure rather than a curiosity.
  *
- *   users-less entries (installations, agents, projects) reference the GAME
+ *   users-less entries (installations, agents, projects) reference the platform
  *     account, and are what every ownership check in the codebase is written
  *     against.
  *

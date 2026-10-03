@@ -4,21 +4,18 @@ import { DEV_LOGIN_NAME, devLoginEnabled, devLoginRefusal } from './auth/dev-log
 /**
  * Who is looking, as far as this page is concerned.
  *
- * ## The board is not public, and that is not a choice made here
+ * ## Who is looking is decided once, here
  *
- * `bounty-routes.ts` authenticates every request on the bounty surface,
- * INCLUDING the list, and gives its reason in the code: a bounty names a
- * repository and an issue number, and `docs/design/public-replay.md` rules that
- * publishing a repository is publishing a place to look. A page that read the
- * same command with no check would publish exactly what the route refuses to,
- * through a door the route does not have.
+ * The rule this records: anything naming a repository and an issue number is
+ * private, and a page that reads the same command with no check publishes
+ * exactly what a route refuses to, through a door the route does not have. So
+ * the decision lives here rather than being re-made per surface.
  *
- * So the whole `(app)` route group is behind this one check. The alternative —
- * gating `/bounties` and leaving `/agents` open — would be defensible on the
- * narrowest reading and wrong on the one the codebase actually wrote down.
- * `/replay/[replayId]` stays outside the group, because that page is the
- * surface `docs/design/public-replay.md` is about and it decides its own
- * boundary.
+ * The bounty route this was written against is gone with its feature, and so is
+ * the page group it gated. What survives is the seam: a surface that needs to
+ * know who is asking resolves it through this one function rather than reading
+ * the session itself, which is the property that made the boundary checkable
+ * when there was something to check.
  *
  * ## The three answers, and why there are three
  *

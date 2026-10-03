@@ -26,20 +26,15 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUTPUT = join(REPO_ROOT, 'packages/protocol/src/generated/action-ids.ts');
 const FEATURES_DIR = join(REPO_ROOT, 'packages/features');
 
-/** Every feature's action ids, in one place the generator reads. */
-const MANIFESTS: Readonly<Record<string, readonly string[]>> = {
-  agent: AGENT_ACTION_IDS,
-  animation: ANIMATION_ACTION_IDS,
-  bounty: BOUNTY_ACTION_IDS,
-  quest: QUEST_ACTION_IDS,
-  progression: PROGRESSION_ACTION_IDS,
-  reputation: REPUTATION_ACTION_IDS,
-  social: SOCIAL_ACTION_IDS,
-  battle: BATTLE_ACTION_IDS,
-  achievements: ACHIEVEMENTS_ACTION_IDS,
-  guild: GUILD_ACTION_IDS,
-  world: WORLD_ACTION_IDS,
-};
+/**
+ * Every extension's action ids, in one place the generator reads.
+ *
+ * Empty. No extension package is registered, so there is no manifest to import
+ * and the union below is empty. The first extension added back adds its import
+ * and its entry here, and the discovery assertion below is what notices if
+ * someone adds the manifest and forgets this line.
+ */
+const MANIFESTS: Readonly<Record<string, readonly string[]>> = {};
 
 /**
  * Every feature that declares an action-id manifest on disk, discovered rather
@@ -87,15 +82,20 @@ function discoverManifestOwners(): Map<string, string> {
 
 function assertEveryManifestIsRegistered(): void {
   const discovered = discoverManifestOwners();
-  if (discovered.size === 0) {
-    // A glob that matches nothing is indistinguishable from a clean tree, and
-    // that is the failure this guard exists to catch.
+  if (discovered.size === 0 && existsSync(FEATURES_DIR)) {
+    // The directory exists but holds no manifest, which is not the same as there
+    // being no features: something read the directory and found nothing to read.
+    // That is the failure this guard exists to catch, because a glob matching
+    // nothing is indistinguishable from a clean tree.
     throw new Error(
       'codegen: no feature manifest declaring *_ACTION_IDS was found under ' +
         'packages/features. The discovery step is not seeing the tree, so it ' +
         'cannot catch a feature that was never registered.',
     );
   }
+  // Zero discovered with no directory at all is a tree with no features in it,
+  // which is a real state rather than a broken one: the union is empty and
+  // `act()` rejects everything, which is the truth about this build.
   const missing = [...discovered].filter(([feature]) => !(feature in MANIFESTS));
   if (missing.length > 0) {
     throw new Error(
@@ -155,13 +155,32 @@ function main(): void {
   const every = [...new Set(Object.values(MANIFESTS).flat())].sort();
   const duplicates = every.length - new Set(every).size;
 
+  /**
+   * The union, or the type that stands in for it when there are none.
+   *
+   * An empty list of `| "x"` lines emits `export type T =` followed by `;`, which
+   * does not parse — so a build with no extensions produced a file the compiler
+   * rejected, and the "assembled from the manifests" story turned out to depend on
+   * there being at least one.
+   *
+   * `never`, because an empty union of string literals IS `never` and anything
+   * weaker stops being a guarantee: `string & { readonly x?: never }` compiles,
+   * so every `@ts-expect-error` in `tests/types/action-ids.ts` becomes an unused
+   * directive and the type suite reports it — which is the check that exists to
+   * report exactly that. `never` is assignable nowhere except another `never`,
+   * so `act('anything')` is the compile error it was always meant to be, and a
+   * value narrowed by `isRegisteredActionId` is usable because the guard proved
+   * nothing is registered.
+   */
+  const union = every.length === 0 ? 'never' : unionOf(every);
+
   const body = `${banner}
 
 ${byFeature}
 
 /** Every action id in this build, sorted. The type \`act()\` is checked against. */
 export type RegisteredActionId =
-${unionOf(every)};
+${union};
 
 /**
  * Whether a string names an action this build registers.
@@ -211,18 +230,5 @@ function camel(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-// Imported after the helpers so the "no imports in the OUTPUT" rule is about
-// the generated file, not about this one, which legitimately reads the features.
-import { AGENT_ACTION_IDS } from '../packages/features/agent/src/manifest.js';
-import { ANIMATION_ACTION_IDS } from '../packages/features/animation/src/manifest.js';
-import { BOUNTY_ACTION_IDS } from '../packages/features/bounty/src/manifest.js';
-import { PROGRESSION_ACTION_IDS } from '../packages/features/progression/src/manifest.js';
-import { QUEST_ACTION_IDS } from '../packages/features/quest/src/manifest.js';
-import { REPUTATION_ACTION_IDS } from '../packages/features/reputation/src/manifest.js';
-import { BATTLE_ACTION_IDS } from '../packages/features/battle/src/manifest.js';
-import { ACHIEVEMENTS_ACTION_IDS } from '../packages/features/achievements/src/manifest.js';
-import { GUILD_ACTION_IDS } from '../packages/features/guild/src/manifest.js';
-import { SOCIAL_ACTION_IDS } from '../packages/features/social/src/manifest.js';
-import { WORLD_ACTION_IDS } from '../packages/features/world/src/manifest.js';
 
 main();

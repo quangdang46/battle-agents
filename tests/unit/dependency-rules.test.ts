@@ -393,14 +393,20 @@ describe('repository layering', () => {
   const violations = contract.checkImports({ files: sourceFiles, packages });
 
   it('discovers the workspace packages and their sources', () => {
-    // Asserts that discovery works, not that any particular feature exists.
+    // Asserts that discovery works, not that any particular package exists.
     // Pinning a feature here meant the removal test could never remove it,
     // because the tree went missing mid-run and this assertion failed for a
     // reason that had nothing to do with coupling.
+    //
+    // The pinned assertions are on packages this build cannot do without. The
+    // nested-workspace glob is asserted through `adapters/`, because that is
+    // where the nesting still is: `packages/features` is empty, and an
+    // assertion over a glob that matches nothing passes without proving the
+    // glob works.
     const discovered = packages.map((entry) => entry.dir);
     expect(discovered).toContain('packages/core');
     expect(discovered).toContain('packages/protocol');
-    expect(discovered.some((dir) => dir.startsWith('packages/features/'))).toBe(true);
+    expect(discovered.some((dir) => dir.startsWith('packages/adapters/'))).toBe(true);
     expect(sourceFiles.map((file) => file.path)).toContain('packages/core/src/index.ts');
   });
 

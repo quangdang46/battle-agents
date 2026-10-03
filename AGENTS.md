@@ -5,39 +5,28 @@ The root [README.md](README.md) has the vision; this file has the map.
 
 ## What this is
 
-**A native pixel RPG that happens to run inside a browser** — not a React
-website with a game embedded in it. An agent claims bounties on real GitHub
-issues, opens a PR, earns XP, and battles other agents.
+**The platform an RPG will be built on, with the game taken back out.** Every
+feature package, the browser client and the art were removed; what remains is
+the seam they mounted into — the extension runtime, the Application API, the
+telemetry protocol, and one HTTP surface where three consumers (CLI, MCP, web)
+reach the same implementation.
 
-## The one rule that overrides everything else below
+Adding a game back means adding a package under `packages/features/` and a
+manifest entry. Nothing in `core/`, `cli/` or `mcp/` needs to change to allow
+it, and that is the property the layering rules exist to protect.
 
-**The browser is the runtime. The game is the product.** There is no "plain web
-plus an embedded game" in this product; the whole application IS the game.
+## What this is not
 
-The full doctrine is [docs/design/game-first-doctrine.md](docs/design/game-first-doctrine.md)
-and it is binding. The four that break most often:
+It is not a game with a platform attached. `discover` returns no domains,
+`act` refuses every id, and `packages/features/` is empty — deliberately, and
+the composition root at `apps/web/src/composition.ts` says so where someone
+adding the first extension will read it.
 
-- **`/` is the game.** Fullscreen, `position: fixed; inset: 0`, no layout above
-  it. Not a dashboard, not a redirect into one.
-- **Scene, not route.** City / Arena / Guild Hall are state. A scene switch keeps
-  the PixiJS application, the world store, the SSE connection, the asset cache and
-  the camera. It is `GameClient.rebindView()`, never a navigation.
-- **Every feature has a place in the world.** A bounty is a notice board. A
-  profile is a character sheet. Settings is the pause menu. If you cannot say
-  where in the world a feature lives, it is not finished.
-- **No SaaS chrome.** No navbar, no sidebar, no card grid, no table doing the
-  work of a game screen. If a screen looks like Linear or Notion it is wrong, no
-  matter how clean it is.
-
-`scripts/check-game-first.sh` enforces the first two mechanically and runs in the
-M0 gate. **A green suite with a red `check-game-first` is a broken gate, not a
-passing build.** When you add a screen, the gate is the place that has to learn
-it exists — not the place to be worked around.
-
-Assets from `.tmp` and the vendored packs under `apps/web/public/art/` are the
-source of truth. A procedurally drawn shape where art already exists is a bug
-with a licence file next to it, and this repository has shipped that bug
-through a fully green test suite.
+The four M0 stages that policed the game — `game-first`, `asset-licenses`,
+`license` on art, and `removal-test` over the deleted features — went with
+their subjects. `scripts/check-stage-manifest.sh` still asserts the manifest,
+`CANONICAL_STAGES` and the `run_stage` dispatch agree, so the list cannot drift
+silently when stages are added back.
 
 ## Before you write code
 
@@ -77,13 +66,12 @@ preference; the plan freezes those three deliberately, and review rejects the PR
 | ------------------------------ | ----------------------------------------------------- |
 | `packages/core/src/`           | primitives, the Extension API, the hook-provider seam |
 | `packages/protocol/src/`       | the AgentEvent union, tool-name normalization         |
-| `packages/features/<concept>/` | one package per game concept                          |
+| `packages/features/<concept>/` | one package per extension; none installed today      |
 | `packages/adapters/<harness>/` | one package per coding harness                        |
 | `packages/api/src/`            | the Application API every surface calls               |
 | `packages/db/src/`             | Drizzle schema and repositories                       |
 | `apps/web/`                    | Next.js UI, auth mount, HTTP surface                  |
 | `docs/design/`                 | decisions that took a while, and why                  |
-| `docs/research/`               | other projects, with commit SHAs and caveats          |
 | `scripts/stages.manifest`      | the single definition of what the gate runs           |
 
 `packages/core` has **zero dependencies**. That is load-bearing: it is what lets
@@ -131,14 +119,17 @@ rediscovered.
   everything applied. The `migrations` and `schema-drift` stages check the
   tables and the artifact directly for exactly this reason.
 - **A check may not assume every feature is installed.** `removal-test.sh`
-  strips each feature in turn and runs the unit suite, so any test that reads
-  `packages/features/*/src` at a fixed path fails on the removal it was meant to
-  prove clean. Four were written this way before the pattern was named. A feature
-  that is absent is not a feature with no behaviour: its event types are neither
-  durable nor bus-only, and a style or vocabulary check that cannot tell the
-  difference reports a dependency that does not exist. This is the same failure as
-  the `any` at a boundary, one layer out — an assertion about the whole system
-  reaching past a seam the system is built to have.
+  stripped each feature in turn and ran the unit suite, so any test that read
+  `packages/features/*/src` at a fixed path failed on the removal it was meant to
+  prove clean. Four were written this way before the pattern was named. The script
+  went with the features it removed, but the rule is why `FEATURE_TABLES` is
+  `[]` rather than absent and why `tests/unit/scaffold.test.ts` tolerates a
+  missing directory: a feature that is absent is not a feature with no behaviour,
+  so its event types are neither durable nor bus-only, and a style or vocabulary
+  check that cannot tell the difference reports a dependency that does not exist.
+  This is the same failure as the `any` at a boundary, one layer out — an
+  assertion about the whole system reaching past a seam the system is built to
+  have.
 
 ## Working a bead
 

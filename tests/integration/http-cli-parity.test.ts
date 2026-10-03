@@ -6,6 +6,7 @@ import {
   defineAction,
   InMemoryStateStore,
 } from '@battle-agents/core';
+import type { RegisteredActionId } from '@battle-agents/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { createRoutes, type HttpRequest } from '../../apps/web/src/routes.js';
@@ -70,6 +71,13 @@ const FIXTURE = {
     }),
   ],
 };
+
+/**
+ * The id `FIXTURE` registers. Cast because `RegisteredActionId` is `never` while
+ * nothing is registered in the product build — but this file's runtime is its own
+ * fixture, and the fixture is what makes this id real here.
+ */
+const FIXTURE_ACTION = 'bounty.list' as RegisteredActionId;
 
 function fixtureApi(): ApplicationApi {
   return createApplicationApi(
@@ -183,8 +191,8 @@ describe('HTTP and the CLI, over one Application API', () => {
     const transport = bridge(api);
     const cli = new HttpApiClient({ baseUrl: ORIGIN, transport });
 
-    const overHttp = await cli.act('bounty.list', { id: 'quest-1' });
-    const direct = await api.act('bounty.list', { id: 'quest-1' });
+    const overHttp = await cli.act(FIXTURE_ACTION, { id: 'quest-1' });
+    const direct = await api.act(FIXTURE_ACTION, { id: 'quest-1' });
 
     expect(overHttp).toEqual(direct);
     // Two acts, two runs, same payload. A route that reshaped the input — a
@@ -203,10 +211,7 @@ describe('HTTP and the CLI, over one Application API', () => {
     // client turns a 404 back into an ApiError carrying the same status. Asserted
     // as a class and a status because a caller that gets a 500 here would retry
     // a spelling mistake forever.
-    // Cast, because the point of the case is an id the union does not carry —
-    // which is exactly what a caller gets from a typo, and the only way to hand
-    // one to a signature that is supposed to forbid it.
-    const TYPO = 'quest.tpyo' as Parameters<ApplicationApi['act']>[0];
+    const TYPO = 'quest.tpyo';
     const overHttp = await cli.act(TYPO, {}).catch((error: unknown) => error);
     const direct = await api.act(TYPO, {}).catch((error: unknown) => error);
 
@@ -277,7 +282,7 @@ describe('the bridge itself', () => {
     const api = fixtureApi();
     const cli = new HttpApiClient({ baseUrl: ORIGIN, transport: bridge(api) });
 
-    expect(await cli.act('bounty.list', { id: 'quest-1' })).toEqual({ listed: 'quest-1' });
-    expect(await cli.act('bounty.list', { id: 'quest-2' })).toEqual({ listed: 'quest-2' });
+    expect(await cli.act(FIXTURE_ACTION, { id: 'quest-1' })).toEqual({ listed: 'quest-1' });
+    expect(await cli.act(FIXTURE_ACTION, { id: 'quest-2' })).toEqual({ listed: 'quest-2' });
   });
 });

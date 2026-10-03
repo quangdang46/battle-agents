@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import type { RegisteredActionId } from '@battle-agents/protocol';
+
 import { ApiError, HttpApiClient, type HttpTransport } from './api-client.js';
 
 /**
@@ -84,9 +86,15 @@ describe('the HTTP client', () => {
     });
     const api = new HttpApiClient({ baseUrl: 'http://api.test', transport });
 
-    await expect(api.act('quest.claim', { questId: 'q1' })).resolves.toEqual({ ok: true });
+    // The cast is the point of the test. `RegisteredActionId` is `never` while no
+    // extension is registered, and passing a string literal straight in would be
+    // a compile error — which is correct for a caller and useless for a test that
+    // is about the wire format rather than about which ids exist.
+    const action = 'some.action' as RegisteredActionId;
+
+    await expect(api.act(action, { id: 'q1' })).resolves.toEqual({ ok: true });
     expect(calls[0]?.method).toBe('POST');
-    expect(calls[0]?.body).toEqual({ action: 'quest.claim', input: { questId: 'q1' } });
+    expect(calls[0]?.body).toEqual({ action: 'some.action', input: { id: 'q1' } });
   });
 
   it('turns a server failure into an error carrying the status and the body', async () => {

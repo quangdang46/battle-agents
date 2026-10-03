@@ -4,7 +4,7 @@ import {
   InMemoryStateStore,
   createInMemoryEventBus,
 } from '@battle-agents/core';
-import { isRegisteredActionId } from '@battle-agents/protocol';
+import type { RegisteredActionId } from '@battle-agents/protocol';
 import type { Runtime } from '@battle-agents/core';
 import { describe, expect, it } from 'vitest';
 
@@ -54,6 +54,17 @@ function runtimeWith(extensionCount: number): Runtime {
     now: () => AT,
   });
 }
+
+/**
+ * The id `runtimeWith` registers on its first fixture extension.
+ *
+ * `RegisteredActionId` is `never` while nothing is registered, so a literal
+ * cannot be passed to `act()` without a cast. Casting at each call site would say
+ * "this particular id happens to be fine" three times over; naming the fixture's
+ * id once says what it is — a string this test's OWN harness registers — which
+ * is the actual reason the call typechecks.
+ */
+const REGISTERED_ID = 'quest.claim' as RegisteredActionId;
 
 function harness(extensionCount = 2): { runtime: Runtime; api: ApplicationApi } {
   const runtime = runtimeWith(extensionCount);
@@ -124,7 +135,7 @@ describe('the application API', () => {
   it('runs an action through act()', async () => {
     const { api } = harness(2);
 
-    await expect(api.act('quest.claim', { id: 'q1' })).resolves.toEqual({
+    await expect(api.act(REGISTERED_ID, { id: 'q1' })).resolves.toEqual({
       claimed: 'q1',
       by: 0,
     });
@@ -167,11 +178,14 @@ describe('parity across surfaces', () => {
     const { api } = harness(1);
     const [domain, operation, ...rest] = ['quest', 'claim', 'shared-1'];
 
-    const actionId = `${domain}.${operation}`;
-    if (!isRegisteredActionId(actionId)) {
-      throw new Error(`fixture id ${actionId} is not registered`);
-    }
-    await expect(api.act(actionId, { id: rest.join(' ') })).resolves.toEqual(expected);
+    // No "is this id registered" guard. `act` raises `UnknownActionError` for
+    // one that is not, so the guard asserted what the call below already
+    // asserts — and it consulted the build's generated union rather than the
+    // fixture runtime that registered the action, which is not the thing under
+    // test here.
+    await expect(api.act(`${domain}.${operation}`, { id: rest.join(' ') })).resolves.toEqual(
+      expected,
+    );
   });
 
   it('reaches the same action from an HTTP-shaped caller', async () => {
@@ -182,14 +196,7 @@ describe('parity across surfaces', () => {
       input,
     };
 
-    // Narrowed in a CONDITION, not inside expect(): a type predicate only
-    // narrows where the compiler can see the branch, and an assertion reads
-    // true without telling it anything.
-    const action = body.action;
-    if (!isRegisteredActionId(action)) {
-      throw new Error(`fixture id ${action} is not registered`);
-    }
-    await expect(api.act(action, body.input)).resolves.toEqual(expected);
+    await expect(api.act(body.action, body.input)).resolves.toEqual(expected);
   });
 
   it('reaches the same action from an MCP-shaped caller', async () => {
@@ -200,21 +207,12 @@ describe('parity across surfaces', () => {
       input,
     };
 
-    const action = toolCall.action;
-    if (!isRegisteredActionId(action)) {
-      throw new Error(`fixture id ${action} is not registered`);
-    }
-    await expect(api.act(action, toolCall.input)).resolves.toEqual(expected);
+    await expect(api.act(toolCall.action, toolCall.input)).resolves.toEqual(expected);
   });
 
   it('fails the same way whichever surface asked', async () => {
     const { api } = harness(1);
-    const wrong = 'quest.cliam';
-
-    if (isRegisteredActionId(wrong)) {
-      throw new Error(`the fixture misspelling ${wrong} is a real id`);
-    }
-    await expect(api.act(wrong as never, input)).rejects.toBeInstanceOf(UnknownActionError);
+    await expect(api.act('quest.cliam', input)).rejects.toBeInstanceOf(UnknownActionError);
   });
   it('describes an action without running it', async () => {
     // inspect is advertised to MCP clients as "describe one operation, without
@@ -271,7 +269,7 @@ describe('act refuses a payload that is not an object', () => {
 
   it('names the action and what it received', async () => {
     for (const input of [null, undefined, 'agent-1', 42, true]) {
-      await expect(api.act('quest.claim', input as never)).rejects.toMatchObject({
+      await expect(api.act(REGISTERED_ID, input as never)).rejects.toMatchObject({
         code: 'malformed-input',
         message: expect.stringContaining('quest.claim takes an object'),
       });
@@ -280,7 +278,7 @@ describe('act refuses a payload that is not an object', () => {
 
   it('still dispatches a well-formed payload', async () => {
     // A guard that refused everything would pass the test above.
-    await expect(harness().api.act('quest.claim', { id: 'quest-1' })).resolves.toMatchObject({
+    await expect(harness().api.act(REGISTERED_ID, { id: 'quest-1' })).resolves.toMatchObject({
       claimed: 'quest-1',
     });
   });

@@ -55,14 +55,8 @@ readonly CANONICAL_STAGES=(
   architecture
   adapter-boundary
   schema-hygiene
-  removal-test
-  moltbook-claims
   docs
-  watchlist-claims
   pooled-driver
-  asset-licenses
-  game-first
-  license
   e2e-smoke
 )
 
@@ -92,16 +86,10 @@ readonly DATABASE_URL_ENV="M0_DATABASE_URL"
 
 # Beads that own each delegated stage, so a red pipeline names who owes the work.
 readonly OWNER_DB="ba-db-schema-drizzle-fki"
-readonly OWNER_REMOVAL_TEST="ba-removal-test-e33"
-readonly OWNER_LICENSE="ba-license-hygiene-qy7"
-readonly OWNER_MOLTBOOK="ba-moltbook-verification-0zc"
 readonly OWNER_DOCS="ba-contributor-onboarding-tc9"
-readonly OWNER_WATCHLIST="ba-watchlist-space-molt-5v4"
-readonly OWNER_ASSETS="ba-asset-shortlist-x2a"
 # Owned by the same bead as the doctrine it enforces: an art pack that no code
 # loads and a screen that is not a game are the same class of defect — something
 # built, attributed, shipped, and unused.
-readonly OWNER_GAME_FIRST="ba-asset-shortlist-x2a"
 readonly OWNER_POOLED_DRIVER="ba-neon-cloud-deploy-zn4"
 readonly OWNER_ADAPTER_BOUNDARY="ba-third-party-adapter-proof-2wp"
 readonly OWNER_WEB="ba-web-ui-surface-t3w"
@@ -476,7 +464,7 @@ run_stage_seed() {
 }
 
 # tsc runs first so a type error is reported as a unit-stage failure rather than
-# surfacing later as a confusing removal-test or integration failure.
+# surfacing later as a confusing integration failure.
 run_stage_schema_hygiene() {
   # Guards credential hygiene, which schema-drift cannot: that stage checks that
   # the migration matches the schema, and a plaintext token column is a perfectly
@@ -678,20 +666,7 @@ run_stage_integration() {
   run_delegated_test_stage integration "$OWNER_DB" integration script:test:integration file:scripts/integration-test.sh
 }
 
-run_stage_removal_test() {
-  run_delegated removal-test "$OWNER_REMOVAL_TEST" script:removal-test file:scripts/removal-test.sh
-}
 
-run_stage_moltbook_claims() {
-  # Every Moltbook mechanic the plan states, re-checked against the note that
-  # actually read the source, plus a resolution of every cited file:line against
-  # the checkout. The check existed and passed while nothing invoked it, which is
-  # the failure mode ba-risk-gates-e74 was opened over: a gate that is not wired
-  # is a comment. It ships with its own self-test asserting every sub-check goes
-  # red on the mutation meant to defeat it, so a future edit cannot quietly turn
-  # it into a script that exits 0.
-  run_delegated moltbook-claims "$OWNER_MOLTBOOK" script:check:moltbook
-}
 
 run_stage_docs() {
   # A doc that drifts from the tree passes every review, because a reviewer
@@ -702,15 +677,6 @@ run_stage_docs() {
   run_delegated docs "$OWNER_DOCS" script:check:docs
 }
 
-run_stage_watchlist_claims() {
-  # Resolves every SpaceMolt citation in the research note against the checkout
-  # and asserts the decision is recorded as ADOPT, KEEP or DEFER with a stated
-  # consequence. The clause that earns it is the cross-check: a design doc
-  # leaning on an unverified SpaceMolt mechanic is how a phantom constraint gets
-  # built, and that is the failure the Moltbook check guards on the first watch
-  # target.
-  run_delegated watchlist-claims "$OWNER_WATCHLIST" script:check:watchlist
-}
 
 run_stage_pooled_driver() {
   # §7.1's beginner trap: a connection constructed per request rather than a
@@ -731,29 +697,8 @@ run_stage_adapter_boundary() {
   run_delegated adapter-boundary "$OWNER_ADAPTER_BOUNDARY" script:check:adapter-boundary
 }
 
-run_stage_game_first() {
-  # The doctrine in docs/design/game-first-doctrine.md, checked. It is a stage
-  # because the two rules it enforces were both violated here while the entire
-  # suite stayed green: the game was a 460px panel inside a dashboard reached by
-  # a tab, and 3,436 licensed art files sat on disk that no code loaded. A
-  # doctrine with nothing checking it is a preference with good formatting.
-  run_delegated game-first "$OWNER_GAME_FIRST" script:check:game-first
-}
 
-run_stage_asset_licenses() {
-  # Per-pack asset licences, separate from the vendored SOURCE licences
-  # check-licenses.sh covers. An asset pack is third-party art with its own
-  # licence file, and a copyleft pack sitting in an MIT repository contaminates
-  # it — so the two are never inferred from one another. The rule with teeth is
-  # that the licence RECORDED IN THE SHORTLIST matches the text actually shipped
-  # beside the pack: a file merely existing is not verification, and a pack
-  # relicensed upstream between selection and merge still has a LICENSE.txt.
-  run_delegated asset-licenses "$OWNER_ASSETS" script:check:assets
-}
 
-run_stage_license() {
-  run_delegated license "$OWNER_LICENSE" file:scripts/check-licenses.sh script:check:licenses
-}
 
 run_stage_e2e_smoke() {
   run_delegated_test_stage e2e-smoke "$OWNER_WEB" e2e file:scripts/e2e-smoke.sh script:test:e2e
@@ -779,14 +724,8 @@ run_stage() {
     typecheck) run_stage_typecheck ;;
     unit) run_stage_unit ;;
     integration) run_stage_integration ;;
-    removal-test) run_stage_removal_test ;;
-    moltbook-claims) run_stage_moltbook_claims ;;
     docs) run_stage_docs ;;
-    watchlist-claims) run_stage_watchlist_claims ;;
     pooled-driver) run_stage_pooled_driver ;;
-    asset-licenses) run_stage_asset_licenses ;;
-    game-first) run_stage_game_first ;;
-    license) run_stage_license ;;
     e2e-smoke) run_stage_e2e_smoke ;;
     *) fail "no runner registered for stage '$1'" ;;
   esac

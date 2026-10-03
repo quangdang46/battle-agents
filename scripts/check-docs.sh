@@ -43,9 +43,7 @@ readonly ROOT_DOCS=(
   README.md
   CONTRIBUTING.md
   AGENTS.md
-  THIRD-PARTY-NOTICES.md
   apps/web/README.md
-  docs/research/README.md
 )
 
 # The failure modes a newcomer hits, as DATA. The brief requires that a
@@ -182,10 +180,10 @@ assert_failure_modes() {
 
 # --- 3. This repository's licence -------------------------------------------
 #
-# NOT a grep for "Apache-2.0". THIRD-PARTY-NOTICES.md records agent-world-
-# smallville as genuinely Apache-2.0, and the plan's licence table does the
-# same. Those are accurate records of someone ELSE's licence; a bare grep
-# fails on correct content, which is how a licence check gets deleted.
+# NOT a grep for "Apache-2.0". The plan's licence table records third-party work
+# as genuinely Apache-2.0, and those are accurate records of someone ELSE's
+# licence; a bare grep fails on correct content, which is how a licence check
+# gets deleted.
 #
 # So the check is two-sided and both halves are needed:
 #   (a) an affirmative statement that THIS project is MIT, and
@@ -206,12 +204,6 @@ assert_licence() {
       fail "$doc appears to claim a non-MIT licence for battle-agents itself"
     fi
   done
-
-  # The notices file must keep pointing at a licence file that exists. This is
-  # asserted by the link checker above, not by grepping for the string
-  # './LICENSE': a `grep -F './LICENSE'` also matches './LICENSE.txt', so that
-  # version of the check stayed green while the link was broken. Verified by
-  # mutation. Do not reintroduce the substring grep.
 
   [ "$failures" -eq 0 ] && pass "battle-agents is stated as MIT, with no competing claim about this repo"
 }

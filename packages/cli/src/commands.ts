@@ -1,5 +1,4 @@
-import { UnknownDomainError } from '@battle-agents/api';
-import { isRegisteredActionId } from '@battle-agents/protocol';
+import { UnknownActionError, UnknownDomainError } from '@battle-agents/api';
 
 import { clearSession, readSession, writeSession } from './session.js';
 import type { ApplicationApi, Discovery, DomainDetail } from '@battle-agents/api';
@@ -355,12 +354,17 @@ async function actOn(
   offered?: readonly string[],
 ): Promise<CommandResult> {
   try {
-    if (!isRegisteredActionId(actionId)) {
+    // `api.act` raises `UnknownActionError` for an id the composed runtime does
+    // not register, which is the check that matters: the generated union
+    // describes this repository's build and cannot see an extension a host
+    // composes at runtime. Translating that one error into a usage message is
+    // what keeps `ba` reporting a typo as a typo rather than as a crash.
+    return emit(await api.act(actionId, actionInput(args, actionId)));
+  } catch (error) {
+    if (error instanceof UnknownActionError) {
       const suffix = offered === undefined ? '' : ` This domain offers: ${offered.join(', ')}`;
       throw new UsageError(`no action "${actionId}" in this build.${suffix}`);
     }
-    return emit(await api.act(actionId, actionInput(args, actionId)));
-  } catch (error) {
     if (error instanceof UsageError) throw error;
     throw new CommandFailedError(
       `${actionId} failed: ${error instanceof Error ? error.message : String(error)}`,

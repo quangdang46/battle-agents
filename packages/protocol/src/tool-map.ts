@@ -23,12 +23,8 @@
  *    assert against the map rather than against a call that hides it. This
  *    comment used to name a shared adapter contract suite as the reason, and
  *    that suite does not exist; the reasons above are the ones that hold.
- * 2. `TOOL_ICONS` is not ported. It is emoji presentation and belongs to the
- *    game client; the protocol package has no business choosing how a tool is
- *    drawn.
- * 3. The zone set carries three game zones the upstream map does not have
- *    (bounty-board, battle-arena, guild-hall), because the game client maps
- *    tools onto our world and upstream's zones describe a different world.
+ * 2. `TOOL_ICONS` is not ported. It is emoji presentation, and a rendering
+ *    concern; the protocol package has no business choosing how a tool is drawn.
  *
  * The entry counts are smaller than the plan implies, not the ~50 quoted
  * upstream, and they grow as harnesses ship new tools, so the counts are not a
@@ -47,11 +43,7 @@ export type ZoneId =
   | 'messaging'
   | 'tasks'
   | 'spawn'
-  | 'idle'
-  // Added for the game world; see the header.
-  | 'bounty-board'
-  | 'battle-arena'
-  | 'guild-hall';
+  | 'idle';
 
 /** Canonical tool names that modify files. */
 export const FILE_WRITE_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'NotebookEdit']);

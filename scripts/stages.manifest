@@ -44,24 +44,9 @@ architecture
 # real violation.
 adapter-boundary
 schema-hygiene
-removal-test
-# The Moltbook check resolves every cited file:line against the checkout and
-# fails on an uncited assertion of a claim the note records as dropped. It runs
-# here because a check nobody invokes is the exact failure ba-risk-gates-e74
-# exists to prevent, and this one was written to pass while enforcing nothing.
-moltbook-claims
 # `docs` and `pooled-driver` are here because both scripts were written, run
 # green by hand, and would have stayed that way. A check nobody invokes is a
 # comment with a shebang, and each of these was that until this line.
 docs
-watchlist-claims
 pooled-driver
-asset-licenses
-# `game-first` is the doctrine check from docs/design/game-first-doctrine.md, and it
-# is a stage rather than a note because every rule it enforces was already broken
-# here in a way that read as normal: a route per scene under a shared dashboard
-# layout, and 3,436 licensed art files on disk that no code loaded. Both passed the
-# entire suite. A doctrine nothing checks is a preference.
-game-first
-license
 e2e-smoke

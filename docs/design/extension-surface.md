@@ -68,12 +68,11 @@ versions, before a single event is validated. That is a real handshake on the
 server side, and `tests/integration/event-ingest.test.ts` exercises it.
 
 What it is not is a client-side negotiation, and the published docs say so in
-`skill.md` §7 and in `skill.json`'s own `note` field. That honesty is the right
-answer to `docs/research/moltbook.md`'s C11: Moltbook's `skill.json` `"1.7.0"` is
-a string compare a client does against a moving branch, and this repository
-refuses to ship a pin that looks load-bearing and is not. A number that looks
-like a handshake and is not will let a client sail through a protocol change
-until it fails in a way nobody can explain.
+`skill.md` §7 and in `skill.json`'s own `note` field. A client-side pin is a
+string compare against a moving branch, and this repository refuses to ship one
+that looks load-bearing and is not. A number that looks like a handshake and is
+not will let a client sail through a protocol change until it fails in a way
+nobody can explain.
 
 So: `PROTOCOL_VERSION` is **enforced by the server, descriptive for the client**,
 and the published documents say exactly that. That half was

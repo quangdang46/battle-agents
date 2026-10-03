@@ -32,12 +32,12 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly REPO_ROOT
 
-# id, manifest path, runner path. M0 first and unchanged; the milestone runners
-# are the 2026-09-24 amendment of plan section 40 landing in the tree.
+# id, manifest path, runner path. M0 only: the M2 and M4 milestone pipelines
+# gated bounty-claim and battle-replay, and both milestones' subject was removed
+# with the feature packages, so the pipelines went with them rather than
+# remaining green because they had nothing left to run.
 readonly PIPELINES=(
   "m0:scripts/stages.manifest:scripts/test-m0.sh"
-  "m2:scripts/stages-m2.manifest:scripts/test-m2.sh"
-  "m4:scripts/stages-m4.manifest:scripts/test-m4.sh"
 )
 
 # Collect one value per line into stdout, dropping comments and blanks.

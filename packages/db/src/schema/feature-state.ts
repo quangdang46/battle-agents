@@ -6,17 +6,16 @@ import { jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
  * The frozen Extension API says where this goes: "A feature keeps its own state
  * through `StateStore` under its own id." Until now no feature needed it, and
  * `DrizzleStateStore.load`/`save` threw rather than guess a shape — the comment
- * there said the first feature to need it would decide the shape. The battle
- * feature is that feature, and the shape it decided is the narrowest one the
- * interface allows: `load` takes a feature id and no key, so a slice is a single
+ * there said the first extension to need it would decide the shape. That shape
+ * is the narrowest one the interface allows: `load` takes a feature id and no key, so a slice is a single
  * value per feature and a table with a composite key would be inventing a key
  * the contract does not have.
  *
  * ## What this is for, and what it is not for
  *
  * State that can be DERIVED from the event log does not belong here, and putting
- * it here would be a second source free to disagree with the log. What the battle
- * feature keeps is the part the log cannot rebuild: which agent a session
+ * it here would be a second source free to disagree with the log. What belongs
+ * here is the part the log cannot rebuild: which agent a session
  * belongs to is available from `session.started`, but the in-flight behaviour
  * counters are incremented by `file.write`, `thinking` and `tool.completed`, which
  * the platform's persistence policy does not write down. Re-deriving them would

@@ -42,20 +42,31 @@ import { AUTHENTICATION_REASONS, isAuthenticationFailure } from '../../packages/
  */
 const REPO = join(process.cwd());
 const AUTH_SOURCE = join(REPO, 'packages', 'db', 'src', 'auth.ts');
+/**
+ * A second source of reasons, kept because the union is only worth checking
+ * against more than one place.
+ *
+ * It pointed at `packages/features/agent/src/credential.ts`, which was deleted
+ * with the feature that owned it, so `reasonsIn` returned nothing for it and the
+ * comparison silently became single-source — a test that still passed while
+ * checking half of what it claimed. `packages/db/src/auth.ts` raises all seven
+ * reasons on its own, so the rule is still enforced; the redundancy is what an
+ * extension reinstating its own credential store should add back here.
+ */
 const CREDENTIAL_SOURCE = join(REPO, 'packages', 'features', 'agent', 'src', 'credential.ts');
 const API_SOURCE = join(REPO, 'packages', 'api', 'src', 'api.ts');
 
 /**
  * Every `reason: '…'` literal in a file — the reasons it can actually produce.
  *
- * A file that is not there contributes nothing rather than throwing. This is the
- * `removal-test.sh` trap the repository already names in AGENTS.md: it strips
- * each feature in turn and runs the unit suite, so a test that reads
- * a feature's `src` directory at a fixed path fails on the very removal it was
- * written to prove clean. This is the fifth one written that way and the second
- * to survive a green gate, because a stage that cannot fail is worse than no
- * stage. `packages/db` and `packages/api` are never stripped, so those two still
- * fail loudly if they go missing.
+ * A file that is not there contributes nothing rather than throwing, so this
+ * tolerates an extension being absent — the same rule AGENTS.md states for a
+ * check that reads a feature's `src` at a fixed path. That tolerance is exactly
+ * what let this one go quietly half-blind when the agent feature was removed,
+ * which is why the header above names the lost source rather than leaving a
+ * reader to assume there are still two. `packages/db` and `packages/api` are not
+ * optional, and the floor in the first assertion is what keeps them from quietly
+ * joining it.
  */
 function reasonsIn(path: string): string[] {
   if (!existsSync(path)) return [];

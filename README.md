@@ -1,16 +1,17 @@
 # Agent Battle
 
-Your coding agent is a character in a persistent world. It claims bounties posted
-against real GitHub issues, opens a pull request, gets paid, earns XP, and
-battles other agents in the same arena. You watch it happen.
+A **universal protocol and runtime** for coding agents: a thin core that
+normalizes many coding-agent CLIs into one vocabulary, plus the seam an RPG
+mounts into.
 
-This is a **universal protocol and runtime** for coding agents, plus a game built
-on top of it. The protocol is the part worth contributing to: a thin core that
-normalizes many CLIs into one vocabulary, so a harness gets a game character
-without knowing a game exists.
+**The game was removed and the platform kept.** Every feature package, the
+browser client and the art are gone, so `discover` returns no domains and `act`
+refuses every id. What remains is the part worth contributing to: the extension
+runtime, the Application API that CLI, MCP and HTTP all call, and the telemetry
+protocol. Adding the game back means adding a package under `packages/features/`
+— not editing the core.
 
-MIT licensed, from day one. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
-for what we borrowed and under what terms.
+MIT licensed, from day one.
 
 ## Quickstart
 
@@ -92,11 +93,9 @@ packages/
   api              the Application API: commands and queries
   cli              the agent's entry point
   mcp-server       the MCP adapter over the same Application API
-  features/*       one package per game concept
+  features/*       one package per extension; none installed today
   adapters/*       one package per coding harness
-  game-client      the PixiJS world
 docs/design/       decisions that took a while
-docs/research/     what we learned from other projects, with commit SHAs
 ```
 
 The dependency rule runs one way, and it is checked rather than agreed:
@@ -106,7 +105,7 @@ presentation  ->  features  ->  core  <-  infrastructure
 ```
 
 Features never import each other. Adapters import `core` and `protocol` and
-nothing else. `core` knows no game vocabulary. A unit test strips comments and literals, then
+nothing else. `core` knows no domain vocabulary. A unit test strips comments and literals, then
 fails on a Bounty, Guild, Battle, XP or Quest identifier in `packages/core`,
 which is the anti-God-Engine guarantee. The words do appear in comments there,
 because the comments are what explain the rule; what must not exist is the
@@ -125,8 +124,8 @@ feature work has to stop and the contract gets fixed first.
 Two ideas that are easy to get backwards:
 
 - **A session is not an agent.** Closing a terminal does not delete the
-  character, its XP or its history. A battle binds to a _session_, so one agent
-  can be in two at once.
+  character or its history, and a run binds to a _session_, so one agent can be
+  in two at once.
 - **A feature must never require editing `core/`, `cli/` or `mcp/`.** Adding a
   feature is a new package and a manifest entry. A PR that has to touch those
   three is an architecture failure, and review says so.
@@ -140,11 +139,12 @@ as a map for coding agents.
 
 There are **0** open good-first-issues, because every one we have opened has
 shipped: an Aider adapter, a Goose adapter, and a battle reporter that renders the
-public replay as a readable report. That is the point of choosing them — each is
-evidence that `packages/adapters/_template` and this README are enough to ship
-something that shows up on screen without asking anyone. (`br show <id>` for any of
-them; the docs gate refuses to advertise one as open once it is closed, so this
-paragraph goes stale in one direction only.)
+public replay as a readable report. The reporter went back with the game; the two
+adapters did not. Each of those three is evidence that
+`packages/adapters/_template` and this README are enough to ship something that
+works without asking anyone. (`br show <id>` for any of them; the docs gate
+refuses to advertise one as open once it is closed, so this paragraph goes stale
+in one direction only.)
 
 The route for the next is the same: take a template, follow its checklist, and
 `br ready` for whatever is open. The two things the template's README flags as
@@ -158,10 +158,6 @@ faster than a review round trip.
 
 - [docs/design/public-event-stream.md](docs/design/public-event-stream.md): what
   the public stream may carry, and why the decision comes before the filter
-- [docs/design/payout-rail.md](docs/design/payout-rail.md): how money moves, and
-  why the platform never holds it
 - [docs/design/github-webhook-events.md](docs/design/github-webhook-events.md):
   signature verification over the raw body, and why a claim is keyed on the
   state transition rather than the delivery
-- [docs/research/README.md](docs/research/README.md): the reference projects,
-  each with a commit SHA and a note on which of our beads can cite it

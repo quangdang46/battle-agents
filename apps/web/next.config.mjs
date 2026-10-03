@@ -21,7 +21,6 @@ const nextConfig = {
   // what makes `pnpm dev` reflect an edit to a feature without a rebuild, and
   // it is why the Dockerfile installs first and runs second.
   transpilePackages: [
-    '@battle-agents/agent',
     '@battle-agents/api',
     '@battle-agents/core',
     '@battle-agents/db',
@@ -29,11 +28,6 @@ const nextConfig = {
     // protocol, and a package that is transpiled through one of its consumers
     // still has to be listed if the bundler sees it directly.
     '@battle-agents/protocol',
-    // The city page mounts PixiJS and the game client as source, for the same
-    // reason the rest are here: so a change to the client is visible from a dev
-    // reload rather than after a workspace rebuild.
-    '@battle-agents/game-client',
-    'pixi.js',
   ],
   // One webpack change, and it is the only one that was needed.
   //
@@ -60,21 +54,6 @@ const nextConfig = {
       '.jsx': ['.tsx', '.jsx'],
     };
     return config;
-  },
-  // Plan section 28.1 puts art under `apps/web/public/assets/`, and that path
-  // DOES NOT WORK: Next.js reserves `/assets` for its own build pipeline and
-  // answers every request beneath it with a 308 to the directory, so every pack
-  // vendored there was unreachable from the running app. Measured — a PNG in
-  // `public/assets/tiny-swords-cc0/` returned 308, and following it returned 404,
-  // while a file at `public/probe.txt` beside it returned 200. The art was on
-  // disk, licensed, checked, and unloadable.
-  //
-  // So the files live in `public/art/`, which Next serves, and this rewrite
-  // keeps the URL the plan names. If the rewrite is ever reported as not
-  // applying, the honest fallback is to change the URLs rather than to move the
-  // files back under a reserved path.
-  async rewrites() {
-    return [{ source: '/assets/:path*', destination: '/art/:path*' }];
   },
   eslint: { ignoreDuringBuilds: true },
 };

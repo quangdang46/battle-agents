@@ -17,8 +17,7 @@ import { sharedRuntime } from '@/shared-runtime.js';
  *
  * A CATCH-ALL rather than four files, and the specific routes win: Next.js
  * prefers the more specific match, so /api/events, /api/events/stream, /api/mcp,
- * /api/auth/[...all], /api/sessions/[id]/heartbeat and /api/webhooks/github are
- * untouched by this. A test asserts that, because a catch-all that shadowed a
+ * /api/auth/[...all] and /api/webhooks/github are untouched by this. A test asserts that, because a catch-all that shadowed a
  * sibling would be a regression with no symptom except a 404 somewhere else.
  *
  * AUTHENTICATION IS WIRED AND FAIL-CLOSED. `RouteDependencies.authenticate` is

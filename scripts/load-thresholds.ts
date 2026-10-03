@@ -28,8 +28,8 @@
  * its floor today.
  *
  * The threshold is 10%, twice the floor. The headroom is deliberate and bounded
- * in both directions, and both bounds are asserted in
- * `tests/m4/load-threshold.test.ts`:
+ * in both directions. Both bounds were asserted by `tests/m4/load-threshold.test.ts`,
+ * which went with the M4 pipeline — so the bounds below are argued, not checked.
  *
  *   - ABOVE the floor, so adding a genuinely key event type to the policy does
  *     not immediately turn the gate red. A threshold pinned to 5% would make the
@@ -38,9 +38,9 @@
  *     — is not a near miss. Every event becoming a row is 5x over the line, and
  *     so is anything approaching it.
  *
- * A quarter is the ceiling asserted on it. Anything looser than that and a
- * filter that let half the chatter through would still be green, which is the
- * same gate-at-a-nice-round-number mistake in the other direction.
+ * A quarter is the ceiling. Anything looser than that and a filter that let half
+ * the chatter through would still be green, which is the same
+ * gate-at-a-nice-round-number mistake in the other direction.
  *
  * ## The rate number
  *
@@ -134,11 +134,13 @@ export function thresholdBreaches(
 /**
  * Thresholds from the environment, falling back to the published numbers.
  *
- * The override exists so `tests/m4/load-threshold.test.ts` can watch each gate
- * go red without editing this file, and so a machine that genuinely cannot hold
- * the scenario can be diagnosed rather than silently reported as passing. It is
- * a deliberate hole and it is closed the only way it can be: the self-test
- * asserts the DEFAULT values, and the stage runs the harness with no override.
+ * The override exists so a machine that genuinely cannot hold the scenario can be
+ * diagnosed rather than silently reported as passing.
+ *
+ * It was also there so a test could watch each gate go red without editing this
+ * file. That test went with the M4 pipeline, so the override is now an open hole
+ * with nothing checking the defaults: a run with `LOAD_*` set reports its own
+ * numbers and exits 0, and no gate compares them against what is written here.
  */
 export function thresholdsFromEnv(env: NodeJS.ProcessEnv): LoadThresholds {
   return {

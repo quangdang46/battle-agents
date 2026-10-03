@@ -8,19 +8,9 @@ import { authenticate } from '@battle-agents/db';
 import { createInMemoryEventBus } from '@battle-agents/core';
 import type { EventBus, Runtime } from '@battle-agents/core';
 import {
-  DrizzleAgentRepository,
-  DrizzleBattleRepository,
-  DrizzleAchievementsRepository,
-  DrizzleBountyRepository,
   DrizzleCredentialStore,
-  DrizzlePayoutIntentStore,
-  DrizzleWorldRepository,
-  DrizzleProgressionRepository,
-  DrizzleQuestRepository,
-  DrizzleReputationRepository,
   DrizzleSessionRepository,
   DrizzleSessionSweeper,
-  DrizzleSocialRepository,
   DrizzleStateStore,
   type Database,
 } from '@battle-agents/db';
@@ -126,23 +116,7 @@ export function createEventGateway(dependencies: EventGatewayDependencies): Even
     dependencies.authenticate ??
     ((): Promise<never> => Promise.reject(new Error('no authenticator was supplied')));
 
-  const runtime =
-    dependencies.runtime ??
-    createGameRuntime({
-      store,
-      bus,
-      agentRepository: new DrizzleAgentRepository(dependencies.database),
-      questRepository: new DrizzleQuestRepository(dependencies.database),
-      sessionRepository,
-      progressionRepository: new DrizzleProgressionRepository(dependencies.database),
-      reputationRepository: new DrizzleReputationRepository(dependencies.database),
-      socialRepository: new DrizzleSocialRepository(dependencies.database),
-      bountyRepository: new DrizzleBountyRepository(dependencies.database),
-      payoutIntentStore: new DrizzlePayoutIntentStore(dependencies.database),
-      worldStore: new DrizzleWorldRepository(dependencies.database),
-      battleStore: new DrizzleBattleRepository(dependencies.database),
-      achievementsRepository: new DrizzleAchievementsRepository(dependencies.database),
-    });
+  const runtime = dependencies.runtime ?? createGameRuntime({ store, bus });
 
   // The snapshot is deliberately synchronous. The hub takes a subscriber's
   // snapshot and starts watching it in one non-yielding step, so no event can

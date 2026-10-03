@@ -4,14 +4,14 @@
  *
  * ## Why this exists rather than living in a repository
  *
- * `agents.ts` and `social.ts` each carried their own `HARNESSES` set and their
- * own `toHarness`, character for character, and the two had never been compared.
- * They agree today. They are two copies of the same fact, which is the shape
- * that stops agreeing: adding a harness to one and not the other is not a
- * compile error and not a test failure, it is a character who reads as one
- * harness on the profile and another on the leaderboard.
+ * Two repositories once each carried their own `HARNESSES` set and their own
+ * `toHarness`, character for character, and the two had never been compared.
+ * They agreed. They were two copies of the same fact, which is the shape that
+ * stops agreeing: adding a harness to one and not the other is not a compile
+ * error and not a test failure, it is a value that reads as one harness in one
+ * place and another somewhere else.
  *
- * ## Why the list is not imported from the agent feature
+ * ## Why the list is not imported from an extension
  *
  * It is spelled out rather than imported for the reason every other repository
  * in this package spells its shapes out: infrastructure may not import the layer
@@ -19,9 +19,9 @@
  * was worth paying ONCE here rather than twice in two files that were already
  * going to drift.
  *
- * `packages/features/agent/src/domain.ts` carries its own copy for the same
- * reason, and the two agree by spelling. A test reads both so that agreement is
- * checked rather than assumed — see `tests/unit/harness-narrowing.test.ts`.
+ * An extension carrying its own copy does so for the same reason, and the two
+ * agree by spelling. Only a test that reads both can check that agreement rather
+ * than assume it.
  */
 
 /** The harnesses this build knows how to name. Anything else reads as 'other'. */

@@ -9,27 +9,9 @@ import {
   PLATFORM_TABLES_OWNING_USER_ID,
 } from './schema/ownership.js';
 import { seedDatabase } from './seed/seed.js';
-import { SEEDED_BOUNTY_TOTAL_CENTS, SEED_BOUNTY } from './seed/fixtures.js';
 import type { Database } from './client.js';
 
 const PUBLIC_SCHEMA = 'public';
-const MONEY_FLOAT_TYPES: readonly string[] = ['numeric', 'real', 'double precision'];
-const MONEY_COLUMN_TABLES: readonly string[] = [
-  'bounties',
-  'bounty_funds',
-  'payout_intents',
-  'guild_treasury_entries',
-];
-// payout_intents.amount_cents is a STATED TARGET, not a stored total, and it is
-// still money: a float there loses a cent and the refund arithmetic in
-// docs/design/payout-rail.md section 3.1 stops reconciling. Listed so the
-// integer-cents check covers it rather than only the tables that existed when
-// the check was written.
-const REQUIRED_MONEY_COLUMNS: readonly string[] = [
-  'bounty_funds.amount_cents',
-  'payout_intents.amount_cents',
-  'guild_treasury_entries.amount_cents',
-];
 const EVENTS_SEQUENCE_TABLE = 'event_log';
 const EVENT_LOG_PROBE_TYPE = 'verify.probe';
 const EVENT_LOG_PROBE_ACTOR = 'verify';
@@ -70,18 +52,8 @@ interface CountRow {
   readonly row_count: number;
 }
 
-interface ColumnDefaultRow {
-  readonly column_default: string | null;
-}
-
 interface ProbeIdRow {
   readonly id: number;
-}
-
-interface FundingTotalRow {
-  readonly bounty_id: string;
-  readonly funded_cents: number;
-  readonly sponsor_count: number;
 }
 
 export interface SchemaSnapshot {
@@ -215,73 +187,17 @@ const REQUIRED_CHECK_CONSTRAINTS: readonly {
   readonly name: string;
   readonly mustMention: string;
 }[] = [
-  {
-    table: 'bounty_funds',
-    name: 'bounty_funds_amount_cents_non_negative',
-    mustMention: 'amount_cents',
-  },
-  {
-    table: 'payout_intents',
-    name: 'payout_intents_amount_cents_non_negative',
-    mustMention: 'amount_cents',
-  },
-  {
-    // The attribution rule, enforced where the row is written. payout.ts refuses
-    // to build an intent with an empty reporter, and this is what makes a row
-    // written by anything else obey the same rule.
-    table: 'payout_intents',
-    name: 'payout_intents_reported_by_not_empty',
-    mustMention: 'reported_by',
-  },
-  { table: 'bounties', name: 'bounties_issue_number_positive', mustMention: 'issue_number' },
-  {
-    // The dedup key's domain. Without it, a row written by anything that is not
-    // this adapter can carry a kind the feature has no case for, and the unique
-    // index would then be refusing to double-count two rows the feature reads
-    // as the same outcome.
-    table: 'reputation_outcomes',
-    name: 'reputation_outcomes_kind_known',
-    mustMention: 'kind',
-  },
-  {
-    // An empty bounty id is a key nothing can be recognised by, so a row
-    // carrying one disables the dedup for the outcomes it claims to cover.
-    table: 'reputation_outcomes',
-    name: 'reputation_outcomes_bounty_id_not_empty',
-    mustMention: 'bounty_id',
-  },
+  // Four survive, all on platform tables. The ten that named bounty_funds,
+  // payout_intents, bounties, reputation_outcomes and agent_stats went with the
+  // features that owned those tables and were dropped in
+  // 0023_drop_feature_tables.sql — a constraint on a table that does not exist
+  // is a check that cannot pass and does not guard anything, which is the shape
+  // of gate this file exists to avoid. An extension that reinstates one of them
+  // adds its entry back here.
   { table: 'agents', name: 'agents_level_min', mustMention: 'level' },
   { table: 'agents', name: 'agents_xp_non_negative', mustMention: 'xp' },
   { table: 'agents', name: 'agents_reputation_non_negative', mustMention: 'reputation' },
   { table: 'sessions', name: 'sessions_disconnected_has_ended_at', mustMention: 'ended_at' },
-  { table: 'agent_stats', name: 'agent_stats_prs_opened_non_negative', mustMention: 'prs_opened' },
-  { table: 'agent_stats', name: 'agent_stats_prs_merged_non_negative', mustMention: 'prs_merged' },
-  {
-    table: 'agent_stats',
-    name: 'agent_stats_prs_rejected_non_negative',
-    mustMention: 'prs_rejected',
-  },
-  {
-    table: 'agent_stats',
-    name: 'agent_stats_tests_passed_non_negative',
-    mustMention: 'tests_passed',
-  },
-  {
-    table: 'agent_stats',
-    name: 'agent_stats_tests_failed_non_negative',
-    mustMention: 'tests_failed',
-  },
-  { table: 'agent_stats', name: 'agent_stats_recoveries_non_negative', mustMention: 'recoveries' },
-  {
-    table: 'agent_stats',
-    name: 'agent_stats_battles_won_non_negative',
-    mustMention: 'battles_won',
-  },
-  {
-    table: 'agent_stats',
-    name: 'agent_stats_battles_lost_non_negative',
-    mustMention: 'battles_lost',
-  },
 ];
 
 export function checkRequiredCheckConstraints(snapshot: SchemaSnapshot): readonly string[] {
@@ -344,180 +260,6 @@ export function checkCredentialStoresOnlyHashes(snapshot: SchemaSnapshot): reado
   );
 }
 
-export function checkMoneyIsIntegerCents(snapshot: SchemaSnapshot): readonly string[] {
-  const failures: string[] = [];
-  const moneyColumns = snapshot.columns.filter((column) =>
-    MONEY_COLUMN_TABLES.includes(column.table_name),
-  );
-
-  for (const column of moneyColumns) {
-    if (MONEY_FLOAT_TYPES.includes(column.data_type)) {
-      failures.push(
-        `${column.table_name}.${column.column_name} is ${column.data_type}; money must be integer cents`,
-      );
-    }
-  }
-
-  const present = new Set(
-    moneyColumns
-      .filter((column) => column.column_name.endsWith('_cents'))
-      .map((column) => `${column.table_name}.${column.column_name}`),
-  );
-  for (const required of REQUIRED_MONEY_COLUMNS) {
-    if (!present.has(required)) {
-      failures.push(`missing required money column "${required}"`);
-    }
-  }
-
-  // The `bounties.amount_cents` scalar this function used to forbid here is
-  // forbidden by checkNoCachedTotals instead, and the message is byte-identical.
-  // Keeping both would report every violation twice, which trains a reader to
-  // skim past the one that matters.
-  return failures;
-}
-
-/**
- * Scalars the guild feature must never grow, and what derives each one instead.
- *
- * `bounties.amount_cents` is already forbidden above, and it was forbidden
- * because a stored total is right until the second funder arrives and then is
- * right about nothing. The guild feature sits on the same money and the same
- * scoreboard, so the same failure is available twice over: a cached treasury
- * balance that disagrees with the entries behind it, and a cached quest counter
- * that disagrees with the work log. Either one turns a guild's standing into a
- * number nobody can reconstruct, and §10.4's no-pay-to-win rule is a claim
- * about the economy being honest — which it cannot be while the score is
- * stored and the evidence is not.
- *
- * Declared as data rather than as two hand-written blocks, because the block
- * form is where a third table's rule would be forgotten. `derivedFrom` is in
- * the message because an operator reading the failure needs to know what to
- * read the number from instead.
- */
-const FORBIDDEN_CACHED_TOTALS: readonly {
-  readonly table: string;
-  readonly columns: readonly string[];
-  readonly derivedFrom: string;
-}[] = [
-  {
-    table: 'bounties',
-    columns: ['amount_cents'],
-    derivedFrom: 'bounty_funds',
-  },
-  {
-    table: 'guilds',
-    // Any money-shaped column, not a named one: a balance called `treasury` or
-    // `funds` is the same defect wearing a different noun, and this check is
-    // the only thing standing between the two.
-    columns: ['amount_cents', 'balance_cents'],
-    derivedFrom: 'guild_treasury_entries',
-  },
-  {
-    table: 'guild_quests',
-    columns: ['progress'],
-    derivedFrom: 'guild_work_log',
-  },
-];
-
-export function checkNoCachedTotals(snapshot: SchemaSnapshot): readonly string[] {
-  const failures: string[] = [];
-  for (const rule of FORBIDDEN_CACHED_TOTALS) {
-    const present = columnNames(snapshot, rule.table);
-    for (const column of rule.columns) {
-      if (present.includes(column)) {
-        failures.push(
-          `${rule.table}.${column} stores a drifting scalar; the total must be derived from ` +
-            `${rule.derivedFrom}`,
-        );
-      }
-    }
-  }
-  return failures;
-}
-
-export function checkBattleParticipantIdentity(snapshot: SchemaSnapshot): readonly string[] {
-  const failures: string[] = [];
-  const participants = columnNames(snapshot, 'battle_participants');
-  const keyColumns = snapshot.primaryKeys
-    .filter((key) => key.table_name === 'battle_participants')
-    .sort((left, right) => left.ordinal_position - right.ordinal_position)
-    .map((key) => key.column_name);
-
-  if (keyColumns.join(',') !== 'battle_id,session_id') {
-    failures.push(
-      `battle_participants primary key must be (battle_id, session_id), found (${keyColumns.join(', ')})`,
-    );
-  }
-  if (participants.includes('agent_id')) {
-    failures.push('battle_participants must reference sessions, not agents');
-  }
-
-  const sessionKey = findForeignKey(snapshot, 'battle_participants', 'session_id');
-  if (sessionKey?.foreign_table_name !== 'sessions') {
-    failures.push('battle_participants.session_id must reference sessions.id');
-  }
-  return failures;
-}
-
-export function checkBattleReplayHandle(snapshot: SchemaSnapshot): readonly string[] {
-  const failures: string[] = [];
-  const battles = columnNames(snapshot, 'battles');
-  if (!battles.includes('replay_id')) {
-    failures.push(
-      'battles.replay_id is missing. It is the only handle a public replay link carries, ' +
-        'and without it every shared link is either a guess at battles.id or a dead link.',
-    );
-    return failures;
-  }
-  return failures;
-}
-
-/**
- * The public handle is present, random and one-per-battle.
- *
- * The three properties are the ones a bulk scrape of every battle on the
- * platform would need, and the third is the only one a column list can answer:
- * a shared link resolving to two battles is not an address. The first two are
- * read out of `information_schema` rather than assumed, because the assumption
- * is exactly what a later migration would quietly break — swapping a random
- * default for a sequence keeps the column, keeps it non-null, and turns the
- * platform's entire battle history into an enumerable list.
- */
-async function checkBattleReplayIds(database: Database): Promise<readonly string[]> {
-  const failures: string[] = [];
-  const columns = await readRows<ColumnDefaultRow>(
-    await database.execute(sql`
-      SELECT column_default FROM information_schema.columns
-      WHERE table_schema = ${PUBLIC_SCHEMA} AND table_name = 'battles' AND column_name = 'replay_id'
-    `),
-    'battles.replay_id default',
-  );
-  const columnDefault = columns[0]?.column_default;
-  if (columnDefault === undefined || columnDefault === null) {
-    failures.push('battles.replay_id has no default, so a battle is created with no public link');
-  } else if (!columnDefault.includes('gen_random_uuid()')) {
-    failures.push(
-      `battles.replay_id defaults to "${columnDefault}", which is not a random value. A public ` +
-        'handle that is sequential lets anybody enumerate every battle on the platform.',
-    );
-  }
-
-  const duplicates = await readRows<CountRow>(
-    await database.execute(sql`
-      SELECT COUNT(*)::integer AS row_count FROM (
-        SELECT replay_id FROM battles WHERE replay_id IS NOT NULL
-        GROUP BY replay_id HAVING COUNT(*) > 1
-      ) duplicated
-    `),
-    'duplicate battles.replay_id',
-  );
-  if ((duplicates[0]?.row_count ?? 0) > 0) {
-    failures.push(
-      'two or more battles share a replay_id, so a shared link does not identify one battle',
-    );
-  }
-  return failures;
-}
 
 export function checkPlatformAndFeatureSplit(snapshot: SchemaSnapshot): readonly string[] {
   const managed = new Set<string>([...PLATFORM_TABLES, ...FEATURE_TABLES]);
@@ -526,20 +268,6 @@ export function checkPlatformAndFeatureSplit(snapshot: SchemaSnapshot): readonly
     .map((table) => `table "${table}" is not assigned to the platform or a feature`);
 }
 
-async function readFundingTotal(database: Database): Promise<FundingTotalRow | undefined> {
-  try {
-    const rows = await readRows<FundingTotalRow>(
-      await database.execute(sql`
-        SELECT bounty_id, funded_cents, sponsor_count FROM bounty_funding_totals
-        WHERE bounty_id = ${SEED_BOUNTY.id}
-      `),
-      'bounty funding totals',
-    );
-    return rows[0];
-  } catch {
-    return undefined;
-  }
-}
 
 async function countRowsOwnedTables(database: Database): Promise<readonly number[]> {
   const counts: number[] = [];
@@ -602,7 +330,6 @@ async function removeEventLogProbe(database: Database): Promise<void> {
 export async function runSchemaVerification(database: Database): Promise<readonly string[]> {
   await applyMigrations(database);
   const snapshot = await readSchemaSnapshot(database);
-  const funding = await readFundingTotal(database);
 
   const failures: string[] = [
     ...checkTablesExist(snapshot),
@@ -611,29 +338,10 @@ export async function runSchemaVerification(database: Database): Promise<readonl
     ...checkAgentIdentityInvariant(snapshot),
     ...checkUserIdOwnership(snapshot),
     ...checkCredentialStoresOnlyHashes(snapshot),
-    ...checkMoneyIsIntegerCents(snapshot),
-    ...checkNoCachedTotals(snapshot),
-    ...checkBattleParticipantIdentity(snapshot),
-    ...checkBattleReplayHandle(snapshot),
   ];
-
-  if (funding === undefined) {
-    failures.push('bounty_funding_totals view is missing or returned no row for the seeded bounty');
-  } else {
-    if (funding.funded_cents !== SEEDED_BOUNTY_TOTAL_CENTS) {
-      failures.push(
-        `bounty total should derive to ${String(SEEDED_BOUNTY_TOTAL_CENTS)} cents, ` +
-          `got ${String(funding.funded_cents)}`,
-      );
-    }
-    if (funding.sponsor_count !== 2) {
-      failures.push(`seeded bounty should have 2 sponsors, got ${String(funding.sponsor_count)}`);
-    }
-  }
 
   failures.push(...(await checkSeedIsIdempotent(database)));
   failures.push(...(await checkEventLogSequenceIsWritable(database)));
-  failures.push(...(await checkBattleReplayIds(database)));
   return failures;
 }
 

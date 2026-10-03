@@ -138,9 +138,11 @@ This is not a preference. It is checked twice: `pnpm architecture` fails the
 build on a layering violation, and review rejects a PR that had to touch those
 three. If your work seems to need one of them, that is a finding about the
 design, not a hurdle to route around — open an issue and describe what you
-were trying to express. `scripts/removal-test.sh` is the machine version of
-the same rule: it strips one feature out of the composition root and rebuilds,
-so a feature that quietly became load-bearing cannot be removed.
+were trying to express. `scripts/removal-test.sh` was the machine version of
+the same rule: it stripped one feature out of the composition root and rebuilt,
+so a feature that quietly became load-bearing could not be removed. It went with
+the features it removed, and an extension reinstating one should bring the check
+back with it — a rule nothing checks is a preference.
 
 ## Adding a package
 
@@ -198,23 +200,19 @@ other way. Write what you chose _and_ what you did not.
 
 ## Good first issues
 
-Three are open now, all fun-visible: you ship something that shows up on
-screen rather than fixing an internal chore.
+**None are open.** Every one we opened has shipped — an Aider adapter, a Goose
+adapter, and a battle reporter — and the reporter went with the game.
 
-| Bead                                | You would add                                      |
-| ----------------------------------- | -------------------------------------------------- |
-| `ba-adapter-goose-good-first-cpd`   | an adapter, so Goose joins the roster              |
-| `ba-adapter-aider-good-first-9f1`   | an adapter, so Aider joins the roster              |
-| `ba-battle-reporter-good-first-rxz` | a page that renders a session as a readable report |
+Run `br list --label good-first-issue` to see for yourself rather than trusting
+this paragraph; the docs gate checks that the count above matches the tracker,
+so it goes stale in one direction only.
 
-Read one with `br show <id>`; each names the files, the traps, and how you
-will know it worked. They are also labelled `good-first-issue` in the tracker,
-so `br list --label good-first-issue` finds all of them.
-
-If none of those appeal: any harness nobody has added yet, any reporter, any
-battle mode. The protocol is the part worth contributing to — a thin core that
-normalizes many CLIs into one vocabulary, so a harness gets a game character
-without knowing a game exists.
+The route to the next one is the same as the last three: take the adapter
+template, follow its checklist, and `br ready`. `packages/adapters/_template` and
+this file are enough to ship something that works without asking anyone — that
+is what those three are the evidence for. The two things its README flags as the
+usual first mistakes, tool-name normalisation and consent gating, are the two
+every shipped adapter had to get right before its contract suite passed.
 
 ## House style
 

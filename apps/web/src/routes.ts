@@ -1,5 +1,4 @@
-import { createApplicationApi, UnknownActionError } from '@battle-agents/api';
-import { isRegisteredActionId, type RegisteredActionId } from '@battle-agents/protocol';
+import { createApplicationApi } from '@battle-agents/api';
 import type { ApplicationApi } from '@battle-agents/api';
 
 import { describeHttpFailure } from './http-failure.js';
@@ -101,110 +100,6 @@ function searchFrom(url: URL): { type: string; name?: string } {
   return name === null ? { type } : { type, name };
 }
 
-/**
- * The actions this catch-all refuses, and the route that runs them instead.
- *
- * `act()` is reached with a credential on the request and a payload in the body,
- * and the payload is where the caller identity arrives: `quest.claim` and
- * `quest.submit` take an `agentId`, `session.create` an `ownerId`,
- * `session.heartbeat` and `session.end` a `sessionId`. The frozen Extension API
- * puts no principal in `RuntimeContext`, so by the time one of those runs the
- * transport has already thrown away whose token was presented. A caller naming
- * somebody else's agent there is not a bug in the feature — given an `agentId`,
- * the feature records that `agentId`, which is what it is for — it is a caller
- * choosing which identity to wear, and the row it writes names that choice.
- *
- * A RESOURCE ROUTE is what closes it, because a route sees the credential before
- * it discards it: it resolves the session the caller owns and passes the
- * `agentId` THAT session belongs to. The two surfaces are therefore not
- * equivalent for these six ids, and refusing here is what makes the resource
- * route the only door rather than the polite one.
- *
- * `route: null` is not an oversight and is the reason the list is data. It marks
- * an action whose caller identity is NOT derivable from a credential, so there
- * is no route to point at and the honest answer is that nobody may run it over
- * HTTP. `quest.admin.revoke` is the one today: revoking a quest is an
- * administrator's move, and the schema has no column anywhere that says who an
- * administrator is, so a route could not check anything — it could only take an
- * `agentId` from the body and call that the authorization. Until that question
- * is answered the operation has no HTTP door at all, which is a smaller surface
- * than one where any credential-holder can cancel any quest.
- *
- * What this does NOT close, listed because a list of what is closed is a claim
- * about the rest otherwise:
- *
- *   - The in-process MCP surface. `/api/mcp` runs the frozen server, which calls
- *     `context.api.act(input.action, input.input ?? {})` itself, below this
- *     dispatcher. A gate here is the strongest statement the HTTP transport can
- *     make without editing a frozen package, and the MCP limit is recorded
- *     rather than worked around.
- *
- *   - `social.*`. `social.send` and `social.broadcast` take a `fromAgentId` and
- *     are unreachable in practice because nothing provides `guild.can_talk_to`,
- *     so the feature refuses before it stores anything. `social.poke` is NOT in
- *     that position: it never asks the ACL, so it is live today and takes an
- *     `agentId` naming whose inbox to wake, answering with the newest message's
- *     id and sender. Deciding who a social principal IS is open in this
- *     repository, so no principal is resolved for it here and the operation is
- *     left as it stands.
- *
- *   - `bounty.claim`, `bounty.submit`, `bounty.fund`, `battle.create` and
- *     `battle.join`. Each names its caller in the payload and each has a
- *     resource route that resolves it, so the shape is the same as the six
- *     above — and the same hole is open here, because a route is a second
- *     spelling rather than the only one. They are absent because closing them is
- *     a change to the parity contract in `resource-route-parity.test.ts`, which
- *     asserts that a route and `act` reach the same command; that is a decision
- *     about the two surfaces agreeing, not one to make inside a security fix.
- *
- * The CLI is covered by this list, not by the routes: `HttpApiClient` posts to
- * `/api/act`, so a `agent-battle` command that reached one of these ids is
- * refused here exactly as a hand-written request would be.
- */
-interface CallerScopedAction {
-  readonly id: RegisteredActionId;
-  /** The route that runs it with the caller's identity resolved, or null. */
-  readonly route: string | null;
-}
-
-const CALLER_SCOPED_ACTIONS: readonly CallerScopedAction[] = [
-  { id: 'quest.claim' satisfies RegisteredActionId, route: 'POST /api/quests/{id}/claim' },
-  { id: 'quest.submit' satisfies RegisteredActionId, route: 'POST /api/quests/{id}/submit' },
-  { id: 'quest.admin.revoke' satisfies RegisteredActionId, route: null },
-  { id: 'session.create' satisfies RegisteredActionId, route: 'POST /api/sessions' },
-  {
-    id: 'session.heartbeat' satisfies RegisteredActionId,
-    route: 'POST /api/sessions/{id}/heartbeat',
-  },
-  { id: 'session.end' satisfies RegisteredActionId, route: 'POST /api/sessions/{id}/end' },
-  // The four the resource routes already resolve. These were absent because
-  // closing them changes the parity contract in `resource-route-parity.test.ts`
-  // — that test asserts a route and `/api/act` reach the same command with the
-  // same input, and for an action whose identity comes from the credential,
-  // `/api/act` reaching it with the body's version is precisely the defect.
-  //
-  // The parity test already carries the escape hatch this needs: `routeStatus`
-  // is written per pair precisely because the two surfaces are NOT expected to
-  // answer alike. It is extended the same way here — the pair keeps asserting
-  // that both surfaces reach the same COMMAND, which is the part that matters,
-  // and drops the assertion that they agree on the caller's identity, which is
-  // the part that was the bug.
-  { id: 'bounty.fund' satisfies RegisteredActionId, route: 'POST /api/bounties/{id}/fund' },
-  { id: 'battle.create' satisfies RegisteredActionId, route: 'POST /api/battles' },
-  { id: 'battle.join' satisfies RegisteredActionId, route: 'POST /api/battles/{id}/join' },
-];
-
-/** What `/api/act` says about an action that names its caller, or undefined. */
-export function callerScopedRefusal(action: string): string | undefined {
-  const entry = CALLER_SCOPED_ACTIONS.find((candidate) => candidate.id === action);
-  if (entry === undefined) {
-    return undefined;
-  }
-  return entry.route === null
-    ? `${action} has no HTTP door: who may run it is a question this repository has not answered.`
-    : `${action} takes its caller from the credential, not from the body. Use ${entry.route}.`;
-}
-
 async function act(api: ApplicationApi, request: HttpRequest): Promise<HttpResponse> {
   const body = request.body;
   if (typeof body !== 'object' || body === null || !('action' in body)) {
@@ -214,19 +109,9 @@ async function act(api: ApplicationApi, request: HttpRequest): Promise<HttpRespo
   if (typeof action !== 'string') {
     return json(400, { error: '"action" must be a string' });
   }
-  if (!isRegisteredActionId(action)) {
-    // The API owns this error wording; throwing its class keeps one message
-    // rather than a terser second copy that says less to whoever reads it.
-    throw new UnknownActionError(action, (await api.discover()).domains ?? []);
-  }
-  // After the unknown-action check, so a client that misspelled an id is told
-  // that rather than told it needs a route. 403 rather than 404: the action
-  // exists, this surface will not run it, and a client that reads a 404 as "no
-  // such action" would go looking for a spelling that works.
-  const refusal = callerScopedRefusal(action);
-  if (refusal !== undefined) {
-    return json(403, { error: refusal, action });
-  }
+  // No pre-check: `api.act` raises `UnknownActionError` for an unregistered id and
+  // `http-failure.ts` turns that into a 404. Gating here on the generated union
+  // would refuse an action a host installed at runtime.
   return json(200, await api.act(action, input ?? {}));
 }
 

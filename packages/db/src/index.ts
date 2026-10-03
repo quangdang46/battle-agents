@@ -1,9 +1,9 @@
 /**
  * `@battle-agents/db` — the database client, the schema, and the repositories
- * that implement a feature's storage contract.
+ * that implement a storage contract.
  *
- * This is the infrastructure layer. Features may not import it, which is why
- * the repositories here match the features' interfaces structurally rather than
+ * This is the infrastructure layer. Extensions may not import it, which is why
+ * the repositories here match a host's interfaces structurally rather than
  * importing them: the two sides agree on a contract, and apps/web — the only
  * place allowed to see both — is where that agreement is checked.
  */
@@ -16,32 +16,6 @@ export { and, eq, or, sql } from 'drizzle-orm';
 export { closeDatabasePool, createDatabase, createDatabasePool } from './client.js';
 export type { Database } from './client.js';
 export { applyMigrations } from './migrate.js';
-export { DrizzleAchievementsRepository } from './repositories/achievements.js';
-export type {
-  AchievementsStore,
-  AwardedAchievementRow,
-  RecordedOutcomeRow,
-} from './repositories/achievements.js';
-export { DrizzleBattleRepository } from './repositories/battles.js';
-export type {
-  BattleParticipantRow,
-  BattleRow,
-  BattleStore,
-  JoinOutcomeRow,
-  JoinRefusalRow,
-} from './repositories/battles.js';
-export { DrizzleActivityLog, DEFAULT_TRAIL_LIMIT } from './repositories/activity.js';
-export type { ActivityLogEntry, ActivityTrailQuery } from './repositories/activity.js';
-export {
-  AGENT_NAME_TAKEN,
-  AGENT_NOT_OWNED,
-  DrizzleAgentRepository,
-} from './repositories/agents.js';
-export type { AgentRow, StoredInstallationRow } from './repositories/agents.js';
-export { DrizzleProgressionRepository } from './repositories/progression.js';
-export { DrizzleWorldRepository } from './repositories/world.js';
-export { DrizzleBountyRepository, DrizzlePayoutIntentStore } from './repositories/bounties.js';
-export type { StoredPayoutIntent } from './repositories/bounties.js';
 export { DrizzleGithubDeliveryStore } from './repositories/github-deliveries.js';
 export type {
   ClaimRow,
@@ -50,45 +24,8 @@ export type {
   DeliveryFactShape,
   PublishedFactShape,
 } from './repositories/github-deliveries.js';
-export { DrizzleReputationRepository } from './repositories/reputation.js';
-export type {
-  ReputationOutcomeKind,
-  ReputationOutcomeRow,
-  ReputationRow,
-  ReputationStore,
-} from './repositories/reputation.js';
-export type {
-  ProgressionRow,
-  ProgressionStore,
-  NewProgressRow,
-} from './repositories/progression.js';
-export { DrizzleQuestRepository } from './repositories/quests.js';
 export { DrizzleCredentialStore } from './repositories/credentials.js';
 export type { NewStoredCredential, StoredCredential } from './repositories/credentials.js';
-export { DrizzleSocialRepository } from './repositories/social.js';
-export { DrizzleGuildRepository } from './repositories/guild.js';
-export type {
-  Guild,
-  GuildMembership,
-  GuildQuest,
-  NewGuild,
-  NewQuest,
-  NewRoleSignal,
-  NewTreasuryEntry,
-  NewWorkRecord,
-  RoleSignal,
-  TreasuryEntry,
-  WorkRecord,
-} from './repositories/guild.js';
-export type {
-  NewSocialMessageRow,
-  SocialBoardMetric,
-  SocialBoardQuery,
-  SocialLeaderboardRow,
-  SocialMessageRow,
-  SocialProfileRow,
-  SocialStore,
-} from './repositories/social.js';
 export { DrizzleInstallationRepository } from './repositories/installations.js';
 export type { InstallationOwner } from './repositories/installations.js';
 export { DrizzleSessionRepository, DrizzleSessionSweeper } from './repositories/sessions.js';

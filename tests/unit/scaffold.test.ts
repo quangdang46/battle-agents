@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,7 +44,6 @@ const REQUIRED_PACKAGE_DIRS: readonly string[] = [
   'packages/adapters/pi',
   'packages/cli',
   'packages/core',
-  'packages/game-client',
   'packages/mcp-server',
   'packages/protocol',
 ];
@@ -113,7 +112,18 @@ function readBooleanProperty(value: unknown, key: string): boolean {
   return property;
 }
 
+/**
+ * An absent directory is empty, not an error.
+ *
+ * `packages/features` holds no packages in this build, and a scanner that
+ * throws on it fails every test in this file with an ENOENT that says nothing
+ * about the property being checked. The distinction the callers rely on is
+ * between "this directory has no packages" and "the scan cannot see the
+ * directory" — a scan that cannot see it must still say so, which is what the
+ * `existsSync` guard on the workspace scope below is for.
+ */
 function listDirectories(absoluteDir: string): string[] {
+  if (!existsSync(absoluteDir)) return [];
   return readdirSync(absoluteDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !IGNORED_DIRECTORIES.includes(entry.name))
     .map((entry) => entry.name)

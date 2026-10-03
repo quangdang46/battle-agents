@@ -8,6 +8,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * stylistic. A comment in a schema file is not enforcement, so each one is
  * asserted against the catalog, which is what a runtime query would see.
  *
+ * It covered `bounties` and `bounty_funds` as well — the denormalised-total
+ * rule and the integer-cents rule, both of which were real and both of which
+ * went with the tables they described. An extension that reinstates money moves
+ * the assertion back here; the reasoning it recorded is in
+ * COMPREHENSIVE_PLAN_FOR_BATTLE_AGENTS.md.
+ *
  * Requires DATABASE_URL pointing at a migrated database. When it is absent the
  * suite reports itself as unimplemented instead of silently passing: an empty
  * green suite is worse than a red one, because it reads as coverage.
@@ -19,12 +25,8 @@ const IDENTITY_COLUMN = 'agent_id';
 const FORBIDDEN_IDENTITY_COLUMN = 'user_id';
 const CREDENTIALS_TABLE = 'agent_credentials';
 const TOKEN_HASH_COLUMN = 'token_hash';
-const BOUNTIES_TABLE = 'bounties';
-const DENORMALIZED_TOTAL_COLUMN = 'amount_cents';
-const BOUNTY_FUNDS_TABLE = 'bounty_funds';
 const AGENTS_TABLE = 'agents';
 const SECRET_LIKE_COLUMN = /(token|secret|password|api_?key|credential)/i;
-const MONEY_COLUMN = 'amount_cents';
 const SESSIONS_TABLE = 'sessions';
 
 interface ColumnRow {
@@ -98,45 +100,4 @@ describe('schema invariants', () => {
     expect(secretish).toEqual([TOKEN_HASH_COLUMN]);
   });
 
-  it('derives a bounty total from funding rows rather than a drifting scalar', async () => {
-    // Two sponsors funding one bounty must not require a write to the bounty
-    // row, otherwise the displayed total can disagree with the fund rows.
-    const columns = await columnsOf(BOUNTIES_TABLE);
-    expect(columns.has(DENORMALIZED_TOTAL_COLUMN)).toBe(false);
-  });
-
-  it('keeps both the bounty and its funding rows', async () => {
-    // The previous assertions only ever looked at bounties, so deleting that
-    // table wholesale satisfied every one of them. Both halves of the pair are
-    // checked, and the funding rows are checked to actually reference bounties.
-    expect((await columnsOf(BOUNTIES_TABLE)).size).toBeGreaterThan(0);
-    expect((await columnsOf(BOUNTY_FUNDS_TABLE)).has(MONEY_COLUMN)).toBe(true);
-
-    const link = await pool.query<{ referenced_table: string }>(
-      `SELECT ref.relname AS referenced_table
-         FROM pg_constraint con
-         JOIN pg_class src ON src.oid = con.conrelid
-         JOIN pg_class ref ON ref.oid = con.confrelid
-        WHERE con.contype = 'f' AND src.relname = $1 AND ref.relname = $2`,
-      [BOUNTY_FUNDS_TABLE, BOUNTIES_TABLE],
-    );
-    expect(link.rows.length).toBeGreaterThan(0);
-  });
-
-  it('keeps money in integer cents on the funding rows', async () => {
-    // A float amount cannot represent 0.10 exactly, so payouts drift by cents.
-    // The column lives on bounty_funds because a bounty's total is the SUM of
-    // its funding rows, not a scalar anyone can forget to update.
-    const result = await pool.query<{ data_type: string }>(
-      `SELECT data_type
-         FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
-      [BOUNTY_FUNDS_TABLE, MONEY_COLUMN],
-    );
-    // noUncheckedIndexedAccess is on, so rows[0] is T | undefined. Asserting
-    // length first does not narrow the type, so bind the value and assert on it.
-    const [moneyColumn] = result.rows;
-    expect(moneyColumn).toBeDefined();
-    expect(moneyColumn?.data_type).toBe('integer');
-  });
 });

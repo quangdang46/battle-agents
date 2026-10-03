@@ -7,7 +7,6 @@ import type {
   SearchQuery,
   SearchResult,
 } from '@battle-agents/api';
-import type { RegisteredActionId } from '@battle-agents/protocol';
 
 /**
  * The Application API, over HTTP.
@@ -153,7 +152,10 @@ export class HttpApiClient implements ApplicationApi {
     });
   }
 
-  act<I>(action: RegisteredActionId, input: I): Promise<unknown> {
+  // `string`, matching `ApplicationApi.act`. A transport posts whatever it is
+// handed; narrowing to this repository's generated union would reject an action
+// the server it is talking to has installed and this build never heard of.
+  act<I>(action: string, input: I): Promise<unknown> {
     return this.#call<unknown>({
       method: 'POST',
       path: '/api/act',

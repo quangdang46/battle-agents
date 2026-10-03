@@ -89,9 +89,6 @@ describe('getZoneForTool', () => {
       'tasks',
       'spawn',
       'idle',
-      'bounty-board',
-      'battle-arena',
-      'guild-hall',
     ]);
     for (const zone of zones) expect(known.has(zone as ZoneId)).toBe(true);
   });

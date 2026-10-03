@@ -18,29 +18,18 @@
     "start": "next start"
   },
   "dependencies": {
-    "@battle-agents/achievements": "workspace:*",
-    "@battle-agents/agent": "workspace:*",
     "@battle-agents/api": "workspace:*",
-    "@battle-agents/battle": "workspace:*",
-    "@battle-agents/bounty": "workspace:*",
     "@battle-agents/core": "workspace:*",
     "@battle-agents/db": "workspace:*",
-    "@battle-agents/game-client": "workspace:*",
     "@battle-agents/github": "workspace:*",
     "@battle-agents/mcp-server": "workspace:*",
-    "@battle-agents/progression": "workspace:*",
-    "@battle-agents/quest": "workspace:*",
-    "@battle-agents/reputation": "workspace:*",
-    "@battle-agents/social": "workspace:*",
     "better-auth": "^1.3.34",
     "next": "^15.5.4",
-    "pixi.js": "^8.21.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "pixi.js": "^8.21.0"
+    "@types/react-dom": "^19.2.0"
   }
 }

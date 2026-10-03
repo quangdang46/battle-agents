@@ -3,17 +3,16 @@
  *
  * ## What this is for
  *
- * The `(app)` route group gates every page behind a real GitHub OAuth session
- * (`apps/web/src/ui/viewer-gate.tsx`), and standing one up needs a registered
- * OAuth App with an exact loopback callback. That is a legitimate gate — the
- * board names a repository and an issue number, and `docs/design/public-replay.md`
- * rules that publishing a repository is publishing a place to look. But it means
- * the product cannot be LOOKED AT until somebody visits github.com/settings and
- * registers an app, and a game that cannot be seen cannot be judged.
+ * Everything that needs to know who is asking resolves it through
+ * `viewer-view.ts`, and standing up a real GitHub OAuth session needs a
+ * registered OAuth App with an exact loopback callback. That is a legitimate
+ * gate — anything naming a repository is private — but it means nothing can be
+ * LOOKED AT until somebody visits github.com/settings and registers an app, and
+ * a thing that cannot be seen cannot be judged.
  *
- * So: an opt-in, development-only, deliberately conspicuous way to see the
- * screens. It changes who the reader is. It does not change what any route will
- * serve that reader, so none of the boundaries `viewer-gate.tsx` draws move.
+ * So: an opt-in, development-only, deliberately conspicuous way in. It changes
+ * who the reader is. It does not change what any route will serve that reader,
+ * so none of the boundaries `viewer-view.ts` draws move.
  *
  * ## What this deliberately is NOT
  *

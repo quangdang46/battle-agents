@@ -24,15 +24,16 @@
  * The three numbers above are a printout. A load test that reports and exits 0
  * is the "a gate nobody runs is a comment" failure with a performance harness
  * attached, which is how this one sat for a while: implemented, referenced by
- * `pnpm load:events`, and wired into no gate. It is a stage of `pnpm test:m4`
- * now, which is what §17.2 asks for ("a pre-M4 gate, not M0") and what §40
- * repeats.
+ * `pnpm load:events`, and wired into no gate.
  *
- * The thresholds are in scripts/load-thresholds.ts, with the arithmetic that
- * chose them, and the stage asserts two things this file cannot assert about
- * itself: that the defaults are the ones in that module, and that each gate goes
- * red when the measurement cannot meet it. `tests/m4/load-threshold.test.ts`
- * runs this harness for real, twice, with the thresholds set so it must fail.
+ * It WAS a stage of `pnpm test:m4`, which is gone with the M4 pipeline, so
+ * nothing asserts these thresholds any more. The numbers below are therefore
+ * unverified: `thresholdsFromEnv` still opens the hole it always did, and no
+ * test reads the defaults back or drives each gate red on purpose. Run
+ * `pnpm load:events` and read the line it prints, or wire it back into a gate.
+ *
+ * The thresholds themselves are in scripts/load-thresholds.ts, with the
+ * arithmetic that chose them.
  */
 
 import { writeFileSync } from 'node:fs';
@@ -256,9 +257,8 @@ async function main(): Promise<void> {
     // The gates, printed. A threshold that only exists in a source file cannot be
     // read off a run, so a green run cannot be told apart from a run whose
     // thresholds had been loosened by an environment variable — which is the hole
-    // `thresholdsFromEnv` opens on purpose.
-    // tests/m4/load-threshold.test.ts reads these two numbers back and asserts
-    // they are the published defaults.
+    // `thresholdsFromEnv` opens on purpose. Nothing compares these two against
+    // the published defaults any more; see the header.
     `  thresholds             rows <= ${thresholds.maxRowRatioPercent}% of generated, generated >= ${thresholds.minGeneratedEventsPerSecond} ev/s`,
     '───────────────────────────────────────────────────────────────────',
   ];

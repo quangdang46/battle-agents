@@ -84,14 +84,20 @@ function suiteFiles(): string[] {
 }
 
 describe('no-suite-wipes-the-shared-delivery-table', () => {
-  it('sees the two suites that write the table', () => {
+  it('sees the suite that writes the table', () => {
     // A guard that reads no files passes vacuously, and that is the state both
     // dead gates in this repo were found in. So the file list is asserted
     // before it is trusted.
+    //
+    // One writer, not two. The webhook end-to-end suite that shared this table
+    // was deleted with the feature that mounted it, and the floor dropped with
+    // it deliberately: a count of two would go red the next time a suite is
+    // removed, which is the wrong direction for a guard — it would be reporting
+    // the shape of the repository rather than the safety of the table.
     const writers = suiteFiles().filter((path) =>
       readFileSync(path, 'utf8').includes(DELETE_CALL),
     );
-    expect(writers.length).toBeGreaterThanOrEqual(2);
+    expect(writers).toEqual([join(SUITE_DIR, 'github-delivery-store.test.ts')]);
   });
 
   it('scopes every delete of github_delivery_claims to the rows the suite wrote', () => {
