@@ -202,11 +202,11 @@ export class OpenCodeStore {
    * Opens the user's database read-only and adopts its tail.
    *
    * `node:sqlite` rather than better-sqlite3, which is what the port used, and
-   * that was not a free choice. better-sqlite3 is a native module and
-   * `docs/research/agent-move.md` section 8 records it failing to COMPILE on
-   * Node 26.3.0 — this machine's Node — while building fine on Node 22, which is
-   * what CI runs. A dependency that installs only on the machine the gate does
-   * not run on is the worst available split, and the built-in installs on both.
+   * that was not a free choice. better-sqlite3 is a native module and was
+   * measured failing to COMPILE on Node 26.3.0 — this machine's Node — while
+   * building fine on Node 22, which is what CI runs. A dependency that installs
+   * only on the machine the gate does not run on is the worst available split,
+   * and the built-in installs on both.
    * Verified unflagged on both: Node 26.3.0 here, and the `node:22-bookworm-slim`
    * image the pipeline runs (v22.23.2), where `require('node:sqlite')` returns
    * `DatabaseSync` with no flag. The tradeoff accepted is that `node:sqlite` is
